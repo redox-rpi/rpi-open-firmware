@@ -6,7 +6,7 @@ project added to Kristina Brooks's
 out how far an open-source `bootcode.bin` gets on a **Raspberry Pi 3B+**
 (BCM2837B0), and what is missing before it could start Redox OS instead of
 the closed Broadcom firmware. The upstream code outside this directory is
-unchanged. See the top-level [README](../README.md) for results.
+unchanged apart from the chainloader fixes listed in the top-level [README](../README.md), which also has the results.
 
 | File | What it does |
 | --- | --- |

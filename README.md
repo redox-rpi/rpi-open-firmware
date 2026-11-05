@@ -1,3 +1,47 @@
+# rpi-open-firmware: redox-rpi experiment
+
+This fork belongs to [redox-rpi](https://github.com/redox-rpi/redox-rpi),
+a port of Redox OS to the Raspberry Pi 3B+. We use it to test how far
+Kristina Brooks's open-source VPU firmware
+([christinaa/rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware))
+gets on our Pi 3B+, and what is missing before it could start Redox
+instead of Broadcom's closed firmware. The license stays upstream's: GPLv2+,
+with BSD-licensed Broadcom headers (see [LICENSE](LICENSE)). Our changes are
+on the `redox-rpi` branch; `master` is upstream unchanged.
+
+## Results on the Pi 3B+ (BCM2837B0)
+
+| Test | Date | Result |
+| --- | --- | --- |
+| [#224](https://github.com/redox-rpi/redox-rpi/blob/main/docs/test-plan.md) | 2026-11-05 | **The VPU firmware works:** serial output, 1 GB LPDDR2 set up and tested, USB power and PHY on, ARM clock set, ARM core 0 runs the 32-bit chainloader. The chainloader finds the SD card (64 MB, SDSC), then one read fails at the data clock, and reading the MBR crashes on a trap that GCC 13 inserts where the old code is missing a `return`. |
+| #249 | queued | Same, with both chainloader bugs fixed and a slower SD clock after read errors; a second, SDHC card if at hand. |
+
+What it does not do yet, and what Redox would need (64-bit ARM start,
+spin table for cores 1–3, loading U-Boot or `kernel8.img`, a replacement
+for the firmware mailbox, USB/Ethernet): see the project's
+[topic page](https://github.com/redox-rpi/redox-rpi/blob/main/docs/topics/open-firmware.md).
+
+## Our changes
+
+- [`redox-rpi/`](redox-rpi/README.md): toolchain build script (no root),
+  build script, test payload, SD card image script.
+- `arm_chainloader`: missing `return`s added, SD read errors reported, and
+  retried with half the clock.
+
+## Build
+
+```bash
+git clone -b redox-rpi https://github.com/redox-rpi/rpi-open-firmware.git
+cd rpi-open-firmware
+redox-rpi/build-toolchain.sh          # once, about 40 minutes
+redox-rpi/build.sh
+redox-rpi/make-sdcard.sh bcm2710-rpi-3-b-plus.dtb openfw-3bp.img
+```
+
+Details in [redox-rpi/README.md](redox-rpi/README.md). Below is upstream's README.
+
+---
+
 # Minimal Raspberry Pi VPU firmware
 
 `rpi-open-firmware` is a small firmware for the [RPi VPU](https://en.wikipedia.org/wiki/VideoCore), capable of initializing UART, VPU PLL (PLLC), and ARM itself. It's intended as a libre replacement for the stock `bootcode.bin` normally loaded from the SD card. A UART cable is highly recommended for the time being, though not strictly necessary. Additionally, there is a second-stage chainloader running on ARM capable of initializing eMMC, FAT, and the Linux kernel.
