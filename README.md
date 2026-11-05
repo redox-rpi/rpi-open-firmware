@@ -14,7 +14,7 @@ on the `redox-rpi` branch; `master` is upstream unchanged.
 | Test | Date | Result |
 | --- | --- | --- |
 | [#224](https://github.com/redox-rpi/redox-rpi/blob/main/docs/test-plan.md) | 2026-11-05 | **The VPU firmware works:** serial output, 1 GB LPDDR2 set up and tested, USB power and PHY on, ARM clock set, ARM core 0 runs the 32-bit chainloader. The chainloader finds the SD card (64 MB, SDSC), then one read fails at the data clock, and reading the MBR crashes on a trap that GCC 13 inserts where the old code is missing a `return`. |
-| #249 | queued | Same, with both chainloader bugs fixed and a slower SD clock after read errors; a second, SDHC card if at hand. |
+| #249 | 2026-11-05 | **Works up to the kernel hand-off** (same 64 MB card, both chainloader bugs fixed). The first SD read failed at `SH_CDIV 0x8` and worked at half the clock (`0x12`). MBR, `cmdline.txt`, `rpi.dtb` and `zImage` were read, and the test payload ran: 32-bit Supervisor mode, MIDR `0x410FD034` (Cortex-A53), core 0. SDHC card still to try. |
 
 What it does not do yet, and what Redox would need (64-bit ARM start,
 spin table for cores 1–3, loading U-Boot or `kernel8.img`, a replacement
