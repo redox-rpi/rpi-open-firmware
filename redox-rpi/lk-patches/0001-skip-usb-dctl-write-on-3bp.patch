@@ -1,0 +1,26 @@
+diff --git a/platform/bcm28xx/platform.c b/platform/bcm28xx/platform.c
+index c4680de..9e76ee8 100644
+--- a/platform/bcm28xx/platform.c
++++ b/platform/bcm28xx/platform.c
+@@ -434,13 +434,21 @@ void platform_early_init(void) {
+     uart_init_early();
+     logf("b\n");
+ 
++    // redox-rpi: on the Pi 3B+ the boot stopped right here (Pi test #251),
++    // most likely on this write to the USB controller while its power
++    // domain is still off. It only quiets a USB host in device mode, so
++    // skip it unless REDOX_RPI_USB_DCTL is set.
++#ifdef REDOX_RPI_USB_DCTL
+     // soft-disconnect, so the usb host doesnt spew errors
+     *REG32(USB_DCTL) = BIT(1);
++#endif
++    logf("b1 (USB_DCTL skipped)\n");
+ 
+ #ifdef ARCH_ARM64
+   __asm__ volatile("msr daifclr, #4" ::: "memory");
+ #endif
+ 
++    logf("b2 intc_init\n");
+     intc_init();
+ 
+     logf("c\n");

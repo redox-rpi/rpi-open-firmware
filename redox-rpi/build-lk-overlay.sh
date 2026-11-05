@@ -32,6 +32,15 @@ git submodule update --init --depth 50 lk lib/tinyusb/upstream
 sed -i 's|^ARCH_LDFLAGS += -L/nix/store/.*|ARCH_LDFLAGS += -L$(dir $(shell $(TOOLCHAIN_PREFIX)gcc -print-libgcc-file-name))|' \
   arch/vpu/rules.mk
 
+# Our fixes for the Pi 3B+ (see the comments in each patch).
+for p in "$HERE"/redox-rpi/lk-patches/*.patch; do
+  if git apply --check "$p" 2>/dev/null; then
+    git apply "$p"
+  elif ! git apply --check -R "$p" 2>/dev/null; then
+    echo "patch does not apply: $p" >&2; exit 1
+  fi
+done
+
 # ARM programs that stage 2 embeds, one per chip. Only the BCM2837 one
 # (rpi3-test, 64-bit) runs on a Pi 3B+. rpi2-test needs C++ headers our
 # minimal arm-none-eabi GCC lacks, so it gets a placeholder that is never
