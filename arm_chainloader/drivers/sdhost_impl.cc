@@ -77,7 +77,7 @@ struct BCM2708SDHost : BlockDevice {
 	uint32_t cid[4];
 	uint32_t csd[4];
 
-	uint32_t capacity_bytes;
+	uint64_t capacity_bytes;
 
 	uint32_t r[4];
 
@@ -458,7 +458,7 @@ struct BCM2708SDHost : BlockDevice {
 			block_length = 1 << SD_CSD_V2_BL_LEN;
 
 			/* work out the capacity of the card in bytes */
-			capacity_bytes = (SD_CSD_V2_CAPACITY(csd) * block_length);
+			capacity_bytes = ((uint64_t)SD_CSD_V2_CAPACITY(csd) * block_length);
 
 			clock_div = 5;
 		} else if (SD_CSD_CSDVER(csd) == SD_CSD_CSDVER_1_0) {
@@ -469,7 +469,7 @@ struct BCM2708SDHost : BlockDevice {
 			block_length = 1 << SD_CSD_READ_BL_LEN(csd);
 
 			/* work out the capacity of the card in bytes */
-			capacity_bytes = (SD_CSD_CAPACITY(csd) * block_length);
+			capacity_bytes = ((uint64_t)SD_CSD_CAPACITY(csd) * block_length);
 
 			clock_div = 10;
 		} else {
@@ -499,7 +499,7 @@ struct BCM2708SDHost : BlockDevice {
 
 		block_size = 512;
 
-		logf("Card initialization complete: %s %dMB SD%s Card\n", &pnm, capacity_bytes >> 20, is_high_capacity ? "HC" : "");
+		logf("Card initialization complete: %s %dMB SD%s Card\n", &pnm, (uint32_t)(capacity_bytes >> 20), is_high_capacity ? "HC" : "");
 
 		/*
 		 * this makes some dangerous assumptions that the all csd2 cards are sdio cards
