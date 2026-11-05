@@ -93,7 +93,7 @@ struct MbrImpl {
 
 	template <typename T>
 	inline bool read_block(uint8_t volume, uint32_t sector, T* dest_buffer) {
-		read_block(volume, sector, reinterpret_cast<uint32_t*>(dest_buffer));
+		return read_block(volume, sector, reinterpret_cast<uint32_t*>(dest_buffer));
 	}
 
 	inline unsigned int get_block_size() {

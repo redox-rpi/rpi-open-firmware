@@ -332,7 +332,24 @@ struct BCM2708SDHost : BlockDevice {
 		}
 	}
 
+	/*
+	 * redox-rpi: on a transfer error, halve the data clock and try again,
+	 * logging the divider, so one boot shows whether the clock is too fast.
+	 */
 	virtual bool read_block(uint32_t sector, uint32_t* buf) override {
+		for (int attempt = 0; attempt < 5; attempt++) {
+			if (read_block_once(sector, buf))
+				return true;
+			uint32_t cdiv = SH_CDIV;
+			if (cdiv >= kIdentSafeClockRate)
+				break;
+			SH_CDIV = (cdiv + 2) * 2 - 2;
+			logf("read of sector %d failed, retrying with SH_CDIV 0x%X (was 0x%X)\n", sector, SH_CDIV, cdiv);
+		}
+		return false;
+	}
+
+	bool read_block_once(uint32_t sector, uint32_t* buf) {
 		if (!card_ready)
 			panic("card not ready");
 
@@ -365,7 +382,7 @@ struct BCM2708SDHost : BlockDevice {
 				break;
 			}
 
-			uint32_t hsts_err = SH_HSTS & SDHSTS_ERROR_MASK;
+			hsts_err = SH_HSTS & SDHSTS_ERROR_MASK;
 			if (hsts_err) {
 				logf("ERROR: transfer error on FIFO word %d: 0x%x\n", i, SH_HSTS);
 				break;
