@@ -6,6 +6,8 @@
 #                  (github.com/itszor/vc4-toolchain), for bootcode.bin
 #   arm-none-eabi- plain GNU binutils + GCC (C, C++, libgcc only) + newlib for
 #                  the ARM chainloader (it uses newlib's headers)
+#   aarch64-none-elf- binutils + GCC (C, C++, libgcc) for lk-overlay's
+#                  64-bit ARM stage
 #
 # Usage: redox-rpi/build-toolchain.sh [WORKDIR]   (default: ../toolchains)
 # Result: WORKDIR/prefix/bin on PATH, see redox-rpi/env.sh.
@@ -118,6 +120,26 @@ if [ ! -x "$PREFIX/bin/arm-none-eabi-g++" ]; then
   make install-gcc install-target-libgcc
 fi
 
+# --- aarch64-none-elf (for lk-overlay's 64-bit ARM stage, which has C++) ----
+if [ ! -x "$PREFIX/bin/aarch64-none-elf-g++" ]; then
+  cd "$WORK/src"
+  [ -d $BINUTILS ] || tar xf $BINUTILS.tar.xz
+  [ -d $GCC_ARM ] || tar xf $GCC_ARM.tar.xz
+  unpack_prereqs "$WORK/src/$GCC_ARM"
+
+  rm -rf "$WORK/build-a64-binutils"; mkdir "$WORK/build-a64-binutils"; cd "$WORK/build-a64-binutils"
+  "$WORK/src/$BINUTILS/configure" --target=aarch64-none-elf --prefix="$PREFIX" \
+    --disable-nls --disable-werror
+  make -j"$JOBS" && make install
+
+  rm -rf "$WORK/build-a64-gcc"; mkdir "$WORK/build-a64-gcc"; cd "$WORK/build-a64-gcc"
+  CFLAGS="-O2 -std=gnu17" "$WORK/src/$GCC_ARM/configure" --target=aarch64-none-elf --prefix="$PREFIX" \
+    --disable-nls --enable-languages=c,c++ --without-headers --with-newlib \
+    --disable-libssp --disable-shared --disable-threads --disable-lto
+  make -j"$JOBS" all-gcc all-target-libgcc
+  make install-gcc install-target-libgcc
+fi
+
 if [ ! -f "$PREFIX/arm-none-eabi/include/string.h" ]; then
   cd "$WORK/src"
   [ -d $NEWLIB ] || tar xf $NEWLIB.tar.gz
@@ -129,3 +151,4 @@ fi
 
 vc4-elf-gcc --version | head -1
 arm-none-eabi-gcc --version | head -1
+aarch64-none-elf-gcc --version | head -1

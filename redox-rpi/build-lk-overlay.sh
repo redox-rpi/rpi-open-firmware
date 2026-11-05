@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build librerpi/lk-overlay (the newer, LK-based open firmware) without Nix,
-# with the toolchains from redox-rpi/build-toolchain.sh and the host's
-# aarch64-linux-gnu- GCC, for the Pi 3B+ 64-bit test.
+# with the toolchains from redox-rpi/build-toolchain.sh (vc4-elf-,
+# arm-none-eabi-, aarch64-none-elf-), for the Pi 3B+ 64-bit test.
 #
 # Usage: redox-rpi/build-lk-overlay.sh [LK_DIR] [TOOLCHAIN_WORKDIR]
 #   LK_DIR default ../lk-overlay (cloned and pinned if missing)
@@ -45,7 +45,9 @@ done
 # (rpi3-test, 64-bit) runs on a Pi 3B+. rpi2-test needs C++ headers our
 # minimal arm-none-eabi GCC lacks, so it gets a placeholder that is never
 # started on a BCM2837.
-make PROJECT=rpi3-test TOOLCHAIN_PREFIX=aarch64-linux-gnu- -j"$JOBS"
+# rpi3-test ships without an SD driver (CONFIG_SD_BOOT := 0), so its loader
+# cannot find sdhostp1 (Pi test #253: "mount failure: -2"); turn it on.
+make PROJECT=rpi3-test TOOLCHAIN_PREFIX=aarch64-none-elf- CONFIG_SD_BOOT=1 -j"$JOBS"
 make PROJECT=rpi1-test TOOLCHAIN_PREFIX=arm-none-eabi- -j"$JOBS"
 mkdir -p build-rpi2-test
 [ -s build-rpi2-test/lk.bin ] || printf 'RPI2-PLACEHOLDER' > build-rpi2-test/lk.bin
