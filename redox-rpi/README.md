@@ -15,6 +15,9 @@ unchanged apart from the chainloader fixes listed in the top-level [README](../R
 | `build.sh` | Runs upstream `buildall.sh` with those toolchains and builds the test payload |
 | `payload/` | A 32-bit test program the chainloader starts as `zImage`; it prints the CPU mode and IDs on the UART |
 | `make-sdcard.sh` | Makes a small SD card image (FAT16: `bootcode.bin`, `rpi.dtb`, `cmdline.txt`, `zImage`) without root |
+| `build-lk-overlay.sh` | Builds [librerpi/lk-overlay](https://github.com/librerpi/lk-overlay) (pinned `50c95c1`) without Nix: the 64-bit ARM stage, VPU stage 2 and stage 1 (`bootcode.bin`) |
+| `payload64/` | A 64-bit test program, started by lk-overlay's ARM loader as `Image-aarch64`; it prints EL, MIDR, MPIDR, x0, SCTLR and CNTFRQ |
+| `make-sdcard-lk.sh` | Card image in lk-overlay's layout: FAT with `bootcode.bin`, ext4 with `/boot/lk.elf`, `Image-aarch64`, `rpi3.dtb`, `cmdline.txt` |
 
 ## Build
 
