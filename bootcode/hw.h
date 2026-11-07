@@ -36,6 +36,7 @@ void udelay(uint32_t us);
 /* uart.c */
 void uart_init(void);
 void uart_putc(char c);
+int uart_getc_timeout(uint32_t timeout_us);
 
 /* printf.c: no format attribute, because uint32_t is long on VC4 while
  * int and long are both 32 bits; our printf reads every number as 32 bits */
@@ -46,3 +47,6 @@ int vprintf(const char *fmt, va_list ap);
 enum ram_size { RAM_1GB, RAM_512MB, RAM_256MB, RAM_128MB, RAM_UNKNOWN };
 extern enum ram_size g_ram_size;
 void sdram_init(void);
+
+/* monitor.c: test builds only (MONITOR=1), never in a release */
+void monitor(uint32_t wait_s);

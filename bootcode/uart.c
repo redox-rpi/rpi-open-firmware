@@ -17,6 +17,7 @@
 #define UART_CR   HW_REGISTER_RW(UART_BASE + 0x30)
 #define UART_ICR  HW_REGISTER_RW(UART_BASE + 0x44)
 
+#define UART_FR_RXFE 0x10
 #define UART_FR_TXFF 0x20
 
 void uart_init(void) {
@@ -51,4 +52,14 @@ void uart_putc(char c) {
 	while (UART_FR & UART_FR_TXFF) {
 	}
 	UART_RBRTHRDLL = (uint8_t)c;
+}
+
+/* -1 if nothing arrives within timeout_us */
+int uart_getc_timeout(uint32_t timeout_us) {
+	uint32_t t0 = timer_us();
+	while (UART_FR & UART_FR_RXFE) {
+		if (timer_us() - t0 >= timeout_us)
+			return -1;
+	}
+	return (int)(UART_RBRTHRDLL & 0xff);
 }
