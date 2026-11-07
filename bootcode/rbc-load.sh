@@ -50,24 +50,39 @@ if [ $ENTER = 1 ]; then
 	printf '\r' > "$TTY"
 	wait_for "$off" '^ok monitor' 5 >/dev/null
 	echo "monitor open"
+	sleep 0.2
 fi
 
-off=$(log_size)
-send "l $ADDR $(printf '%x' "$LEN")"
-r=$(wait_for "$off" '^(ok send|err)' 5)
-case "$r" in ok*) ;; *) echo "$r" >&2; exit 1 ;; esac
-
-off=$(log_size)
-xxd -p "$FILE" > "$TTY"
-# 2 hex digits per byte at about 11 500 characters per second, plus slack
-r=$(wait_for "$off" '^(ok crc32|err)' $((LEN * 2 / 11500 + 15)))
 want=$(python3 -I -c 'import sys, zlib; print("%08X" % zlib.crc32(open(sys.argv[1], "rb").read()))' "$FILE")
-got=${r##* }
-if [ "$got" != "$want" ]; then
-	echo "load failed: $r (want crc32 $want)" >&2
-	exit 1
-fi
-echo "loaded $LEN bytes at $ADDR, crc32 $got"
+# 115200 baud is about 11 500 characters a second, 2 hex digits per byte
+secs=$((LEN * 2 / 11500 + 1))
+echo "loading $LEN bytes to $ADDR, crc32 $want, about $secs s"
+
+# the monitor answers each err only after its input has been quiet for
+# 0.5 s, then prints the prompt, so a retry needs no reset
+try_load() {
+	local off r
+	off=$(log_size)
+	send "l $ADDR $(printf '%x' "$LEN") $want"
+	r=$(wait_for "$off" '^(ok send|err)' 5) || return 1
+	case "$r" in ok*) ;; *) echo "$r" >&2; return 1 ;; esac
+	off=$(log_size)
+	xxd -p "$FILE" > "$TTY"
+	r=$(wait_for "$off" '^(ok crc32|err)' $((secs + 10))) || return 1
+	case "$r" in "ok crc32 $want") ;; *) echo "$r" >&2; return 1 ;; esac
+}
+
+for try in 1 2 3; do
+	if try_load; then
+		echo "loaded $LEN bytes at $ADDR, crc32 $want"
+		break
+	fi
+	if [ $try = 3 ]; then echo "load failed 3 times" >&2; exit 1; fi
+	echo "load try $try failed, retrying" >&2
+	# the err line and the prompt come together; give the monitor time to
+	# finish any drain before the next command
+	sleep 1.5
+done
 
 case "$ACTION" in
 chain)

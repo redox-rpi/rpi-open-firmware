@@ -54,11 +54,18 @@ the prompt `rbc> `. Numbers are hex.
 | `w A V` | write V to A | `ok` |
 | `s A M`, `c A M` | set / clear bits M at A | `ok A V` |
 | `d A N` | dump N bytes | lines, then `ok` |
-| `l A N` | load N bytes, sent as 2N hex digits (other characters skipped) | `ok send …`, then `ok crc32 X` |
+| `l A N [C]` | load N bytes, sent as 2N hex digits (other characters skipped); with C the CRC-32 must match | `ok send …`, then `ok crc32 X`; `err timeout …` after 2 s without a digit, `err crc32 X want C` |
 | `crc A N` | CRC-32 (zlib) of N bytes | `ok crc32 X` |
 | `g A [r0 r1 r2 r3]` | call VPU code at A | `ok ret X` |
 | `chain A N` | copy a `bootcode.bin` image to `0x80000000`, start it at `0x80000200` | `ok chain …`, no return |
 | `boot` | leave the monitor | `ok boot` |
+
+Before any `err`, the monitor drops input until the line has been quiet
+for 0.5 s, so the rest of a broken upload is not read as commands. The
+prompt follows, and the host can retry without a reset. `rbc-load.sh`
+prints the expected time (about 5.7 KB of file per second at 115200
+baud, so 100 KB takes about 18 s) and retries a failed load up to three
+times.
 
 Load into SDRAM through the uncached alias, for example `0xc1000000`
 (16 MB). Other `0x8…` addresses would evict this code from the L2 cache.

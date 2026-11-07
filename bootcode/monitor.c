@@ -12,14 +12,19 @@
  *   w A V          write V to A                       -> ok
  *   s A M / c A M  set / clear the bits M at A        -> ok A V
  *   d A N          dump N bytes from A, 16 per line   -> ... ok
- *   l A N          load N bytes, sent as 2N hex digits (any other
- *                  character is skipped, so line breaks are fine)
- *                                                     -> ok crc32 X
+ *   l A N [C]      load N bytes, sent as 2N hex digits (any other
+ *                  character is skipped, so line breaks are fine);
+ *                  with C, the CRC-32 must match      -> ok crc32 X
+ *                  a missing digit ends after 2 s idle -> err timeout ...
+ *                  a wrong CRC-32 with C given        -> err crc32 X want C
  *   crc A N        CRC-32 (zlib) of N bytes at A      -> ok crc32 X
  *   g A [a b c d]  call VPU code at A with r0..r3     -> ok ret X
  *   chain A N      copy a bootcode.bin image (N bytes at A) to 0x80000000
  *                  and start it at 0x80000200; no return
  *   boot           leave the monitor, go on with the normal boot
+ * Before any err, input is dropped until the line is quiet for 0.5 s, so
+ * the rest of a broken upload is not read as commands; the prompt follows
+ * the err line, and the host can retry without a reset once it sees it.
  * Load into SDRAM through the uncached alias (0xc0000000 + phys), not
  * through 0x8...: other 0x8 addresses would evict this code from the L2.
  *
@@ -36,7 +41,8 @@
 #define CHAIN_ENTRY 0x80000200u
 #define CHAIN_MAX 0x19000u /* the trampoline lives at 0x80019000 */
 
-#define LOAD_IDLE_US (10u * 1000 * 1000)
+#define LOAD_IDLE_US (2u * 1000 * 1000)
+#define DRAIN_QUIET_US (500u * 1000)
 
 static char line[128];
 
@@ -84,6 +90,12 @@ static uint32_t crc32(const volatile uint8_t *p, uint32_t n) {
 			crc = (crc >> 1) ^ (0xedb88320u & -(crc & 1));
 	}
 	return ~crc;
+}
+
+/* drop input until the line has been quiet for DRAIN_QUIET_US */
+static void drain_input(void) {
+	while (uart_getc_timeout(DRAIN_QUIET_US) >= 0) {
+	}
 }
 
 static int hexval(int c) {
@@ -160,7 +172,7 @@ static int split(char *s, char **argv, int max) {
 	return argc;
 }
 
-static void cmd_load(uint32_t addr, uint32_t len) {
+static void cmd_load(uint32_t addr, uint32_t len, bool check, uint32_t want) {
 	volatile uint8_t *p = (volatile uint8_t *)addr;
 	printf("ok send %u bytes as hex\n", len);
 	for (uint32_t i = 0; i < len; i++) {
@@ -168,7 +180,7 @@ static void cmd_load(uint32_t addr, uint32_t len) {
 		while (hi < 0 || lo < 0) {
 			int c = uart_getc_timeout(LOAD_IDLE_US);
 			if (c < 0) {
-				printf("err timeout after %u bytes\n", i);
+				printf("err timeout after %u of %u bytes\n", i, len);
 				return;
 			}
 			int d = hexval(c);
@@ -181,7 +193,13 @@ static void cmd_load(uint32_t addr, uint32_t len) {
 		}
 		p[i] = (uint8_t)((hi << 4) | lo);
 	}
-	printf("ok crc32 %08X\n", crc32(p, len));
+	uint32_t got = crc32(p, len);
+	if (check && got != want) {
+		drain_input();
+		printf("err crc32 %08X want %08X\n", got, want);
+		return;
+	}
+	printf("ok crc32 %08X\n", got);
 }
 
 static void cmd_dump(uint32_t addr, uint32_t len) {
@@ -196,6 +214,7 @@ static void cmd_dump(uint32_t addr, uint32_t len) {
 
 static void cmd_chain(uint32_t addr, uint32_t len) {
 	if (len < 0x204 || len > CHAIN_MAX) {
+		drain_input();
 		printf("err length must be 0x204..0x%X\n", CHAIN_MAX);
 		return;
 	}
@@ -215,6 +234,7 @@ static bool run(int argc, char **argv) {
 	uint32_t a[5] = {0};
 	for (int i = 1; i < argc; i++) {
 		if (!parse_hex(argv[i], &a[i - 1])) {
+			drain_input();
 			printf("err bad number %s\n", argv[i]);
 			return false;
 		}
@@ -223,6 +243,7 @@ static bool run(int argc, char **argv) {
 	int n = argc - 1;
 	bool word = (c[0] == 'r' || c[0] == 'w' || c[0] == 's' || c[0] == 'c') && c[1] == 0;
 	if (word && (a[0] & 3)) {
+		drain_input();
 		printf("err address not 4-byte aligned\n");
 		return false;
 	}
@@ -241,8 +262,8 @@ static bool run(int argc, char **argv) {
 		printf("ok %08X %08X\n", a[0], *w);
 	} else if (!strcmp_s(c, "d") && n == 2) {
 		cmd_dump(a[0], a[1]);
-	} else if (!strcmp_s(c, "l") && n == 2) {
-		cmd_load(a[0], a[1]);
+	} else if (!strcmp_s(c, "l") && (n == 2 || n == 3)) {
+		cmd_load(a[0], a[1], n == 3, a[2]);
 	} else if (!strcmp_s(c, "crc") && n == 2) {
 		printf("ok crc32 %08X\n", crc32((const volatile uint8_t *)a[0], a[1]));
 	} else if (!strcmp_s(c, "g") && n >= 1) {
@@ -255,9 +276,10 @@ static bool run(int argc, char **argv) {
 		printf("ok boot\n");
 		return true;
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N | crc A N | g A [r0..r3] | chain A N | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N | boot\n");
 		printf("ok\n");
 	} else {
+		drain_input();
 		printf("err unknown command or wrong argument count: %s\n", c);
 	}
 	return false;
