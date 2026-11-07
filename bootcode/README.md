@@ -15,7 +15,7 @@ no RTOS: one file per hardware block, strict warnings (`-Wall -Wextra
 | | What | State |
 |---|---|---|
 | **M1** | Stage 1: VPU clock, UART, SDRAM, memory test, heartbeat | **passed** on the Pi 3B+, Pi test #265 (2026-11-07): Elpida 1 GB, DDR PLL 398.4 MHz, self test 1024 MB in 28 ms, heartbeat to 60 s |
-| M1.5 | Serial monitor for test builds (`MONITOR=1`): peek/poke, dump, load code over the UART, run it, chain another `bootcode.bin` | built, Pi test queued |
+| M1.5 | Serial monitor for test builds (`MONITOR=1`): peek/poke, dump, load code over the UART, run it, chain another `bootcode.bin` | **passed**, Pi test #269 (2026-11-07): every command, lk-overlay's stage 2 loaded over serial (296 KB, 52 s) and run to our 64-bit payload, lk-overlay's stage 1 chained; chaining Broadcom's `bootcode.bin` network-boots, but with only 256 MB detected |
 | M2 | Read the SD card's FAT partition, load our 64-bit ARM stub, U-Boot and the devicetree, start the ARM in AArch64 with cores 1–3 in the spin table | |
 | M3 | A small service that stays on the VPU and answers the mailbox (board, memory, MAC, clocks, temperature, power) for U-Boot, `rpi-firmwared`, `rpi-fbd` | |
 | M4 | HDMI and a framebuffer (PLLH, HVS, pixel valve, HDMI) | |
