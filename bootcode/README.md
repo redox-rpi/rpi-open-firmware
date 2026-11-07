@@ -15,6 +15,7 @@ no RTOS: one file per hardware block, strict warnings (`-Wall -Wextra
 | | What | State |
 |---|---|---|
 | **M1** | Stage 1: VPU clock, UART, SDRAM, memory test, heartbeat | **passed** on the Pi 3B+, Pi test #265 (2026-11-07): Elpida 1 GB, DDR PLL 398.4 MHz, self test 1024 MB in 28 ms, heartbeat to 60 s |
+| M1.5 | Serial monitor for test builds (`MONITOR=1`): peek/poke, dump, load code over the UART, run it, chain another `bootcode.bin` | built, Pi test queued |
 | M2 | Read the SD card's FAT partition, load our 64-bit ARM stub, U-Boot and the devicetree, start the ARM in AArch64 with cores 1–3 in the spin table | |
 | M3 | A small service that stays on the VPU and answers the mailbox (board, memory, MAC, clocks, temperature, power) for U-Boot, `rpi-firmwared`, `rpi-fbd` | |
 | M4 | HDMI and a framebuffer (PLLH, HVS, pixel valve, HDMI) | |
@@ -36,6 +37,46 @@ make                          # build/bootcode.bin, build/bootcode.dis
 
 Serial console on GPIO 14/15, 115200 8N1.
 
+## Serial monitor (test builds only)
+
+`make MONITOR=1` adds `monitor.c`. After the SDRAM test it prints
+`rbc> monitor: press Enter within 5 s`. With no input it carries on with
+the normal path, so an unattended boot still works. Enter opens the
+monitor. **Never in a release:** anyone on the serial pins gets full
+control of the chip.
+
+Each command gets one reply line that starts with `ok` or `err`, then
+the prompt `rbc> `. Numbers are hex.
+
+| Command | What | Reply |
+|---|---|---|
+| `r A` | read the word at A | `ok A V` |
+| `w A V` | write V to A | `ok` |
+| `s A M`, `c A M` | set / clear bits M at A | `ok A V` |
+| `d A N` | dump N bytes | lines, then `ok` |
+| `l A N` | load N bytes, sent as 2N hex digits (other characters skipped) | `ok send …`, then `ok crc32 X` |
+| `crc A N` | CRC-32 (zlib) of N bytes | `ok crc32 X` |
+| `g A [r0 r1 r2 r3]` | call VPU code at A | `ok ret X` |
+| `chain A N` | copy a `bootcode.bin` image to `0x80000000`, start it at `0x80000200` | `ok chain …`, no return |
+| `boot` | leave the monitor | `ok boot` |
+
+Load into SDRAM through the uncached alias, for example `0xc1000000`
+(16 MB). Other `0x8…` addresses would evict this code from the L2 cache.
+`chain` copies a small trampoline to `0x80019000` first, so a chained
+image can be up to `0x19000` bytes (100 KB).
+
+From the host: `bootcode/rbc-load.sh [--enter] FILE [ADDR] [chain|go|none]`.
+It writes only to `/dev/ttyUSB0` and reads the replies from the log of
+the one serial reader (`LOG`, default `~/redox-rpi/logs/serial.log`), so
+there is never a second reader. `--enter` waits for the monitor line after
+a reset and opens the monitor. `go-test.S` (`make build/go-test.bin`) is
+the smallest payload for `g`: `g c1000000 5 7` replies `ok ret 0000100C`.
+
+`make-card.sh OUT.img BASE.img` puts our `bootcode.bin` into a copy of
+another card image. The monitor test card is lk-overlay's card with our
+`bootcode.bin`, so lk-overlay's stage 1 can be chained over serial and
+still find its stage 2 on the card.
+
 ## Files and where they come from
 
 | File | What | Source |
@@ -46,6 +87,7 @@ Serial console on GPIO 14/15, 115200 8N1.
 | `clock.c` | PLLC 1000 MHz, VPU clock, 1 MHz system timer | rpi-open-firmware `firmware/romstage.c`, `switch_vpu_to_pllc()`, values unchanged |
 | `uart.c` | PL011 on GPIO 14/15 | rpi-open-firmware `firmware/romstage.c`, `uart_init()`, values unchanged |
 | `timer.c`, `printf.c` | delay, small printf | new |
+| `monitor.c`, `go-test.S`, `rbc-load.sh`, `libc.c` | serial monitor (test builds), its test payload and host script, `memset`/`memcpy` | new; cache flush registers from Broadcom's `vpu_l1_cache_ctrl.h` |
 | `sdram.c` | LPDDR2 set-up and self test | rpi-open-firmware `firmware/sdram.c` (Julian Brown and the rpi-open-firmware authors); sequence, timings and magic values unchanged; self test extended |
 | `hw.h` | common header | new; register names from Broadcom's headers |
 | `../firmware/broadcom/` | VideoCore IV register definitions | released by Broadcom (BSD), used as they are |

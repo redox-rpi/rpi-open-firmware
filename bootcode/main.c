@@ -2,7 +2,8 @@
  * redox-rpi bootcode: stage 1 main, milestone M1.
  *
  * M1: clocks, UART, SDRAM and a memory test, then a heartbeat. No loading
- * yet. Plan: https://github.com/redox-rpi/redox-rpi/issues/230
+ * yet. Test builds (MONITOR=1) open the serial monitor before the
+ * heartbeat. Plan: https://github.com/redox-rpi/redox-rpi/issues/230
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -10,6 +11,12 @@
 
 #ifndef BUILD_ID
 #define BUILD_ID "unknown"
+#endif
+
+#if MONITOR
+#define VARIANT "M1, monitor, test build"
+#else
+#define VARIANT "M1"
 #endif
 
 uint32_t g_cpuid;
@@ -74,7 +81,7 @@ void bootcode_main(uint32_t cpuid) {
 	clock_init();
 	uart_init();
 
-	printf("\n\nredox-rpi bootcode " BUILD_ID " (M1)\n");
+	printf("\n\nredox-rpi bootcode " BUILD_ID " (" VARIANT ")\n");
 	printf("VPU cpuid 0x%X\n", cpuid);
 	printf("from the Boot ROM: CM_VPUCTL 0x%X CM_VPUDIV 0x%X PLLC_CTRL 0x%X PLLC_FRAC 0x%X SD_CS 0x%X timer %u us\n",
 	       rom.vpuctl, rom.vpudiv, rom.pllc_ctrl, rom.pllc_frac, rom.sdcs, rom.timer);
@@ -82,6 +89,9 @@ void bootcode_main(uint32_t cpuid) {
 	uint32_t t0 = timer_us();
 	sdram_init();
 	printf("SDRAM ready after %u us\n", timer_us() - t0);
+#if MONITOR
+	monitor(5);
+#endif
 	printf("M1 done: stage 1 runs, SDRAM works. Nothing to load yet.\n");
 
 	for (uint32_t n = 1;; n++) {
