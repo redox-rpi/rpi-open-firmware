@@ -14,7 +14,7 @@ no RTOS: one file per hardware block, strict warnings (`-Wall -Wextra
 
 | | What | State |
 |---|---|---|
-| **M1** | Stage 1: VPU clock, UART, SDRAM, memory test, heartbeat | built, Pi test #265 queued |
+| **M1** | Stage 1: VPU clock, UART, SDRAM, memory test, heartbeat | **passed** on the Pi 3B+, Pi test #265 (2026-11-07): Elpida 1 GB, DDR PLL 398.4 MHz, self test 1024 MB in 28 ms, heartbeat to 60 s |
 | M2 | Read the SD card's FAT partition, load our 64-bit ARM stub, U-Boot and the devicetree, start the ARM in AArch64 with cores 1–3 in the spin table | |
 | M3 | A small service that stays on the VPU and answers the mailbox (board, memory, MAC, clocks, temperature, power) for U-Boot, `rpi-firmwared`, `rpi-fbd` | |
 | M4 | HDMI and a framebuffer (PLLH, HVS, pixel valve, HDMI) | |
