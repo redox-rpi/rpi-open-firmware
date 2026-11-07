@@ -19,8 +19,9 @@
  *                  a wrong CRC-32 with C given        -> err crc32 X want C
  *   crc A N        CRC-32 (zlib) of N bytes at A      -> ok crc32 X
  *   g A [a b c d]  call VPU code at A with r0..r3     -> ok ret X
- *   chain A N      copy a bootcode.bin image (N bytes at A) to 0x80000000
- *                  and start it at 0x80000200; no return
+ *   chain A N      copy a bootcode.bin image (N bytes at A) to 0x80000000,
+ *                  take the SDRAM down as the Boot ROM leaves it, and
+ *                  start the image at 0x80000200; no return
  *   boot           leave the monitor, go on with the normal boot
  * Before any err, input is dropped until the line is quiet for 0.5 s, so
  * the rest of a broken upload is not read as commands; the prompt follows
@@ -59,6 +60,14 @@ static void flush_caches(void) {
 /*
  * Runs from its own copy at 0x80019000 (section .tramp, see linker.ld)
  * while it overwrites the rest of us, so it calls nothing.
+ *
+ * After the copy it takes the SDRAM controller down again, as the Boot
+ * ROM leaves it. A chained bootcode.bin expects that: Broadcom's skips
+ * its SDRAM set-up when SD_CS bit 0 (RESTRT, which our set-up leaves
+ * set) reads 1, and then assumes 256 MB (Pi test #269, part E). The
+ * steps are the start of sdram.c's reset_with_timing(): standby, wait
+ * for SDUP to clear, SDRAM clock off; then SD_CS = 0 (EN and RESTRT
+ * clear). Nothing touches SDRAM after this; the image is in the L2.
  */
 void chain_trampoline(const volatile uint32_t *src, uint32_t words)
 	__attribute__((section(".tramp"), noinline, noreturn));
@@ -66,6 +75,19 @@ void chain_trampoline(const volatile uint32_t *src, uint32_t words) {
 	volatile uint32_t *dst = (volatile uint32_t *)CHAIN_BASE;
 	for (uint32_t i = 0; i < words; i++)
 		dst[i] = src[i];
+
+	SD_CS = (SD_CS & ~(SD_CS_DEL_KEEP_SET | SD_CS_DPD_SET | SD_CS_RESTRT_SET)) | SD_CS_STBY_SET;
+	while (SD_CS & SD_CS_SDUP_SET) {
+	}
+	CM_SDCCTL |= CM_PASSWORD | CM_SDCCTL_UPDATE_SET;
+	while (!(CM_SDCCTL & CM_SDCCTL_ACCPT_SET)) {
+	}
+	CM_SDCCTL = (CM_SDCCTL & ~(CM_SDCCTL_ENAB_SET | CM_SDCCTL_CTRL_SET)) | CM_PASSWORD;
+	CM_SDCCTL = CM_PASSWORD | (CM_SDCCTL & CM_SDCCTL_UPDATE_CLR);
+	while (CM_SDCCTL & CM_SDCCTL_ACCPT_SET) {
+	}
+	SD_CS = 0;
+
 	L1_D_CONTROL |= L1_DC_FLUSH;
 	while (L1_D_CONTROL & L1_DC_FLUSH) {
 	}
@@ -218,7 +240,7 @@ static void cmd_chain(uint32_t addr, uint32_t len) {
 		printf("err length must be 0x204..0x%X\n", CHAIN_MAX);
 		return;
 	}
-	printf("ok chain %u bytes, start 0x%08X\n", len, CHAIN_ENTRY);
+	printf("ok chain %u bytes, start 0x%08X, SDRAM reset\n", len, CHAIN_ENTRY);
 	/* let the last characters leave the UART before we go */
 	udelay(2000);
 	for (uint8_t *s = __tramp_load, *d = __tramp_start; d < __tramp_end;)

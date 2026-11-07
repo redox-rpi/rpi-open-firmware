@@ -57,7 +57,7 @@ the prompt `rbc> `. Numbers are hex.
 | `l A N [C]` | load N bytes, sent as 2N hex digits (other characters skipped); with C the CRC-32 must match | `ok send …`, then `ok crc32 X`; `err timeout …` after 2 s without a digit, `err crc32 X want C` |
 | `crc A N` | CRC-32 (zlib) of N bytes | `ok crc32 X` |
 | `g A [r0 r1 r2 r3]` | call VPU code at A | `ok ret X` |
-| `chain A N` | copy a `bootcode.bin` image to `0x80000000`, start it at `0x80000200` | `ok chain …`, no return |
+| `chain A N` | copy a `bootcode.bin` image to `0x80000000`, take the SDRAM down as the Boot ROM leaves it, start the image at `0x80000200` | `ok chain …, SDRAM reset`, no return |
 | `boot` | leave the monitor | `ok boot` |
 
 Before any `err`, the monitor drops input until the line has been quiet
