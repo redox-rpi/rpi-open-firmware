@@ -2,11 +2,14 @@
 # Load a file into the Pi's SDRAM through the bootcode serial monitor
 # (test builds, MONITOR=1) and optionally run it.
 #
-# Usage: bootcode/rbc-load.sh [--enter] FILE [ADDR] [chain|go|none]
+# Usage: bootcode/rbc-load.sh [--enter] FILE [ADDR] [chain|chainmon|go|none]
 #   --enter  first wait for the monitor's "press Enter" line after a reset
 #            and open the monitor
 #   ADDR     default 0xc1000000 (SDRAM at 16 MB, uncached alias)
 #   chain    start FILE as a bootcode.bin image (copied to 0x80000000)
+#   chainmon as chain, for a monitor build (MONITOR=1): then wait for its
+#            "press Enter" line and open its monitor, so a newer monitor
+#            replaces the card's without a card swap
 #   go       call VPU code at ADDR and print its return value
 #
 # It only writes to the serial port. Replies are read from the log that
@@ -85,10 +88,20 @@ for try in 1 2 3; do
 done
 
 case "$ACTION" in
-chain)
+chain | chainmon)
 	off=$(log_size)
 	send "chain $ADDR $(printf '%x' "$LEN")"
-	wait_for "$off" '^(ok chain|err)' 5
+	r=$(wait_for "$off" '^(ok chain|err)' 5) || exit 1
+	echo "$r"
+	case "$r" in ok*) ;; *) exit 1 ;; esac
+	if [ "$ACTION" = chainmon ]; then
+		wait_for "$off" 'rbc> monitor: press Enter' 30 >/dev/null || exit 1
+		off=$(log_size)
+		printf '\r' > "$TTY"
+		wait_for "$off" '^ok monitor' 5 >/dev/null || exit 1
+		echo "chained monitor open"
+		sleep 0.2
+	fi
 	;;
 go)
 	off=$(log_size)
