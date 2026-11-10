@@ -95,13 +95,17 @@ serial line alone, with no card swap:
 
 - **Enter within 5 s:** the monitor stays open for firmware tests (load
   and run our own stages, read registers).
-- **No Enter, `boot`, or 300 s without a character in an open monitor:**
-  it prints `rbc> chain built-in bootcode.bin, N bytes, crc32 X` and
-  chains Broadcom's `bootcode.bin`, which network-boots U-Boot and Redox
-  as before. The chain takes the SDRAM down first, so Broadcom's code
-  sizes it itself (Pi test #271).
+- **No Enter:** it prints `rbc> chain built-in bootcode.bin, N bytes,
+  crc32 X` and chains Broadcom's `bootcode.bin` before our SDRAM set-up
+  (`ok chain …, SDRAM untouched`), so Broadcom's code finds the SDRAM as
+  the Boot ROM left it and network-boots U-Boot and Redox as before. The
+  first version set up the SDRAM, took it down and then chained; Broadcom's
+  code never got going after that (Pi test #313 step 0).
+- **Enter:** our SDRAM set-up runs, then `ok monitor` and the prompt.
+  `boot`, or 300 s without a character, chains the built-in image with
+  the SDRAM reset of the `chain` command.
 
-The normal boot gets about 6 s longer (5 s wait, our SDRAM set-up). Later
+The normal boot gets about 5 s longer. Later
 our own VPU loader (M2) replaces the built-in Broadcom image.
 
 ## Files and where they come from

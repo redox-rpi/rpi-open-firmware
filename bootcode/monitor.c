@@ -71,16 +71,20 @@ static void flush_caches(void) {
  * its SDRAM set-up when SD_CS bit 0 (RESTRT, which our set-up leaves
  * set) reads 1, and then assumes 256 MB (Pi test #269, part E). The
  * steps are the start of sdram.c's reset_with_timing(): standby, wait
- * for SDUP to clear, SDRAM clock off; then SD_CS = 0 (EN and RESTRT
- * clear). Nothing touches SDRAM after this; the image is in the L2.
+ * for SDUP to clear, SDRAM clock off; then SD_CS back to the value the
+ * Boot ROM left (EN and RESTRT clear; #313 step 0 hung with SD_CS = 0).
+ * Nothing touches SDRAM after this; the image is in the L2. With
+ * reset false (SDRAM never set up) it only copies and jumps.
  */
-void chain_trampoline(const volatile uint32_t *src, uint32_t words)
+void chain_trampoline(const volatile uint32_t *src, uint32_t words, bool reset, uint32_t sdcs)
 	__attribute__((section(".tramp"), noinline, noreturn));
-void chain_trampoline(const volatile uint32_t *src, uint32_t words) {
+void chain_trampoline(const volatile uint32_t *src, uint32_t words, bool reset, uint32_t sdcs) {
 	volatile uint32_t *dst = (volatile uint32_t *)CHAIN_BASE;
 	for (uint32_t i = 0; i < words; i++)
 		dst[i] = src[i];
 
+	if (!reset)
+		goto go;
 	SD_CS = (SD_CS & ~(SD_CS_DEL_KEEP_SET | SD_CS_DPD_SET | SD_CS_RESTRT_SET)) | SD_CS_STBY_SET;
 	while (SD_CS & SD_CS_SDUP_SET) {
 	}
@@ -91,7 +95,8 @@ void chain_trampoline(const volatile uint32_t *src, uint32_t words) {
 	CM_SDCCTL = CM_PASSWORD | (CM_SDCCTL & CM_SDCCTL_UPDATE_CLR);
 	while (CM_SDCCTL & CM_SDCCTL_ACCPT_SET) {
 	}
-	SD_CS = 0;
+	SD_CS = sdcs;
+go:
 
 	L1_D_CONTROL |= L1_DC_FLUSH;
 	while (L1_D_CONTROL & L1_DC_FLUSH) {
@@ -245,13 +250,14 @@ static void cmd_chain(uint32_t addr, uint32_t len) {
 		printf("err length must be 0x204..0x%X\n", CHAIN_MAX);
 		return;
 	}
-	printf("ok chain %u bytes, start 0x%08X, SDRAM reset\n", len, CHAIN_ENTRY);
+	printf("ok chain %u bytes, start 0x%08X, %s\n", len, CHAIN_ENTRY,
+	       g_sdram_up ? "SDRAM reset" : "SDRAM untouched");
 	/* let the last characters leave the UART before we go */
 	udelay(2000);
 	for (uint8_t *s = __tramp_load, *d = __tramp_start; d < __tramp_end;)
 		*d++ = *s++;
 	flush_caches();
-	chain_trampoline((const volatile uint32_t *)addr, (len + 3) / 4);
+	chain_trampoline((const volatile uint32_t *)addr, (len + 3) / 4, g_sdram_up, g_rom_sdcs);
 }
 
 #if CHAIN_IMAGE
@@ -341,7 +347,8 @@ static bool run(int argc, char **argv) {
 #define MONITOR_IDLE_US 0xffffffffu
 #endif
 
-void monitor(uint32_t wait_s) {
+/* true when Enter came within wait_s */
+bool monitor_wait(uint32_t wait_s) {
 	printf("rbc> monitor: press Enter within %u s\n", wait_s);
 	uint32_t t0 = timer_us(), wait_us = wait_s * 1000000u;
 	for (;;) {
@@ -349,11 +356,20 @@ void monitor(uint32_t wait_s) {
 		int c = used < wait_us ? uart_getc_timeout(wait_us - used) : -1;
 		if (c < 0) {
 			printf("rbc> no input, normal boot\n");
-			return;
+			return false;
 		}
 		if (c == '\r' || c == '\n')
-			break;
+			return true;
 	}
+}
+
+void monitor(uint32_t wait_s) {
+	if (monitor_wait(wait_s))
+		monitor_run();
+}
+
+/* returns on "boot" (and after the idle time in a boot selector build) */
+void monitor_run(void) {
 	printf("ok monitor\n");
 	for (;;) {
 		printf("rbc> ");

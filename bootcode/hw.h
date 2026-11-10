@@ -24,6 +24,8 @@
 
 /* main.c */
 extern uint32_t g_cpuid;
+extern uint32_t g_rom_sdcs;  /* SD_CS as the Boot ROM left it */
+extern bool g_sdram_up;      /* sdram_init() has run */
 void panic(const char *fmt, ...) __attribute__((noreturn));
 
 /* clock.c */
@@ -54,4 +56,6 @@ void sdram_init(void);
 #define CHAIN_IMAGE 0
 #endif
 void monitor(uint32_t wait_s);
+bool monitor_wait(uint32_t wait_s);
+void monitor_run(void);
 void monitor_chain_builtin(void) __attribute__((noreturn));

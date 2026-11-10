@@ -22,6 +22,8 @@
 #endif
 
 uint32_t g_cpuid;
+uint32_t g_rom_sdcs;
+bool g_sdram_up;
 
 extern uint32_t __bss_start[], __bss_end[];
 extern const uint32_t exc_stub_table[33];
@@ -79,6 +81,7 @@ void bootcode_main(uint32_t cpuid) {
 		CM_VPUCTL, CM_VPUDIV, A2W_PLLC_CTRL, A2W_PLLC_FRAC, SD_CS, ST_CLO_REG,
 	};
 
+	g_rom_sdcs = rom.sdcs;
 	vectors_init();
 	clock_init();
 	uart_init();
@@ -88,14 +91,22 @@ void bootcode_main(uint32_t cpuid) {
 	printf("from the Boot ROM: CM_VPUCTL 0x%X CM_VPUDIV 0x%X PLLC_CTRL 0x%X PLLC_FRAC 0x%X SD_CS 0x%X timer %u us\n",
 	       rom.vpuctl, rom.vpudiv, rom.pllc_ctrl, rom.pllc_frac, rom.sdcs, rom.timer);
 
+#if MONITOR && CHAIN_IMAGE
+	/* boot selector: the normal boot chains before our SDRAM set-up, so
+	 * Broadcom's code finds the SDRAM as the Boot ROM left it (Pi test
+	 * #313: after our set-up and reset it never got going) */
+	if (!monitor_wait(5))
+		monitor_chain_builtin();
+#endif
 	uint32_t t0 = timer_us();
 	sdram_init();
+	g_sdram_up = true;
 	printf("SDRAM ready after %u us\n", timer_us() - t0);
-#if MONITOR
-	monitor(5);
-#if CHAIN_IMAGE
+#if MONITOR && CHAIN_IMAGE
+	monitor_run();
 	monitor_chain_builtin();
-#endif
+#elif MONITOR
+	monitor(5);
 #endif
 	printf("M1 done: stage 1 runs, SDRAM works. Nothing to load yet.\n");
 
