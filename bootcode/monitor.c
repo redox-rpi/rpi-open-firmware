@@ -23,11 +23,14 @@
  *                  a wrong CRC-32 with C given        -> err crc32 X want C
  *   crc A N        CRC-32 (zlib) of N bytes at A      -> ok crc32 X
  *   g A [a b c d]  call VPU code at A with r0..r3     -> ok ret X
- *   chain A N      copy a bootcode.bin image (N bytes at A) to 0x80000000,
- *                  take the SDRAM down as the Boot ROM leaves it, and
- *                  start the image at 0x80000200; no return
+ *   chain A N [R]  copy a bootcode.bin image (N bytes at A) to 0x80000000
+ *                  and start it at 0x80000200, SDRAM left running; with
+ *                  R = 1 take the SDRAM down first (experimental: Broadcom's
+ *                  bootcode.bin hangs after it, Pi tests #313, #320); no return
+ *   reset          full chip reset through the watchdog, as a reboot; no return
  *   boot           leave the monitor, go on with the normal boot (in a
- *                  boot selector build: chain the built-in image)
+ *                  boot selector build: reset, so the selector starts again
+ *                  and boots without the monitor)
  * Before any err, input is dropped until the line is quiet for 0.5 s, so
  * the rest of a broken upload is not read as commands; the prompt follows
  * the err line, and the host can retry without a reset once it sees it.
@@ -244,20 +247,21 @@ static void cmd_dump(uint32_t addr, uint32_t len) {
 	printf("ok\n");
 }
 
-static void cmd_chain(uint32_t addr, uint32_t len) {
+static void cmd_chain(uint32_t addr, uint32_t len, bool reset) {
 	if (len < 0x204 || len > CHAIN_MAX) {
 		drain_input();
 		printf("err length must be 0x204..0x%X\n", CHAIN_MAX);
 		return;
 	}
+	reset = reset && g_sdram_up;
 	printf("ok chain %u bytes, start 0x%08X, %s\n", len, CHAIN_ENTRY,
-	       g_sdram_up ? "SDRAM reset" : "SDRAM untouched");
+	       !g_sdram_up ? "SDRAM untouched" : reset ? "SDRAM reset" : "SDRAM running");
 	/* let the last characters leave the UART before we go */
 	udelay(2000);
 	for (uint8_t *s = __tramp_load, *d = __tramp_start; d < __tramp_end;)
 		*d++ = *s++;
 	flush_caches();
-	chain_trampoline((const volatile uint32_t *)addr, (len + 3) / 4, g_sdram_up, g_rom_sdcs);
+	chain_trampoline((const volatile uint32_t *)addr, (len + 3) / 4, reset, g_rom_sdcs);
 }
 
 #if CHAIN_IMAGE
@@ -272,10 +276,28 @@ extern const uint8_t chain_image[], chain_image_end[];
 void monitor_chain_builtin(void) {
 	uint32_t len = (uint32_t)(chain_image_end - chain_image);
 	printf("rbc> chain built-in bootcode.bin, %u bytes, crc32 %08X\n", len, crc32(chain_image, len));
-	cmd_chain((uint32_t)chain_image, len);
+	cmd_chain((uint32_t)chain_image, len, false);
 	panic("built-in bootcode.bin not chained");
 }
 #endif
+
+/*
+ * Full chip reset through the PM watchdog, as Linux's bcm2835_wdt restart:
+ * 10 ticks (about 150 us), then a full reset. The Boot ROM starts again
+ * and loads bootcode.bin from the card, as after a power cycle.
+ */
+/* PM_RSTC 0x7e10001c, PM_WDOG 0x7e100024 from Broadcom's headers */
+#define PM_RSTC_WRCFG_MASK 0x30u
+#define PM_RSTC_FULL_RESET 0x20u
+
+void watchdog_reset(void) {
+	printf("rbc> watchdog reset\n");
+	udelay(2000);
+	PM_WDOG = CM_PASSWORD | 10;
+	PM_RSTC = CM_PASSWORD | (PM_RSTC & ~PM_RSTC_WRCFG_MASK) | PM_RSTC_FULL_RESET;
+	for (;;) {
+	}
+}
 
 typedef uint32_t (*vpu_fn)(uint32_t, uint32_t, uint32_t, uint32_t);
 
@@ -320,13 +342,16 @@ static bool run(int argc, char **argv) {
 		flush_caches();
 		uint32_t ret = ((vpu_fn)a[0])(a[1], a[2], a[3], a[4]);
 		printf("ok ret %08X\n", ret);
-	} else if (!strcmp_s(c, "chain") && n == 2) {
-		cmd_chain(a[0], a[1]);
+	} else if (!strcmp_s(c, "chain") && (n == 2 || n == 3)) {
+		cmd_chain(a[0], a[1], n == 3 && a[2] != 0);
+	} else if (!strcmp_s(c, "reset") && n == 0) {
+		printf("ok reset\n");
+		watchdog_reset();
 	} else if (!strcmp_s(c, "boot") && n == 0) {
 		printf("ok boot\n");
 		return true;
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();

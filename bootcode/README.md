@@ -58,7 +58,8 @@ the prompt `rbc> `. Numbers are hex.
 | `l A N [C]` | load N bytes, sent as 2N hex digits (other characters skipped); with C the CRC-32 must match | `ok send …`, then `ok crc32 X`; `err timeout …` after 2 s without a digit, `err crc32 X want C` |
 | `crc A N` | CRC-32 (zlib) of N bytes | `ok crc32 X` |
 | `g A [r0 r1 r2 r3]` | call VPU code at A | `ok ret X` |
-| `chain A N` | copy a `bootcode.bin` image to `0x80000000`, take the SDRAM down as the Boot ROM leaves it, start the image at `0x80000200` | `ok chain …, SDRAM reset`, no return |
+| `chain A N [R]` | copy a `bootcode.bin` image to `0x80000000` and start it at `0x80000200`, SDRAM left running; `R` = 1 takes the SDRAM down first (experimental: Broadcom's `bootcode.bin` hangs after it, #313, #320) | `ok chain …, SDRAM running` (or `SDRAM reset`), no return |
+| `reset` | full chip reset through the watchdog, as a reboot | `ok reset`, `rbc> watchdog reset`, no return |
 | `boot` | leave the monitor (boot selector: chain the built-in image) | `ok boot` |
 
 Before any `err`, the monitor drops input until the line has been quiet
@@ -102,8 +103,12 @@ serial line alone, with no card swap:
   first version set up the SDRAM, took it down and then chained; Broadcom's
   code never got going after that (Pi test #313 step 0).
 - **Enter:** our SDRAM set-up runs, then `ok monitor` and the prompt.
-  `boot`, or 300 s without a character, chains the built-in image with
-  the SDRAM reset of the `chain` command.
+  `boot`, or 300 s without a character, resets the chip through the
+  watchdog (`rbc> watchdog reset`): the selector starts again and, with
+  nobody pressing Enter, boots normally. Chaining Broadcom's code after
+  our SDRAM set-up does not help: with the SDRAM left running it skips
+  its own set-up and sees only 256 MB (#269), with the SDRAM taken down it
+  hangs (#313, #320).
 
 The normal boot gets about 5 s longer. Later
 our own VPU loader (M2) replaces the built-in Broadcom image.

@@ -59,3 +59,4 @@ void monitor(uint32_t wait_s);
 bool monitor_wait(uint32_t wait_s);
 void monitor_run(void);
 void monitor_chain_builtin(void) __attribute__((noreturn));
+void watchdog_reset(void) __attribute__((noreturn));

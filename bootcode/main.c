@@ -103,8 +103,11 @@ void bootcode_main(uint32_t cpuid) {
 	g_sdram_up = true;
 	printf("SDRAM ready after %u us\n", timer_us() - t0);
 #if MONITOR && CHAIN_IMAGE
+	/* after our SDRAM set-up Broadcom's code does not start (Pi tests
+	 * #313, #320), so leave through a chip reset: the selector starts
+	 * again and, with nobody pressing Enter, chains before the set-up */
 	monitor_run();
-	monitor_chain_builtin();
+	watchdog_reset();
 #elif MONITOR
 	monitor(5);
 #endif
