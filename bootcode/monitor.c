@@ -6,6 +6,10 @@
  * Never part of a release: it gives anyone on the serial pins full
  * control of the chip.
  *
+ * Opening: only Enter within the wait opens it. A boot selector build
+ * (CHAIN_IMAGE, see chain-image.S) chains its built-in bootcode.bin when
+ * nobody opens it, on "boot", and after 300 s without input.
+ *
  * Protocol (all numbers hex, "0x" optional; one reply line per command,
  * starting with "ok" or "err", then the prompt "rbc> " again):
  *   r A            read the 32-bit word at A          -> ok A V
@@ -22,7 +26,8 @@
  *   chain A N      copy a bootcode.bin image (N bytes at A) to 0x80000000,
  *                  take the SDRAM down as the Boot ROM leaves it, and
  *                  start the image at 0x80000200; no return
- *   boot           leave the monitor, go on with the normal boot
+ *   boot           leave the monitor, go on with the normal boot (in a
+ *                  boot selector build: chain the built-in image)
  * Before any err, input is dropped until the line is quiet for 0.5 s, so
  * the rest of a broken upload is not read as commands; the prompt follows
  * the err line, and the host can retry without a reset once it sees it.
@@ -249,6 +254,23 @@ static void cmd_chain(uint32_t addr, uint32_t len) {
 	chain_trampoline((const volatile uint32_t *)addr, (len + 3) / 4);
 }
 
+#if CHAIN_IMAGE
+extern const uint8_t chain_image[], chain_image_end[];
+
+/*
+ * Boot selector (CHAIN_IMAGE): chain the bootcode.bin built into us. The
+ * image lies inside our own copy in the L2, above 0x80000000, so the
+ * trampoline's forward copy down to 0x80000000 never overwrites a word
+ * it has yet to read.
+ */
+void monitor_chain_builtin(void) {
+	uint32_t len = (uint32_t)(chain_image_end - chain_image);
+	printf("rbc> chain built-in bootcode.bin, %u bytes, crc32 %08X\n", len, crc32(chain_image, len));
+	cmd_chain((uint32_t)chain_image, len);
+	panic("built-in bootcode.bin not chained");
+}
+#endif
+
 typedef uint32_t (*vpu_fn)(uint32_t, uint32_t, uint32_t, uint32_t);
 
 /* returns true when the normal boot should go on */
@@ -307,18 +329,41 @@ static bool run(int argc, char **argv) {
 	return false;
 }
 
+/*
+ * Only Enter (CR or LF) opens the monitor: other bytes, such as line noise
+ * at power-on, are ignored. A boot selector build also goes on with the
+ * normal boot after MONITOR_IDLE_US without a character, so a monitor
+ * opened by mistake does not keep the Pi from booting.
+ */
+#if CHAIN_IMAGE
+#define MONITOR_IDLE_US (300u * 1000 * 1000)
+#else
+#define MONITOR_IDLE_US 0xffffffffu
+#endif
+
 void monitor(uint32_t wait_s) {
 	printf("rbc> monitor: press Enter within %u s\n", wait_s);
-	int c = uart_getc_timeout(wait_s * 1000000u);
-	if (c < 0) {
-		printf("rbc> no input, normal boot\n");
-		return;
+	uint32_t t0 = timer_us(), wait_us = wait_s * 1000000u;
+	for (;;) {
+		uint32_t used = timer_us() - t0;
+		int c = used < wait_us ? uart_getc_timeout(wait_us - used) : -1;
+		if (c < 0) {
+			printf("rbc> no input, normal boot\n");
+			return;
+		}
+		if (c == '\r' || c == '\n')
+			break;
 	}
 	printf("ok monitor\n");
 	for (;;) {
 		printf("rbc> ");
-		if (!read_line(0xffffffffu))
+		if (!read_line(MONITOR_IDLE_US)) {
+			if (CHAIN_IMAGE) {
+				printf("\nrbc> idle %u s, normal boot\n", MONITOR_IDLE_US / 1000000u);
+				return;
+			}
 			continue;
+		}
 		char *argv[6];
 		int argc = split(line, argv, 6);
 		if (argc && run(argc, argv))

@@ -41,8 +41,9 @@ Serial console on GPIO 14/15, 115200 8N1.
 
 `make MONITOR=1` adds `monitor.c`. After the SDRAM test it prints
 `rbc> monitor: press Enter within 5 s`. With no input it carries on with
-the normal path, so an unattended boot still works. Enter opens the
-monitor. **Never in a release:** anyone on the serial pins gets full
+the normal path, so an unattended boot still works. Only Enter (CR or LF)
+opens the monitor; other bytes, such as line noise at power-on, are
+ignored. **Never in a release:** anyone on the serial pins gets full
 control of the chip.
 
 Each command gets one reply line that starts with `ok` or `err`, then
@@ -58,7 +59,7 @@ the prompt `rbc> `. Numbers are hex.
 | `crc A N` | CRC-32 (zlib) of N bytes | `ok crc32 X` |
 | `g A [r0 r1 r2 r3]` | call VPU code at A | `ok ret X` |
 | `chain A N` | copy a `bootcode.bin` image to `0x80000000`, take the SDRAM down as the Boot ROM leaves it, start the image at `0x80000200` | `ok chain …, SDRAM reset`, no return |
-| `boot` | leave the monitor | `ok boot` |
+| `boot` | leave the monitor (boot selector: chain the built-in image) | `ok boot` |
 
 Before any `err`, the monitor drops input until the line has been quiet
 for 0.5 s, so the rest of a broken upload is not read as commands. The
@@ -84,6 +85,25 @@ another card image. The monitor test card is lk-overlay's card with our
 `bootcode.bin`, so lk-overlay's stage 1 can be chained over serial and
 still find its stage 2 on the card.
 
+### Boot selector (test Pi's network boot card)
+
+`make MONITOR=1 CHAIN_IMAGE=broadcom-bootcode.bin` builds Broadcom's
+`bootcode.bin` into the monitor (`chain-image.S`, the file unchanged, about
+60 KB in all; the Boot ROM loads up to 128 KB). As `bootcode.bin` on the
+network boot card it lets the test agent pick the boot path from the
+serial line alone, with no card swap:
+
+- **Enter within 5 s:** the monitor stays open for firmware tests (load
+  and run our own stages, read registers).
+- **No Enter, `boot`, or 300 s without a character in an open monitor:**
+  it prints `rbc> chain built-in bootcode.bin, N bytes, crc32 X` and
+  chains Broadcom's `bootcode.bin`, which network-boots U-Boot and Redox
+  as before. The chain takes the SDRAM down first, so Broadcom's code
+  sizes it itself (Pi test #271).
+
+The normal boot gets about 6 s longer (5 s wait, our SDRAM set-up). Later
+our own VPU loader (M2) replaces the built-in Broadcom image.
+
 ## Files and where they come from
 
 | File | What | Source |
@@ -94,6 +114,7 @@ still find its stage 2 on the card.
 | `clock.c` | PLLC 1000 MHz, VPU clock, 1 MHz system timer | rpi-open-firmware `firmware/romstage.c`, `switch_vpu_to_pllc()`, values unchanged |
 | `uart.c` | PL011 on GPIO 14/15 | rpi-open-firmware `firmware/romstage.c`, `uart_init()`, values unchanged |
 | `timer.c`, `printf.c` | delay, small printf | new |
+| `chain-image.S` | places a `bootcode.bin` image in the boot selector build | new; the image is Broadcom's, unchanged |
 | `monitor.c`, `go-test.S`, `rbc-load.sh`, `libc.c` | serial monitor (test builds), its test payload and host script, `memset`/`memcpy` | new; cache flush registers from Broadcom's `vpu_l1_cache_ctrl.h` |
 | `sdram.c` | LPDDR2 set-up and self test | rpi-open-firmware `firmware/sdram.c` (Julian Brown and the rpi-open-firmware authors); sequence, timings and magic values unchanged; self test extended |
 | `hw.h` | common header | new; register names from Broadcom's headers |

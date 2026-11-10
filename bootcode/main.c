@@ -13,7 +13,9 @@
 #define BUILD_ID "unknown"
 #endif
 
-#if MONITOR
+#if MONITOR && CHAIN_IMAGE
+#define VARIANT "M1, monitor, test build, boot selector"
+#elif MONITOR
 #define VARIANT "M1, monitor, test build"
 #else
 #define VARIANT "M1"
@@ -91,6 +93,9 @@ void bootcode_main(uint32_t cpuid) {
 	printf("SDRAM ready after %u us\n", timer_us() - t0);
 #if MONITOR
 	monitor(5);
+#if CHAIN_IMAGE
+	monitor_chain_builtin();
+#endif
 #endif
 	printf("M1 done: stage 1 runs, SDRAM works. Nothing to load yet.\n");
 
