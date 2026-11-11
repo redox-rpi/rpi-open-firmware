@@ -129,6 +129,32 @@ background, an hour or more) and compile `bootcode/fat.c` to assembler and,
 if the encoding allows, to an object. Compare with GCC. That tells us
 within a day how complete the backend is.
 
+## TCC spike result
+
+State 2026-11-11 (first day of the spike). Details, milestones and open
+questions: [tcc-vc4.md](tcc-vc4.md); code: branch `vc4` of
+[redox-rpi/tinycc](https://github.com/redox-rpi/tinycc), draft
+[PR #1](https://github.com/redox-rpi/tinycc/pull/1).
+
+- **Works:** `vc4-tcc -c` compiles `bootcode/fat.c` to a VC4 ELF object
+  that links with `vc4-elf-ld` into the bootcode build (`MONITOR=1`).
+  Every instruction form agrees with `vc4-elf-as`/`vc4-elf-objdump`
+  (encoder test: 271 forms, 0 failures).
+- **Not checked yet:** running the code. No VC4 simulator is built
+  (resim needs the maintainer's OK); the Pi is the other way.
+- **Size:** `fat.c` text 3,454 bytes against 1,672 with GCC 6.2.1 `-Os`
+  (2.07×, no optimisation at all); `bootcode.bin` 15,902 against 14,120.
+- **Lines:** encoder 197, code generator 595, relocations 108, tests 275;
+  about 60 lines of plumbing in TCC's own files.
+- **Open problems:** no `long long`, float, struct arguments, variadic
+  function definitions or VLAs; no `stdint.h` of its own; prologue and
+  global addressing are large (M7).
+- **Estimate for the rest:** the other C files of `bootcode/` (about
+  1,900 lines; needs variadic definitions for `printf`/`panic`) about a
+  week; an assembler for the three `.S` files (73 lines) one to two
+  weeks; TCC's own linker for VC4 about a week.
+- **So far no blocker:** nothing points against the approach.
+
 ## Proposed next steps
 
 The TCC spike has started as a work package of its own: plan and
