@@ -18,6 +18,62 @@ The firmware work (M2, M3) goes on with GCC regardless.
   documentation and check it against the VC4 GNU assembler's output; no
   tables or code are taken from binutils (GPLv3+).
 
+## Decision: TCC or GCC for the VPU firmware (draft, for the maintainer)
+
+State 2026-11-11, written by the tcc-vc4 session. Details:
+[tcc-vc4.md](tcc-vc4.md), code in
+[redox-rpi/tinycc PR #1](https://github.com/redox-rpi/tinycc/pull/1)
+(branch `vc4`, 497e8fd3).
+
+**Where TCC stands.** The whole `bootcode/` (all C files, `monitor.c`
+with its inline asm, `start.S`) builds with `vc4-tcc`. Only the link
+still needs `vc4-elf-ld` and `vc4-elf-objcopy` from binutils; GCC is not
+needed any more.
+
+On the Pi, TCC-built code behaves exactly like GCC's: in
+[pi-tests row 347](https://github.com/redox-rpi/pi-tests/blob/main/reports/347.md),
+everything but `monitor.c`/`start.S` from TCC gave the same `sd`, `ls`
+and file-load results, crc32 for crc32. Row 349 (all of it from TCC,
+including the chain trampoline) is queued.
+
+| `bootcode.bin`, `MONITOR=1` | GCC 6.2.1 `-Os` | TCC (no optimisation) |
+|---|---|---|
+| code and data (text) | 14,512 bytes | 24,828 bytes (1.71×) |
+| image | 14,568 bytes | 24,942 bytes |
+| limit | 100 KB (chain), 108 KB (L2) | fits 4 times over |
+
+**Tested:**
+- Encoder: 271 instruction forms, the same as gas and objdump.
+- Assembler: its linked bytes are the same as gas's.
+- ABI: variadic functions, many arguments, narrow types, switch and struct return give the same output as the host build, in the resim simulator.
+- FAT16 and FAT32 loading works in resim.
+- On the Pi: SD and FAT (row 347).
+- TCC's own `make test` still passes.
+
+**What is missing, with rough effort:**
+
+| Item | Effort | Needed for |
+|---|---|---|
+| TCC's own linker for VC4, with what `linker.ld` does (fixed addresses, `.tramp` stored in the image but run at 0x80019000, `ASSERT`) | about 1 week, or less if the firmware drops the separate load address of `.tramp` | dropping binutils |
+| Own freestanding `stdint.h`/`stdbool.h` in the fork (today newlib's) | 1 day | dropping newlib |
+| Size work: keep arguments in registers, skip frames in leaf functions, shorter global addressing | 1–2 weeks to about 1.3× GCC | only if size matters |
+| `long long`, float, struct arguments | about 1 week | not used by `bootcode/` today |
+| TCC for VC4 running on Redox on the Pi (Redox's TCC patches into the fork, after agreement) | days | building firmware on the Pi |
+| Upstream's C++ firmware (`firmware/*.cc`) | not possible: TCC compiles C only | only if we build upstream's firmware rather than our `bootcode/` |
+
+**Options:**
+
+- **A — move to TCC fully,** once the linker is done: one small compiler (builds in seconds) instead of a 40-minute GCC/binutils/newlib build, and it can run on the Pi. We maintain the backend ourselves.
+- **B — keep GCC,** and keep TCC as a second compiler and cross-check. No new maintenance, but also no smaller toolchain.
+- **C — TCC now, binutils for the link** (what works today), and decide on A after the linker step. Drops GCC and newlib now, and keeps a binutils build (minutes, not 40).
+
+**Risks:**
+- Code-generation bugs in a young backend. Against them stand the four host tests and one Pi row per firmware change.
+- One extra codebase to keep up.
+- Upstream C++ stays out of reach.
+
+**Recommendation of the session:** C now, with GCC frozen as the reference. Then the linker step, and then A, if the maintainer wants the toolchain on the Pi.
+
 ## What we use today
 
 | Part | Tool |
