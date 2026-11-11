@@ -34,8 +34,9 @@ What it means for us:
 - **The 3B+:** he tests a 3B (BCM2837 without "B0", LAN9514). Our 3B+ has
   the newer stepping, LAN7515 and the PMIC, so his results don't carry
   over as they are.
-- Contacting him (an issue or the `#raspberrypi-internals` IRC channel)
-  is the maintainer's call; nothing has been sent.
+- Contact: the maintainer wrote to him on 2026-11-11 (his issues are off;
+  his open PRs are librerpi/lk-overlay#8 and librerpi/rpi-open-firmware#3),
+  inviting him to compare notes or contribute.
 
 ## Everything else
 
