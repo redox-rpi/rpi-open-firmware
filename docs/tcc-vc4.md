@@ -21,7 +21,7 @@ Redox, where TCC already runs (redox-rpi experiment `tcc`, #247).
 | First step | A time-boxed spike: integer subset only (load/store, integer arithmetic, compares, branches, calls, stack frame), enough to compile `bootcode/fat.c`. No float, vector, inline asm or `.S`. |
 | Measure | Size against `vc4-elf-gcc -Os`, and a host test. |
 
-## Status (2026-11-11, night)
+## Status (2026-11-11, late night)
 
 Branch `vc4` of redox-rpi/tinycc, draft
 [PR #1](https://github.com/redox-rpi/tinycc/pull/1) against `main`. Native
@@ -33,6 +33,7 @@ Branch `vc4` of redox-rpi/tinycc, draft
 | M1 | **done for integers**: ABI test (`tests/vc4/abi-sim.sh`) prints the same on the host and as TCC code in resim: variadic functions (also called from GCC code), 8 arguments, signed/unsigned narrow types, div/mod, shifts, compares, switch, loops, recursion, struct return, function-pointer tables, data relocations |
 | M2 | **done (simulator)**: `fat.c` runs correctly in resim on FAT16 and FAT32 card images (`tests/vc4/fat-sim.sh`) |
 | M3 | **builds**: every C file of `bootcode/` but `monitor.c` (inline asm, waits for M4) compiles with TCC, and the bootcode links (`tests/vc4/bootcode-build.sh`). **Runs on the Pi** ([pi-tests report 347](https://github.com/redox-rpi/pi-tests/blob/main/reports/347.md)): chained from the boot selector, the builds with TCC's `fat.c` (F) and with all C but `monitor.c` from TCC (T) answered `sd`, `ls`, `fl` (up to the 3 MB START.ELF), `sdr` and `crc` exactly as the GCC build (G). TCC's `sdram.c` did not run there (the chained build keeps the running SDRAM) |
+| M4 | **done (host), Pi test queued**: `vc4-asm.c` assembles `start.S`, `go-test.S`, `chain-image.S` and `monitor.c`'s inline asm; `start.S` and `go-test.S` give the same bytes as gas, and `tests/vc4/asm-test.sh` checks about 90 instructions and the data directives against gas. The whole `bootcode.bin` builds with vc4-tcc (link: vc4-elf-ld): 24,942 bytes against 14,568 (text 1.71×). Pi: [pi-tests row 349](https://github.com/redox-rpi/pi-tests/blob/main/queue.md). On the way: TCC ignored `attribute((section))` on a prototype (the trampoline went to `.text`), fixed in `tccgen.c`; start.S's `.word` was 16 bits (fixed by the open-firmware session, fat-boot 8c704d0) |
 
 | `bootcode/` text | GCC 6.2.1 `-Os` | TCC (no optimisation) | factor |
 |---|---|---|---|

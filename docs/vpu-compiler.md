@@ -192,9 +192,8 @@ questions: [tcc-vc4.md](tcc-vc4.md); code: branch `vc4` of
 [redox-rpi/tinycc](https://github.com/redox-rpi/tinycc), draft
 [PR #1](https://github.com/redox-rpi/tinycc/pull/1).
 
-- **Builds:** every C file of `bootcode/` but `monitor.c` (inline asm)
-  compiles with `vc4-tcc` and links into the bootcode build
-  (`MONITOR=1`). Every instruction form agrees with
+- **Builds:** the whole `bootcode/` (C, inline asm, `.S`) builds with
+  `vc4-tcc`; only the link is `vc4-elf-ld` (see the decision note above). Every instruction form agrees with
   `vc4-elf-as`/`vc4-elf-objdump` (271 forms, 0 failures).
 - **Runs:** in the resim simulator, TCC's `fat.c` loads every file from
   FAT16 and FAT32 card images correctly, and an ABI test (variadic
@@ -203,10 +202,8 @@ questions: [tcc-vc4.md](tcc-vc4.md); code: branch `vc4` of
 - **Size:** bootcode text 16,945 bytes against 9,534 with GCC 6.2.1 `-Os`
   (1.78×, no optimisation at all); `bootcode.bin` 21,880 against 14,420.
 - **Open problems:** no `long long`, float, struct arguments or VLAs; no
-  `stdint.h` of its own; no assembler (`.S` files, `monitor.c`'s one asm
-  line); prologue and global addressing are large (M7).
-- **Estimate for the rest:** an assembler for the three `.S` files (73
-  lines) one to two weeks; TCC's own linker for VC4 about a week.
+  `stdint.h` of its own; no VC4 linker in TCC; prologue and global
+  addressing are large (M7).
 - **So far no blocker:** nothing points against the approach.
 
 ## Proposed next steps
