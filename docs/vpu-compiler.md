@@ -66,7 +66,7 @@ holding the C front end, the code generator, an assembler and a linker.
 | **TCC fork with a VC4 backend** | medium (weeks) | one program | **yes, TCC runs already** | own encoding needed (table above) |
 | [QBE](https://c9x.me/compile/) + [cproc](https://sr.ht/~mcf/cproc/) + an assembler | medium | 3–4 tools | probably portable | QBE writes assembler text and has no assembler of its own, so it needs one (below); better code than TCC |
 | Forward-port the VC4 port to current GCC/binutils | large | very large | no | only fixes the ageing |
-| LLVM backend | very large | huge | no | the only way to Rust on the VPU |
+| **LLVM VideoCore4 backend** (exists, see below) | medium to try, large to finish | huge (LLVM, clang, lld) | no | clang today; the only way to Rust on the VPU |
 
 **Assemblers for the QBE way:**
 
@@ -87,13 +87,44 @@ assembles QPU code to binary, ELF or C source"). It has no linker. Useful
 later: QPU shaders for M5 (3D) and graphics, and reading any QPU code in
 Broadcom's firmware.
 
+## LLVM: there is a VideoCore4 backend
+
+The LLVM line has a longer history than this page first said:
+
+| Repository | LLVM | Last change | Notes |
+|---|---|---|---|
+| David Given's backend, [announced on llvm-dev in 2014](https://lists.llvm.org/pipermail/llvm-dev/2014-May/073262.html) | 3.x | 2014 | "incomplete, but generates decent code in some cases" |
+| [phire/llvm](https://github.com/phire/llvm) | 3.x | 2015 | separate early port |
+| Kristina Brooks's `LLVM-VideoCore4` (fork of Given's, the original repo is gone; copy at [phanirajkiran/LLVM-VideoCore4](https://github.com/phanirajkiran/LLVM-VideoCore4)) | 3.x | 2016 | the rpi-open-firmware author's; she later moved to GCC |
+| [LEA0317/LLVM-VideoCore4](https://github.com/LEA0317/LLVM-VideoCore4) | 8 to 14 | 2022–2023 | the backend carried forward release by release |
+| [hiro-0317/llvm-videocore](https://github.com/hiro-0317/llvm-videocore) | **19.1.3** | 2024-11 | same author as LEA0317; `LLVM_EXPERIMENTAL_TARGETS_TO_BUILD=VideoCore4` with clang and lld; tests compile C/C++ to VC4 assembler (`llvm_crc32`, `llvm_control1`, …); instruction encoding marked "WIP" in the history; no licence file of its own besides LLVM's |
+
+**For it:** clang is a modern C front end (C11 and later, good
+diagnostics), LLVM's code quality, lld as linker, and it is the only way
+to Rust on the VPU: rustc needs an LLVM backend, plus a target
+specification and `core` built for it.
+
+**Against it:** a huge dependency (building LLVM with clang and lld takes
+hours and many GB), it will not run on the Pi, one person maintains it,
+and how far object output works (instruction encoding still "WIP") is
+unknown. It is the opposite of "fewer dependencies", but a strong answer to
+"modern compiler".
+
+**Cheap check:** build hiro-0317's LLVM 19 on homenodellm (in the
+background, an hour or more) and compile `bootcode/fat.c` to assembler and,
+if the encoding allows, to an object. Compare with GCC. That tells us
+within a day how complete the backend is.
+
 ## Proposed next steps
 
 1. **Freeze GCC** (container), as fallback and reference.
-2. **A time-boxed TCC spike**, as a sub-project of its own, off the
+2. **Check the LLVM backend** (above, about a day): if it is nearly
+   complete, it changes the picture, at least for a modern compiler and
+   Rust.
+3. **A time-boxed TCC spike**, as a sub-project of its own, off the
    firmware's path: only the integer subset (load/store, arithmetic,
    branches, calls), enough to compile `bootcode/fat.c`. The host test
    for `fat.c` exists, so size and result can be compared with GCC's.
    If that goes well: the rest of `bootcode/`, then the `.S` files with
    TCC's assembler.
-3. Decision by the maintainer after the spike: TCC, QBE, or GCC frozen.
+4. Decision by the maintainer: TCC (small, on the Pi), LLVM (modern, Rust), QBE, or GCC frozen. TCC and LLVM do not exclude each other: TCC for building on the Pi, LLVM for a modern compiler on the build host.
