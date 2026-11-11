@@ -36,7 +36,11 @@ What it means for us:
   over as they are.
 - Contact: the maintainer wrote to him on 2026-11-11 (his issues are off;
   his open PRs are librerpi/lk-overlay#8 and librerpi/rpi-open-firmware#3),
-  inviting him to compare notes or contribute.
+  inviting him to compare notes or contribute. He answered the same day
+  (lk-overlay#8): he'd like to chat and asked for a channel. His goals
+  were a custom animation on the VPU while the OS loads, and booting as
+  fast as possible (still working on that); avoiding Broadcom's firmware
+  was a side effect.
 
 ## Everything else
 
