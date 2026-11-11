@@ -60,6 +60,10 @@ the prompt `rbc> `. Numbers are hex.
 | `g A [r0 r1 r2 r3]` | call VPU code at A | `ok ret X` |
 | `chain A N [R]` | copy a `bootcode.bin` image to `0x80000000` and start it at `0x80000200`, SDRAM left running; `R` = 1 takes the SDRAM down first (experimental: Broadcom's `bootcode.bin` hangs after it, #313, #320) | `ok chain …, SDRAM running` (or `SDRAM reset`), no return |
 | `arm [M]` | start the ARM cores at ARM address 0 (bus `0xc0000000`; load an `armstub8` there and a kernel at `0xc0080000` first). M = 0 starts them in AArch32, anything else or nothing in AArch64. The monitor keeps running. #230 M2 step 2, `arm.c`, not yet on the Pi |
+| `sd` | set up the SD card through SDHOST (GPIO 48–53, 1-bit) | `ok sd NAME N MB SDHC\|SDSC, SH_CDIV X` |
+| `sdr L A N` | read N sectors from sector L to A | `ok crc32 X` |
+| `ls` | list the root directory of the card's first FAT partition (FAT16/32) | lines, then `ok` |
+| `fl NAME A` | load a root-directory file to A (long names, any case) | `ok NAME N bytes crc32 X` |
 | `reset` | full chip reset through the watchdog, as a reboot | `ok reset`, `rbc> watchdog reset`, no return |
 | `boot` | leave the monitor (boot selector: chain the built-in image) | `ok boot` |
 
@@ -124,6 +128,8 @@ our own VPU loader (M2) replaces the built-in Broadcom image.
 | `clock.c` | PLLC 1000 MHz, VPU clock, 1 MHz system timer | rpi-open-firmware `firmware/romstage.c`, `switch_vpu_to_pllc()`, values unchanged |
 | `uart.c` | PL011 on GPIO 14/15 | rpi-open-firmware `firmware/romstage.c`, `uart_init()`, values unchanged |
 | `timer.c`, `printf.c` | delay, small printf | new |
+| `sd.c` | SD card through SDHOST, read-only; ported from rpi-open-firmware's `sdhost_impl.cc`, with the slower-clock retry from Pi test #249 |
+| `fat.c` | FAT16/32 root directory and file reads, new code from the FAT specification; host test in `tests/fat-test.sh` (FAT16 and FAT32 images made with mtools) |
 | `arm.c` | ARM start for the monitor's `arm`: address map, ARM clock (PLLB), ARM power domain, bridge; ported from rpi-open-firmware's ARM control and power drivers |
 | `chain-image.S` | places a `bootcode.bin` image in the boot selector build | new; the image is Broadcom's, unchanged |
 | `monitor.c`, `go-test.S`, `rbc-load.sh`, `libc.c` | serial monitor (test builds), its test payload and host script, `memset`/`memcpy` | new; cache flush registers from Broadcom's `vpu_l1_cache_ctrl.h` |

@@ -63,3 +63,12 @@ void watchdog_reset(void) __attribute__((noreturn));
 
 /* arm.c (monitor builds): start the ARM cores at ARM address 0 */
 bool arm_start(bool aarch64);
+
+/* sd.c, fat.c (monitor builds): read the SD card and its FAT partition */
+struct sd_card { bool ready, high_capacity; uint32_t mb; char name[6]; };
+extern struct sd_card g_sd;
+bool sd_init(void);
+bool sd_read(uint32_t lba, uint32_t *buf);
+bool fat_mount(void);
+bool fat_list(void);
+int32_t fat_load(const char *name, uint32_t addr, uint32_t max);

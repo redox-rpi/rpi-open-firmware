@@ -30,6 +30,10 @@
  *   arm [M]        start the ARM cores at ARM address 0 (bus 0xc0000000,
  *                  load an armstub8 there first): M = 0 AArch32, otherwise
  *                  AArch64 (default); the monitor keeps running (arm.c)
+ *   sd             set up the SD card (SDHOST)    -> ok sd NAME N MB SDHC|SDSC
+ *   sdr L A N      read N sectors from L to A      -> ok crc32 X
+ *   ls             list the FAT partition's root   -> lines, then ok
+ *   fl NAME A      load file NAME from it to A     -> ok NAME N bytes crc32 X
  *   reset          full chip reset through the watchdog, as a reboot; no return
  *   boot           leave the monitor, go on with the normal boot (in a
  *                  boot selector build: reset, so the selector starts again
@@ -305,8 +309,31 @@ void watchdog_reset(void) {
 typedef uint32_t (*vpu_fn)(uint32_t, uint32_t, uint32_t, uint32_t);
 
 /* returns true when the normal boot should go on */
+static void cmd_fl(const char *name, const char *addr_s) {
+	uint32_t addr;
+	if (!parse_hex(addr_s, &addr)) {
+		printf("err bad number %s\n", addr_s);
+		return;
+	}
+	int32_t n = fat_load(name, addr, 0x10000000u);
+	if (n >= 0)
+		printf("ok %s %u bytes crc32 %08X\n", name, (uint32_t)n, crc32((const volatile uint8_t *)addr, (uint32_t)n));
+}
+
+static void cmd_sd(void) {
+	if (sd_init())
+		printf("ok sd %s %u MB %s, SH_CDIV %X\n", g_sd.name, g_sd.mb, g_sd.high_capacity ? "SDHC" : "SDSC", SH_CDIV);
+}
+
 static bool run(int argc, char **argv) {
 	uint32_t a[5] = {0};
+	if (!strcmp_s(argv[0], "fl")) {
+		if (argc == 3)
+			cmd_fl(argv[1], argv[2]);
+		else
+			printf("err usage: fl NAME A\n");
+		return false;
+	}
 	for (int i = 1; i < argc; i++) {
 		if (!parse_hex(argv[i], &a[i - 1])) {
 			drain_input();
@@ -349,6 +376,19 @@ static bool run(int argc, char **argv) {
 		cmd_chain(a[0], a[1], n == 3 && a[2] != 0);
 	} else if (!strcmp_s(c, "arm") && n <= 1) {
 		arm_start(n == 0 || a[0] != 0);
+	} else if (!strcmp_s(c, "sd") && n == 0) {
+		cmd_sd();
+	} else if (!strcmp_s(c, "sdr") && n == 3) {
+		bool ok = g_sd.ready || sd_init();
+		for (uint32_t i = 0; ok && i < a[2]; i++)
+			ok = sd_read(a[0] + i, (uint32_t *)(a[1] + i * 512));
+		if (ok)
+			printf("ok crc32 %08X\n", crc32((const volatile uint8_t *)a[1], a[2] * 512));
+		else
+			printf("err sd read\n");
+	} else if (!strcmp_s(c, "ls") && n == 0) {
+		if (fat_list())
+			printf("ok\n");
 	} else if (!strcmp_s(c, "reset") && n == 0) {
 		printf("ok reset\n");
 		watchdog_reset();
@@ -356,7 +396,7 @@ static bool run(int argc, char **argv) {
 		printf("ok boot\n");
 		return true;
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();
