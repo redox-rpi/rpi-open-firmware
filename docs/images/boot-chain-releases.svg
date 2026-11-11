@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="420" viewBox="0 0 680 420" role="img"><title>Boot chain by release</title>
+<style>
+text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:12px;fill:#5F5E5A}
+.h{font-size:14px;font-weight:600;fill:#2C2C2A}
+.bc rect{fill:#FAECE7;stroke:#993C1D}.bc text{fill:#712B13}
+.ours rect{fill:#E1F5EE;stroke:#0F6E56}.ours text{fill:#085041}
+.open rect{fill:#F1EFE8;stroke:#5F5E5A}.open text{fill:#444441}
+.gone rect{fill:none;stroke:#888780;stroke-dasharray:3 3}
+rect{stroke-width:0.6}.sep{stroke:#888780;stroke-width:0.6;stroke-dasharray:4 4}
+@media (prefers-color-scheme:dark){
+text{fill:#B4B2A9}.h{fill:#F1EFE8}
+.bc rect{fill:#712B13;stroke:#F0997B}.bc text{fill:#FAECE7}
+.ours rect{fill:#085041;stroke:#5DCAA5}.ours text{fill:#E1F5EE}
+.open rect{fill:#444441;stroke:#B4B2A9}.open text{fill:#F1EFE8}
+.gone rect{stroke:#B4B2A9}}
+</style>
+<text class="h" x="206.0" y="46" text-anchor="middle">v0.4.0</text><text x="206.0" y="66" text-anchor="middle">released</text>
+<text class="h" x="328.0" y="46" text-anchor="middle">v0.5.0</text><text x="328.0" y="66" text-anchor="middle">plan, no U-Boot</text>
+<text class="h" x="450.0" y="46" text-anchor="middle">v0.5 dev</text><text x="450.0" y="66" text-anchor="middle">test Pi today</text>
+<text class="h" x="572.0" y="46" text-anchor="middle">v0.6 dev</text><text x="572.0" y="66" text-anchor="middle">proposal (M2)</text>
+<text class="h" x="40" y="146" dominant-baseline="central">VPU</text><text class="h" x="40" y="286" dominant-baseline="central">ARM</text><line class="sep" x1="40" y1="207" x2="640" y2="207"/>
+<g class="bc"><rect x="150" y="90" width="112" height="32" rx="4"/><text x="206.0" y="106.0" text-anchor="middle" dominant-baseline="central">Boot ROM</text></g>
+<g class="bc"><rect x="272" y="90" width="112" height="32" rx="4"/><text x="328.0" y="106.0" text-anchor="middle" dominant-baseline="central">Boot ROM</text></g>
+<g class="bc"><rect x="394" y="90" width="112" height="32" rx="4"/><text x="450.0" y="106.0" text-anchor="middle" dominant-baseline="central">Boot ROM</text></g>
+<g class="bc"><rect x="516" y="90" width="112" height="32" rx="4"/><text x="572.0" y="106.0" text-anchor="middle" dominant-baseline="central">Boot ROM</text></g>
+<g class="bc"><rect x="150" y="130" width="112" height="32" rx="4"/><text x="206.0" y="146.0" text-anchor="middle" dominant-baseline="central">bootcode.bin</text></g>
+<g class="bc"><rect x="272" y="130" width="112" height="32" rx="4"/><text x="328.0" y="146.0" text-anchor="middle" dominant-baseline="central">bootcode.bin</text></g>
+<g class="ours"><rect x="516" y="130" width="112" height="32" rx="4"/><text x="572.0" y="146.0" text-anchor="middle" dominant-baseline="central">bootcode.bin</text></g>
+<g class="bc"><rect x="150" y="170" width="112" height="32" rx="4"/><text x="206.0" y="186.0" text-anchor="middle" dominant-baseline="central">start.elf</text></g>
+<g class="bc"><rect x="272" y="170" width="112" height="32" rx="4"/><text x="328.0" y="186.0" text-anchor="middle" dominant-baseline="central">start.elf</text></g>
+<g class="bc"><rect x="394" y="170" width="112" height="32" rx="4"/><text x="450.0" y="186.0" text-anchor="middle" dominant-baseline="central">start.elf</text></g>
+<g class="gone"><rect x="516" y="170" width="112" height="32" rx="4"/><text x="572.0" y="186.0" text-anchor="middle" dominant-baseline="central">gone</text></g>
+<g class="bc"><rect x="150" y="214" width="112" height="32" rx="4"/><text x="206.0" y="230.0" text-anchor="middle" dominant-baseline="central">armstub8</text></g>
+<g class="bc"><rect x="272" y="214" width="112" height="32" rx="4"/><text x="328.0" y="230.0" text-anchor="middle" dominant-baseline="central">armstub8</text></g>
+<g class="bc"><rect x="394" y="214" width="112" height="32" rx="4"/><text x="450.0" y="230.0" text-anchor="middle" dominant-baseline="central">armstub8</text></g>
+<g class="ours"><rect x="516" y="214" width="112" height="32" rx="4"/><text x="572.0" y="230.0" text-anchor="middle" dominant-baseline="central">armstub8</text></g>
+<g class="open"><rect x="150" y="254" width="112" height="32" rx="4"/><text x="206.0" y="270.0" text-anchor="middle" dominant-baseline="central">U-Boot, menu</text></g>
+<g class="gone"><rect x="272" y="254" width="112" height="32" rx="4"/><text x="328.0" y="270.0" text-anchor="middle" dominant-baseline="central">gone</text></g>
+<g class="open"><rect x="394" y="254" width="112" height="32" rx="4"/><text x="450.0" y="270.0" text-anchor="middle" dominant-baseline="central">U-Boot, network</text></g>
+<g class="open"><rect x="516" y="254" width="112" height="32" rx="4"/><text x="572.0" y="270.0" text-anchor="middle" dominant-baseline="central">U-Boot</text></g>
+<g class="open"><rect x="150" y="294" width="112" height="32" rx="4"/><text x="206.0" y="310.0" text-anchor="middle" dominant-baseline="central">Redox loader</text></g>
+<g class="ours"><rect x="272" y="294" width="112" height="32" rx="4"/><text x="328.0" y="310.0" text-anchor="middle" dominant-baseline="central">rpi-boot-stub</text></g>
+<g class="open"><rect x="394" y="294" width="112" height="32" rx="4"/><text x="450.0" y="310.0" text-anchor="middle" dominant-baseline="central">Redox loader</text></g>
+<g class="open"><rect x="516" y="294" width="112" height="32" rx="4"/><text x="572.0" y="310.0" text-anchor="middle" dominant-baseline="central">Redox loader</text></g>
+<g class="open"><rect x="150" y="334" width="112" height="32" rx="4"/><text x="206.0" y="350.0" text-anchor="middle" dominant-baseline="central">kernel</text></g>
+<g class="open"><rect x="272" y="334" width="112" height="32" rx="4"/><text x="328.0" y="350.0" text-anchor="middle" dominant-baseline="central">kernel, in RAM</text></g>
+<g class="open"><rect x="394" y="334" width="112" height="32" rx="4"/><text x="450.0" y="350.0" text-anchor="middle" dominant-baseline="central">kernel</text></g>
+<g class="open"><rect x="516" y="334" width="112" height="32" rx="4"/><text x="572.0" y="350.0" text-anchor="middle" dominant-baseline="central">kernel</text></g>
+<g class="ours"><rect x="394" y="130" width="50" height="32" rx="4"/><text x="419.0" y="146.0" text-anchor="middle" dominant-baseline="central">selector</text></g>
+<g class="bc"><rect x="448" y="130" width="58" height="32" rx="4"/><text x="477.0" y="146.0" text-anchor="middle" dominant-baseline="central">bootcode</text></g>
+<g class="bc"><rect x="150" y="388" width="14" height="14" rx="3"/></g><text x="172" y="399">Broadcom, closed</text><g class="ours"><rect x="330" y="388" width="14" height="14" rx="3"/></g><text x="352" y="399">our code</text><g class="open"><rect x="450" y="388" width="14" height="14" rx="3"/></g><text x="472" y="399">open source</text>
+</svg>

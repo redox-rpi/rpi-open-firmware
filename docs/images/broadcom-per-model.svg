@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="330" viewBox="0 0 680 330" role="img"><title>Broadcom firmware per Pi model</title>
+<style>
+text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:12px;fill:#5F5E5A}
+.h{font-size:14px;font-weight:600;fill:#2C2C2A}
+.bc rect{fill:#FAECE7;stroke:#993C1D}.bc text{fill:#712B13}
+.ours rect{fill:#E1F5EE;stroke:#0F6E56}.ours text{fill:#085041}
+.open rect{fill:#F1EFE8;stroke:#5F5E5A}.open text{fill:#444441}
+.gone rect{fill:none;stroke:#888780;stroke-dasharray:3 3}
+rect{stroke-width:0.6}.sep{stroke:#888780;stroke-width:0.6;stroke-dasharray:4 4}
+@media (prefers-color-scheme:dark){
+text{fill:#B4B2A9}.h{fill:#F1EFE8}
+.bc rect{fill:#712B13;stroke:#F0997B}.bc text{fill:#FAECE7}
+.ours rect{fill:#085041;stroke:#5DCAA5}.ours text{fill:#E1F5EE}
+.open rect{fill:#444441;stroke:#B4B2A9}.open text{fill:#F1EFE8}
+.gone rect{stroke:#B4B2A9}}
+</style>
+<text class="h" x="213.0" y="46" text-anchor="middle">Boot ROM</text>
+<text class="h" x="307.0" y="46" text-anchor="middle">1st stage</text>
+<text class="h" x="401.0" y="46" text-anchor="middle">main firmware</text>
+<text class="h" x="495.0" y="46" text-anchor="middle">ARM stub</text>
+<text class="h" x="589.0" y="46" text-anchor="middle">kernel</text>
+<text class="h" x="30" y="78" dominant-baseline="central">Zero / Zero W</text><text x="30" y="96" dominant-baseline="central">BCM2835, 32-bit</text>
+<g class="bc"><rect x="170" y="66" width="86" height="40" rx="4"/><text x="213.0" y="86.0" text-anchor="middle" dominant-baseline="central">in chip</text></g>
+<g class="bc"><rect x="264" y="66" width="86" height="40" rx="4"/><text x="307.0" y="86.0" text-anchor="middle" dominant-baseline="central">bootcode.bin</text></g>
+<g class="bc"><rect x="358" y="66" width="86" height="40" rx="4"/><text x="401.0" y="86.0" text-anchor="middle" dominant-baseline="central">start*.elf</text></g>
+<g class="gone"><rect x="452" y="66" width="86" height="40" rx="4"/><text x="495.0" y="86.0" text-anchor="middle" dominant-baseline="central">none</text></g>
+<g class="open"><rect x="546" y="66" width="86" height="40" rx="4"/><text x="589.0" y="86.0" text-anchor="middle" dominant-baseline="central">kernel.img</text></g>
+<text class="h" x="30" y="134" dominant-baseline="central">Zero 2 W</text><text x="30" y="152" dominant-baseline="central">RP3A0, 64-bit</text>
+<g class="bc"><rect x="170" y="122" width="86" height="40" rx="4"/><text x="213.0" y="142.0" text-anchor="middle" dominant-baseline="central">in chip</text></g>
+<g class="bc"><rect x="264" y="122" width="86" height="40" rx="4"/><text x="307.0" y="142.0" text-anchor="middle" dominant-baseline="central">bootcode.bin</text></g>
+<g class="bc"><rect x="358" y="122" width="86" height="40" rx="4"/><text x="401.0" y="142.0" text-anchor="middle" dominant-baseline="central">start*.elf</text></g>
+<g class="bc"><rect x="452" y="122" width="86" height="40" rx="4"/><text x="495.0" y="142.0" text-anchor="middle" dominant-baseline="central">armstub8</text></g>
+<g class="open"><rect x="546" y="122" width="86" height="40" rx="4"/><text x="589.0" y="142.0" text-anchor="middle" dominant-baseline="central">kernel8.img</text></g>
+<text class="h" x="30" y="190" dominant-baseline="central">Pi 3B+</text><text x="30" y="208" dominant-baseline="central">BCM2837B0, 64-bit</text>
+<g class="bc"><rect x="170" y="178" width="86" height="40" rx="4"/><text x="213.0" y="198.0" text-anchor="middle" dominant-baseline="central">in chip</text></g>
+<g class="bc"><rect x="264" y="178" width="86" height="40" rx="4"/><text x="307.0" y="198.0" text-anchor="middle" dominant-baseline="central">bootcode.bin</text></g>
+<g class="bc"><rect x="358" y="178" width="86" height="40" rx="4"/><text x="401.0" y="198.0" text-anchor="middle" dominant-baseline="central">start*.elf</text></g>
+<g class="bc"><rect x="452" y="178" width="86" height="40" rx="4"/><text x="495.0" y="198.0" text-anchor="middle" dominant-baseline="central">armstub8</text></g>
+<g class="open"><rect x="546" y="178" width="86" height="40" rx="4"/><text x="589.0" y="198.0" text-anchor="middle" dominant-baseline="central">kernel8.img</text></g>
+<text class="h" x="30" y="246" dominant-baseline="central">Pi 400</text><text x="30" y="264" dominant-baseline="central">BCM2711, 64-bit</text>
+<g class="bc"><rect x="170" y="234" width="86" height="40" rx="4"/><text x="213.0" y="254.0" text-anchor="middle" dominant-baseline="central">in chip</text></g>
+<g class="bc"><rect x="264" y="234" width="86" height="40" rx="4"/><text x="307.0" y="254.0" text-anchor="middle" dominant-baseline="central">EEPROM boot</text></g>
+<g class="bc"><rect x="358" y="234" width="86" height="40" rx="4"/><text x="401.0" y="254.0" text-anchor="middle" dominant-baseline="central">start4*.elf</text></g>
+<g class="bc"><rect x="452" y="234" width="86" height="40" rx="4"/><text x="495.0" y="254.0" text-anchor="middle" dominant-baseline="central">armstub8-gic</text></g>
+<g class="open"><rect x="546" y="234" width="86" height="40" rx="4"/><text x="589.0" y="254.0" text-anchor="middle" dominant-baseline="central">kernel8.img</text></g>
+<g class="bc"><rect x="170" y="300" width="14" height="14" rx="3"/></g><text x="172" y="311">Broadcom, closed</text><g class="open"><rect x="330" y="300" width="14" height="14" rx="3"/></g><text x="352" y="311">open source / your OS</text><g class="gone"><rect x="520" y="300" width="14" height="14" rx="3"/></g><text x="542" y="311">not needed</text>
+</svg>

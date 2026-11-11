@@ -1,87 +1,84 @@
-# rpi-open-firmware: redox-rpi experiment
+# Open boot firmware for the Raspberry Pi 3B+
 
-This fork belongs to [redox-rpi](https://github.com/redox-rpi/redox-rpi),
-a port of Redox OS to the Raspberry Pi 3B+. We use it to test how far
-Kristina Brooks's open-source VPU firmware
-([christinaa/rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware))
-gets on our Pi 3B+, and what is missing before it could start Redox
-instead of Broadcom's closed firmware. The license stays upstream's: GPLv2+,
-with BSD-licensed Broadcom headers (see [LICENSE](LICENSE)). Our changes are
-on the `redox-rpi` branch; `master` is upstream unchanged.
+Part of [redox-rpi](https://github.com/redox-rpi/redox-rpi), the port of
+Redox OS to the Raspberry Pi. The goal is to boot the Pi 3B+ (BCM2837B0)
+without Broadcom's closed firmware: our own code instead of `bootcode.bin`,
+`start*.elf` with `fixup*.dat`, and the `armstub8` built into the
+firmware. Only the Boot ROM inside the chip stays. Plan and progress:
+[redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230).
 
-## Results on the Pi 3B+ (BCM2837B0)
+The repository started as a fork of Kristina Brooks's
+[rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware) (2019),
+and that code is still here. Our own firmware is a new, small C program
+that takes its hardware sequences from it and names the source in every
+file.
 
-| Test | Date | Result |
-| --- | --- | --- |
-| [#224](https://github.com/redox-rpi/redox-rpi/blob/main/docs/test-plan.md) | 2026-11-05 | **The VPU firmware works:** serial output, 1 GB LPDDR2 set up and tested, USB power and PHY on, ARM clock set, ARM core 0 runs the 32-bit chainloader. The chainloader finds the SD card (64 MB, SDSC), then one read fails at the data clock, and reading the MBR crashes on a trap that GCC 13 inserts where the old code is missing a `return`. |
-| #249 | 2026-11-05 | **Works up to the kernel hand-off** (same 64 MB card, both chainloader bugs fixed). The first SD read failed at `SH_CDIV 0x8` and worked at half the clock (`0x12`). MBR, `cmdline.txt`, `rpi.dtb` and `zImage` were read, and the test payload ran: 32-bit Supervisor mode, MIDR `0x410FD034` (Cortex-A53), core 0. A 32 GB SDHC card worked at the full data clock, with no retry, so only the old card needs the slower clock. |
-| #251 | queued | Step 2: [librerpi/lk-overlay](https://github.com/librerpi/lk-overlay) built without Nix (`redox-rpi/build-lk-overlay.sh`). Does the VPU start the ARM in 64-bit mode and run a 64-bit test program? |
+## State
 
-What it does not do yet, and what Redox would need (64-bit ARM start,
-spin table for cores 1–3, loading U-Boot or `kernel8.img`, a replacement
-for the firmware mailbox, USB/Ethernet): see the project's
-[topic page](https://github.com/redox-rpi/redox-rpi/blob/main/docs/topics/open-firmware.md).
+| Step | What | State |
+|---|---|---|
+| M1 | Our `bootcode.bin`: VPU clock, UART, 1 GB SDRAM, memory test | passed on the Pi (#265) |
+| Monitor | Test builds only: read/write registers, load code over serial, run it, chain another `bootcode.bin` | passed (#269) |
+| Boot selector | The test Pi's card: Enter on the serial line opens our monitor, otherwise Broadcom's `bootcode.bin` (built in) boots as before | passed (#313, #320 rerun); in daily use on the test Pi |
+| `armstub8` | Our build of the 64-bit ARM start stub | booted Redox on the Pi with Broadcom's firmware; not yet proven that it was ours that ran |
+| M2 | Our VPU code starts the ARM in AArch64, then loads stub, U-Boot and devicetree from the SD card | ARM start written (PR #7), Pi test row 332 queued; SD/FAT not started |
+| M3 | Mailbox service on the VPU (memory, MAC, clocks, temperature) | not started |
+| M4 | HDMI and framebuffer | not started |
+| M5 | Network boot, 3D | not started |
 
-## Our changes
+Today every image of redox-rpi still boots with Broadcom's firmware. How
+each release starts, and what is still Broadcom's after each step:
+[docs/boot-chain.md](docs/boot-chain.md).
 
-- [`redox-rpi/`](redox-rpi/README.md): toolchain build script (no root),
-  build script, test payload, SD card image script.
-- `arm_chainloader`: missing `return`s added, SD read errors reported, and
-  retried with half the clock; the card size in the log no longer
-  overflows for cards of 4 GB and more (not yet seen on the Pi).
+## Documentation
+
+All in [docs/](docs/README.md):
+
+- [broadcom-firmware.md](docs/broadcom-firmware.md): what is in Broadcom's
+  firmware (`bootcode.bin`, `start*.elf`, `armstub*` and their variants),
+  per model: Zero W, Zero 2 W, 3B+, Pi 400.
+- [boot-chain.md](docs/boot-chain.md): Broadcom's boot pieces, how each
+  redox-rpi release starts, the steps to the end goal (with pictures).
+- [own-firmware.md](docs/own-firmware.md): our firmware (#230): design,
+  milestones, monitor and boot selector, findings.
+- [test-results.md](docs/test-results.md): every Pi test of this
+  repository in one table.
+- [rpi-open-firmware-2019.md](docs/rpi-open-firmware-2019.md): the
+  upstream firmware on our Pi, and the 3B+ risks.
+- [lk-overlay.md](docs/lk-overlay.md): librerpi/lk-overlay on our Pi.
+- [vpu-compiler.md](docs/vpu-compiler.md), [socdump.md](docs/socdump.md),
+  [other-models.md](docs/other-models.md): ideas and later work.
+
+## Branches and directories
+
+| Where | What |
+|---|---|
+| `redox-rpi` (default branch) | upstream's firmware with our fixes, the docs, and `redox-rpi/` (toolchain and build scripts, lk-overlay build and patches, test payloads, card images) |
+| `bootcode` | our own firmware in `bootcode/`; work branches are stacked on it (`arm-start`, `armstub8`) |
+| `master` | upstream, unchanged |
 
 ## Build
 
 ```bash
 git clone -b redox-rpi https://github.com/redox-rpi/rpi-open-firmware.git
 cd rpi-open-firmware
-redox-rpi/build-toolchain.sh          # once, about 40 minutes
-redox-rpi/build.sh
-redox-rpi/make-sdcard.sh bcm2710-rpi-3-b-plus.dtb openfw-3bp.img
+redox-rpi/build-toolchain.sh   # VC4 GCC 6.2.1 and ARM GCC, once, about 40 minutes, no root
 ```
 
-Details in [redox-rpi/README.md](redox-rpi/README.md). Below is upstream's README.
+Our firmware (branch `bootcode`): `cd bootcode && make`, or
+`make MONITOR=1` for a test build with the serial monitor
+([bootcode/README.md](https://github.com/redox-rpi/rpi-open-firmware/blob/bootcode/bootcode/README.md)).
+Upstream's firmware: `redox-rpi/build.sh` ([redox-rpi/README.md](redox-rpi/README.md)).
+Serial console on GPIO 14/15, 115200 8N1.
 
----
+## Licence and sources
 
-# Minimal Raspberry Pi VPU firmware
+GPLv2 or later, as upstream. Broadcom's register headers are BSD
+(3-clause). See [LICENSE](LICENSE). Every file of our firmware names the
+code it is taken from. Facts from Broadcom's documents, Linux and an
+internal disassembly of the closed firmware (behaviour only, no code
+copied) are listed with their source; the disassembly itself is not
+published.
 
-`rpi-open-firmware` is a small firmware for the [RPi VPU](https://en.wikipedia.org/wiki/VideoCore), capable of initializing UART, VPU PLL (PLLC), and ARM itself. It's intended as a libre replacement for the stock `bootcode.bin` normally loaded from the SD card. A UART cable is highly recommended for the time being, though not strictly necessary. Additionally, there is a second-stage chainloader running on ARM capable of initializing eMMC, FAT, and the Linux kernel.
-
-See [issue #31](https://github.com/christinaa/rpi-open-firmware/issues/31) for a compatibility table and related discourse.
-
-Technical discussion occurs in `#raspberrypi-internals` on [Freenode](http://webchat.freenode.net/?channels=#raspberrypi-internals). Please come on IRC before randomly hacking on the codebase :-)
-
-All Broadcom headers are licensed under 3-Clause BSD License while our code is under GPLv2+. See `LICENSE` for more information. Various external projects are mirrored under a mix of GPL-compatible licenses.
-
-## Is this project dead or abandoned?
-
-It's not dead and not abandoned in a conventional sense. 
-
-However, it is on an indefinite hold. I wrote a detailed explanation [in issue #37](https://github.com/christinaa/rpi-open-firmware/issues/37) of its current situation. 
-
-## Building
-
-As a prerequisite, Julian Brown's [VC4 toolchain](https://github.com/itszor/vc4-toolchain) is necessary as well as the `arm-none-eabi-` toolchain (Debian package `gcc-arm-none-eabi`). You can tweak the VC4 toolchain path in `CROSS_COMPILE` in `Makefile` and the ARM path in `arm_chainloader/Makefile` if necessary. Contributors should not commit their personal paths. After configuration, run `buildall.sh`. The binary is at `build/bootcode.bin`, ready to be copied to an SD card.
-
-### Building on macOS
-
-macOS compilation is similar to GNU/Linux, save platform errata described here. Instructions to build the ARM toolchain are [here](https://launchpadlibrarian.net/287100910/How-to-build-toolchain.pdf). Due to symlinking by default, GCC must be installed manually, and, an older version of guile is necessary (homebrew packages `gcc-6` and `guile18`, respectively). Finally, set the environment variable `LIBRARY_PATH` to `/lib:/lib64` when running `buildall.sh. 
-
-## Technical Details
-The firmware is split into two parts, one running on the VC4 and the other on ARM. The VC4 part initializes PLLC and moves VPU over to it, and then brings up UART. It performs SDRAM initialization, mapping it to  `0xC0000000` (uncached alias). Next, ARM is initialized, and the embedded bootloader is mapped to ARM address `0x0`. `arm_chainloader` is then executed.
-
-The ARM chainloader initializes the eMMC controller and accesses the FAT boot partition. From here, it chainloads the Linux kernel (other payloads likely do not work due to mailbox usage).
-
-## Does it boot Linux?
-
-Yes, with some conditions. You can boot a very minimal version of Linux without the firmware and get it to work with UART and eMMC. Support for USB, DMA, and Ethernet are in the works, which will be sufficient for certain headless systems. Still, many other peripherals require bringup, such as video. Additionally, drivers for power management need to written.
-
-## Thanks To
- * **[Herman Hermitage](https://github.com/hermanhermitage)** for his VC4 documentation and for helping determine suitable ARM PLL configurations.
- * **[Julian Brown](https://github.com/itszor)** for reviewing the code and for his awesome VC4 toolchain.
- * **[Alyssa Rosenzweig](https://github.com/bobbybee)** for her contributions to the firmware especially in areas of Linux bringup and early ARM side initialization, as well as fixing mailbox support.
- * **[David Given](https://github.com/davidgiven)** for his initial LLVM project used as the base for the initial LLVM toolchain before moving to GCC.
- * **[Scott Mansell](https://github.com/phire)** for reviewing the code.
- * **[Broadcom](https://github.com/broadcom)** for their header release.
- * Various other people not mentioned here.
+Upstream's original README, with its credits, is kept in
+[docs/upstream-README.md](docs/upstream-README.md).
