@@ -4,6 +4,8 @@ ENTRY(_start)
 MEMORY
 {
 	l2 (rwx) : ORIGIN = 0x80000000, LENGTH = 0x1b000
+	/* monitor.c's chain trampoline runs here, above any chained image */
+	tramp (rwx) : ORIGIN = 0x80019000, LENGTH = 0x800
 }
 
 SECTIONS
@@ -15,6 +17,14 @@ SECTIONS
 
 	.rodata : { *(.rodata .rodata.*) } > l2
 	.data : { *(.data .data.*) } > l2
+
+	/* stored in the image, copied to 0x80019000 before use */
+	.tramp : {
+		__tramp_start = .;
+		KEEP(*(.tramp))
+		__tramp_end = .;
+	} > tramp AT> l2
+	__tramp_load = LOADADDR(.tramp);
 
 	.bss (NOLOAD) : {
 		. = ALIGN(4);
