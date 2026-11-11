@@ -29,3 +29,5 @@ source. Before M3 (mailbox) and M4 (HDMI) we read librerpi's notes and
 code first, and name them as the source where we use them. A switch of
 this repository's base from christinaa's to librerpi's fork is possible
 (the same GPLv2+ licence) but not needed: our own firmware is new code.
+
+Forks of these repositories, among them glennra's Pi 3B Linux boot with a DSI display (November 2026): [forks.md](forks.md).

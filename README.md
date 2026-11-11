@@ -83,6 +83,7 @@ All in [docs/](docs/README.md):
   upstream firmware on our Pi, and the 3B+ risks.
 - [lk-overlay.md](docs/lk-overlay.md): librerpi/lk-overlay on our Pi.
 - [librerpi.md](docs/librerpi.md): every librerpi repository and what it is good for.
+- [forks.md](docs/forks.md): forks of our sources; glennra booted Linux on a Pi 3B without Broadcom firmware (November 2026).
 - [vpu-compiler.md](docs/vpu-compiler.md), [socdump.md](docs/socdump.md),
   [other-models.md](docs/other-models.md): ideas and later work.
 
