@@ -59,6 +59,7 @@ the prompt `rbc> `. Numbers are hex.
 | `crc A N` | CRC-32 (zlib) of N bytes | `ok crc32 X` |
 | `g A [r0 r1 r2 r3]` | call VPU code at A | `ok ret X` |
 | `chain A N [R]` | copy a `bootcode.bin` image to `0x80000000` and start it at `0x80000200`, SDRAM left running; `R` = 1 takes the SDRAM down first (experimental: Broadcom's `bootcode.bin` hangs after it, #313, #320) | `ok chain …, SDRAM running` (or `SDRAM reset`), no return |
+| `arm [M]` | start the ARM cores at ARM address 0 (bus `0xc0000000`; load an `armstub8` there and a kernel at `0xc0080000` first). M = 0 starts them in AArch32, anything else or nothing in AArch64. The monitor keeps running. #230 M2 step 2, `arm.c`, not yet on the Pi |
 | `reset` | full chip reset through the watchdog, as a reboot | `ok reset`, `rbc> watchdog reset`, no return |
 | `boot` | leave the monitor (boot selector: chain the built-in image) | `ok boot` |
 
@@ -123,6 +124,7 @@ our own VPU loader (M2) replaces the built-in Broadcom image.
 | `clock.c` | PLLC 1000 MHz, VPU clock, 1 MHz system timer | rpi-open-firmware `firmware/romstage.c`, `switch_vpu_to_pllc()`, values unchanged |
 | `uart.c` | PL011 on GPIO 14/15 | rpi-open-firmware `firmware/romstage.c`, `uart_init()`, values unchanged |
 | `timer.c`, `printf.c` | delay, small printf | new |
+| `arm.c` | ARM start for the monitor's `arm`: address map, ARM clock (PLLB), ARM power domain, bridge; ported from rpi-open-firmware's ARM control and power drivers |
 | `chain-image.S` | places a `bootcode.bin` image in the boot selector build | new; the image is Broadcom's, unchanged |
 | `monitor.c`, `go-test.S`, `rbc-load.sh`, `libc.c` | serial monitor (test builds), its test payload and host script, `memset`/`memcpy` | new; cache flush registers from Broadcom's `vpu_l1_cache_ctrl.h` |
 | `sdram.c` | LPDDR2 set-up and self test | rpi-open-firmware `firmware/sdram.c` (Julian Brown and the rpi-open-firmware authors); sequence, timings and magic values unchanged; self test extended |
