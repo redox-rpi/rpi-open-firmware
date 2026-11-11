@@ -2,7 +2,8 @@
 
 | Page | What |
 |---|---|
-| [broadcom-firmware.md](broadcom-firmware.md) | What is in Broadcom's firmware and its variants, per model (Zero W, Zero 2 W, 3B+, Pi 400), with a picture |
+| [models.md](models.md) | The Pi models and their hardware: chip, cores, memory, USB, network, Wi-Fi, our test boards |
+| [broadcom-firmware.md](broadcom-firmware.md) | What is in Broadcom's firmware and its variants, per model, with a picture |
 | [boot-chain.md](boot-chain.md) | Broadcom's boot pieces, how each redox-rpi release starts, the steps to the end goal, with pictures |
 | [own-firmware.md](own-firmware.md) | Our firmware ([redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230)): milestones, monitor, boot selector, ARM start, findings |
 | [test-results.md](test-results.md) | Every Pi test of this repository |

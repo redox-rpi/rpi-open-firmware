@@ -11,20 +11,18 @@ redox-rpi uses, [raspberrypi/firmware](https://github.com/raspberrypi/firmware)
 
 ![Boot chain per Pi model: Zero W, Zero 2 W, 3B+ and Pi 400](images/broadcom-per-model.svg)
 
-## The models
+## Firmware per model
+
+The boards themselves (chip, cores, memory, USB, network):
+[models.md](models.md).
 
 | | Pi Zero / Zero W | Pi Zero 2 W | Pi 3B+ | Pi 400 |
 |---|---|---|---|---|
-| Chip | BCM2835 | RP3A0 (BCM2710A1 + 512 MB in one package) | BCM2837B0 | BCM2711C0 |
-| ARM | 1 × ARM1176, 32-bit (ARMv6) | 4 × Cortex-A53, 64-bit | 4 × Cortex-A53, 64-bit | 4 × Cortex-A72, 64-bit |
-| VPU | VideoCore IV | VideoCore IV | VideoCore IV | VideoCore VI |
-| RAM | 512 MB | 512 MB | 1 GB | 4 GB |
 | First boot code after the ROM | `bootcode.bin` on the SD card | `bootcode.bin` on the SD card | `bootcode.bin` on the SD card, or over USB or the network (in the ROM) | bootloader in the SPI EEPROM on the board |
 | Main firmware | `start*.elf` + `fixup*.dat` | `start*.elf` + `fixup*.dat` | `start*.elf` + `fixup*.dat` | `start4*.elf` + `fixup4*.dat` |
 | ARM start stub | none needed (one core) | `armstub8` built into `start.elf` | `armstub8` built into `start.elf` | `armstub8-gic` built into `start4.elf` (sets up the GIC-400) |
 | Devicetree | `bcm2708-rpi-zero.dtb`, `bcm2708-rpi-zero-w.dtb` | `bcm2710-rpi-zero-2-w.dtb` | `bcm2710-rpi-3-b-plus.dtb` | `bcm2711-rpi-400.dtb` |
 | Other blobs | Wi-Fi/Bluetooth chip firmware (Zero W) | Wi-Fi/Bluetooth chip firmware | Wi-Fi/Bluetooth chip firmware | Wi-Fi/Bluetooth chip firmware; USB controller (VL805) firmware loaded by the EEPROM bootloader |
-| In redox-rpi | not supported (32-bit ARM; Redox needs 64-bit) | supported | supported, the test Pi | bring-up (Pi test row 325) |
 
 The Wi-Fi and Bluetooth firmware belongs to the Cypress/Infineon radio
 chip and is loaded by the operating system's driver, not by the boot

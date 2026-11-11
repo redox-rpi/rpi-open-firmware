@@ -12,8 +12,9 @@ code. That means:
 - the firmware blobs other chips need, such as Wi-Fi and Bluetooth;
 - on newer boards, the EEPROM bootloader.
 
-Only the Boot ROM inside the chip stays. We start with the Pi 3B+
-(BCM2837B0). Plan and progress:
+Only the Boot ROM inside the chip stays. The models we look at (Zero W,
+Zero 2 W, 3B+, Pi 400) are described in [docs/models.md](docs/models.md);
+work starts on the Pi 3B+. Plan and progress:
 [redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230). Every
 closed piece, per model, and whether it can be replaced:
 [docs/broadcom-firmware.md](docs/broadcom-firmware.md#every-closed-piece-and-whether-it-can-be-replaced).
@@ -45,6 +46,7 @@ each release starts, and what is still Broadcom's after each step:
 
 All in [docs/](docs/README.md):
 
+- [models.md](docs/models.md): the Pi models and their hardware.
 - [broadcom-firmware.md](docs/broadcom-firmware.md): what is in Broadcom's
   firmware (`bootcode.bin`, `start*.elf`, `armstub*` and their variants),
   per model: Zero W, Zero 2 W, 3B+, Pi 400.
