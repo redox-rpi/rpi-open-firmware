@@ -9,6 +9,7 @@
 | [test-results.md](test-results.md) | Every Pi test of this repository |
 | [rpi-open-firmware-2019.md](rpi-open-firmware-2019.md) | Upstream's firmware on our Pi 3B+, and the 3B+ risks |
 | [lk-overlay.md](lk-overlay.md) | librerpi/lk-overlay on our Pi 3B+, with our three patches |
+| [librerpi.md](librerpi.md) | Every librerpi repository (lk-overlay, their continued rpi-open-firmware with about 100 hardware notes, rpi-tools, RP1, JTAG) and what it is good for |
 | [vpu-compiler.md](vpu-compiler.md) | Discussion: fewer toolchain dependencies (TinyCC fork with a VC4 backend, the existing LLVM VideoCore4 backend, alternatives, sources for the instruction encoding) |
 | [socdump.md](socdump.md) | Register dumps as reference values for the firmware |
 | [other-models.md](other-models.md) | Pi 4 and Pi 5 later |

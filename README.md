@@ -37,6 +37,7 @@ Every file names the ones it uses:
 |---|---|---|
 | [christinaa/rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware) (2019) | GPLv2+ | PLL, SDRAM, SDHOST and ARM start sequences; its code is still on the `redox-rpi` branch, with our fixes |
 | [librerpi/lk-overlay](https://github.com/librerpi/lk-overlay), the newer rewrite by the same community | GPLv2+ | tested on our Pi ([lk-overlay.md](docs/lk-overlay.md)); reference for later steps, no code taken yet |
+| [librerpi/rpi-open-firmware](https://github.com/librerpi/rpi-open-firmware), the 2019 firmware carried on to 2025 (375 commits), with about 100 hardware notes | GPLv2+ | first reference for the mailbox, HDMI and the Pi 400; all librerpi repositories in [docs/librerpi.md](docs/librerpi.md) |
 | Broadcom's register headers (`hardware.h`, `sdhost.h`, …) | BSD 3-clause | register names and bits |
 | [raspberrypi/tools `armstub8.S`](https://github.com/raspberrypi/tools/tree/master/armstubs) | BSD 3-clause | what the stub must do (ours is new code) |
 | Linux drivers and devicetrees | GPLv2 | register behaviour, the devicetree we load |
@@ -81,6 +82,7 @@ All in [docs/](docs/README.md):
 - [rpi-open-firmware-2019.md](docs/rpi-open-firmware-2019.md): the
   upstream firmware on our Pi, and the 3B+ risks.
 - [lk-overlay.md](docs/lk-overlay.md): librerpi/lk-overlay on our Pi.
+- [librerpi.md](docs/librerpi.md): every librerpi repository and what it is good for.
 - [vpu-compiler.md](docs/vpu-compiler.md), [socdump.md](docs/socdump.md),
   [other-models.md](docs/other-models.md): ideas and later work.
 
