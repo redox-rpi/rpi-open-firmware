@@ -43,5 +43,5 @@ text{fill:#B4B2A9}.h{fill:#F1EFE8}
 <g class="bc"><rect x="358" y="234" width="86" height="40" rx="4"/><text x="401.0" y="254.0" text-anchor="middle" dominant-baseline="central">start4*.elf</text></g>
 <g class="bc"><rect x="452" y="234" width="86" height="40" rx="4"/><text x="495.0" y="254.0" text-anchor="middle" dominant-baseline="central">armstub8-gic</text></g>
 <g class="open"><rect x="546" y="234" width="86" height="40" rx="4"/><text x="589.0" y="254.0" text-anchor="middle" dominant-baseline="central">kernel8.img</text></g>
-<g class="bc"><rect x="170" y="300" width="14" height="14" rx="3"/></g><text x="172" y="311">Broadcom, closed</text><g class="open"><rect x="330" y="300" width="14" height="14" rx="3"/></g><text x="352" y="311">open source / your OS</text><g class="gone"><rect x="520" y="300" width="14" height="14" rx="3"/></g><text x="542" y="311">not needed</text>
+<g class="bc"><rect x="150" y="300" width="14" height="14" rx="3"/></g><text x="172" y="311">Broadcom, closed</text><g class="open"><rect x="330" y="300" width="14" height="14" rx="3"/></g><text x="352" y="311">open source / your OS</text><g class="gone"><rect x="520" y="300" width="14" height="14" rx="3"/></g><text x="542" y="311">not needed</text>
 </svg>
