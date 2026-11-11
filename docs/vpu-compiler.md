@@ -1,33 +1,99 @@
-# VPU compiler: fewer dependencies (idea)
+# VPU compiler: fewer dependencies (discussion)
 
-The VPU code builds with VC4 GCC 6.2.1 from
-[itszor/vc4-toolchain](https://github.com/itszor/vc4-toolchain): a GCC and
-binutils port from around 2017, plus newlib. It works, but it is a large,
-old dependency that we don't control, and old GCC versions get harder to
-build with new host compilers. The aim is fewer dependencies and more of
-the chain under our control. Not started; nothing waits for it.
+State of the discussion of 2026-11-11 (maintainer and firmware session).
+Nothing is decided and nothing is started; the firmware work (M2, M3) goes
+on with GCC regardless.
 
-- **Step 1, cheap:** freeze the toolchain we have. Fixed sources and
-  checksums already exist (`redox-rpi/build-toolchain.sh`); add a fixed
-  build environment (a container on homenodellm) so the 40-minute build
-  keeps working when the host compiler changes.
-- **Step 2, our own small compiler:** a VideoCore IV backend for
-  [QBE](https://c9x.me/compile/), with [cproc](https://sr.ht/~mcf/cproc/)
-  as the C front end. QBE writes assembler text, and
-  [vasm](http://sun.hasenbraten.de/vasm/) already has a VideoCore IV
-  module (with vlink as the linker), so the hard part, encoding the
-  irregular VC4 instructions (16, 32, 48 and 80 bits long), is done. A QBE
-  backend is about 2,000-3,000 lines (its arm64 backend is that size).
-  Our firmware is flat C without C++, which is the case cproc and QBE
-  handle. The code would be slower than GCC's, which hardly matters for
-  boot code.
-- **Why not TCC:** TCC has its own assembler and linker, so a VC4 port
-  would have to write the instruction encoding and the relocations as
-  well as the code generator. More work, for weaker code.
-- **What no small compiler gives:** the VPU's 16-lane vector unit (GCC
-  doesn't use it either; it is written in assembler) and Rust on the VPU,
-  which would need an LLVM backend, a project of its own.
-- **When:** step 1 whenever the toolchain build breaks or a new build
-  host comes. Step 2 when GCC gets in the way (a compiler bug, or people
-  failing to build it), or as a self-contained project for a contributor.
+## What we use today
 
+| Part | Tool |
+|---|---|
+| VPU code (`bootcode/`, upstream's firmware) | VC4 GCC 6.2.1, GNU assembler and linker (binutils), newlib, all from [itszor/vc4-toolchain](https://github.com/itszor/vc4-toolchain) (around 2017) |
+| ARM code (`armstub8`, test programs, upstream's chainloader) | ARM GCC (`aarch64-linux-gnu-`, `arm-none-eabi-`) |
+| Build | `redox-rpi/build-toolchain.sh`: fixed sources and checksums, about 40 minutes, no root |
+
+It works, but it is a large, old dependency that we don't control, it does
+not run on the Pi, and old GCC versions get harder to build with new host
+compilers. The aim: fewer dependencies, everything open, and ideally the
+firmware built on the Pi itself.
+
+## The idea: a TinyCC fork with a VC4 backend
+
+[TinyCC](https://repo.or.cz/tinycc.git) (TCC, LGPL) is one small program
+holding the C front end, the code generator, an assembler and a linker.
+
+**For it:**
+
+- **TCC already runs on Redox on the Pi** (redox-rpi experiment `tcc`,
+  [#247](https://github.com/redox-rpi/redox-rpi/issues/247)). A VC4
+  backend in that same TCC means the firmware can be built on the Pi,
+  under Redox. No other option gets there as easily.
+- One tool for both sides: the AArch64 backend for the ARM parts exists.
+- Our firmware fits what TCC does well: plain C, no C++, a few files. Our
+  own code is about 14 KB (the rest of the 66 KB monitor build is
+  Broadcom's chained `bootcode.bin`), so even code 1.5 to 2 times larger
+  than GCC's fits the 128 KB of L2 with room to spare.
+- We would own it and could tune it to exactly what the VPU code needs.
+
+**Against it, honestly:**
+
+- TCC writes machine code directly, not assembler text. So the fork must
+  encode the irregular VC4 instructions (16, 32, 48 and 80 bits long)
+  itself, besides the code generator and the ELF relocations. A rough
+  size: code generator 2,000–3,000 lines (like TCC's `arm64-gen.c`),
+  assembler 1,000–1,500, relocations a few hundred.
+- Weaker code: TCC does little register allocation. Fine for boot code;
+  timing-critical loops (SDRAM training) need a check.
+- The VPU's 16-lane vector unit stays assembler (GCC doesn't use it
+  either).
+- Not checked yet: whether TCC's AArch64 assembler handles all that
+  `armstub8.S` needs (system registers, `eret`).
+
+## Sources for the VC4 instruction encoding
+
+| Source | Licence | Use |
+|---|---|---|
+| Opcode table in vc4-toolchain's binutils (`opcodes/vc4-*`) | GPLv3+ | the most complete machine-readable table; taking it makes the fork GPL, which is fine for the firmware |
+| [hermanhermitage/videocoreiv](https://github.com/hermanhermitage/videocoreiv) | none stated, "non-commercial" disclaimer | the VideoCore IV Programmers Manual (wiki), `videocoreiv.arch`, `tinyasm`, an IDA plugin, small samples (`uart01`, `blinker01`); facts to read and check, not code to copy |
+| [thubble's videocore-elf-dis](https://github.com/thubble/videocore-elf-dis) | see repo | a disassembler, to check our output |
+| The internal disassembly of Broadcom's firmware | – | real instruction use, behaviour notes only |
+
+## Alternatives
+
+| Way | Effort | Dependencies | On the Pi / Redox | Notes |
+|---|---|---|---|---|
+| Freeze GCC 6.2.1 (container on homenodellm) | small | large, old | no | do it anyway, as fallback and reference |
+| **TCC fork with a VC4 backend** | medium (weeks) | one program | **yes, TCC runs already** | own encoding needed (table above) |
+| [QBE](https://c9x.me/compile/) + [cproc](https://sr.ht/~mcf/cproc/) + an assembler | medium | 3–4 tools | probably portable | QBE writes assembler text and has no assembler of its own, so it needs one (below); better code than TCC |
+| Forward-port the VC4 port to current GCC/binutils | large | very large | no | only fixes the ageing |
+| LLVM backend | very large | huge | no | the only way to Rust on the VPU |
+
+**Assemblers for the QBE way:**
+
+- GNU as from vc4-toolchain: works, but keeps binutils as a dependency.
+- [vasm](http://sun.hasenbraten.de/vasm/) has a VideoCore IV module
+  (`vidcore`), but its licence is not free: redistribution only unmodified
+  and non-commercial use; anything else needs the author's written consent
+  (vasm manual, legal section). That is a poor base for a project that
+  wants to replace everything closed. Earlier versions of this page
+  proposed it; dropped.
+- Our own, from the encoding sources above: the same work as the TCC
+  assembler.
+
+**Not for the VPU:** [maazl/vc4asm](https://github.com/maazl/vc4asm)
+(GPLv3) assembles and disassembles code for the **QPUs**, the 3D shader
+units of the VideoCore IV, not the VPU our firmware runs on ("It
+assembles QPU code to binary, ELF or C source"). It has no linker. Useful
+later: QPU shaders for M5 (3D) and graphics, and reading any QPU code in
+Broadcom's firmware.
+
+## Proposed next steps
+
+1. **Freeze GCC** (container), as fallback and reference.
+2. **A time-boxed TCC spike**, as a sub-project of its own, off the
+   firmware's path: only the integer subset (load/store, arithmetic,
+   branches, calls), enough to compile `bootcode/fat.c`. The host test
+   for `fat.c` exists, so size and result can be compared with GCC's.
+   If that goes well: the rest of `bootcode/`, then the `.S` files with
+   TCC's assembler.
+3. Decision by the maintainer after the spike: TCC, QBE, or GCC frozen.
