@@ -24,6 +24,8 @@
 
 /* main.c */
 extern uint32_t g_cpuid;
+extern uint32_t g_rom_sdcs;  /* SD_CS as the Boot ROM left it */
+extern bool g_sdram_up;      /* sdram_init() has run */
 void panic(const char *fmt, ...) __attribute__((noreturn));
 
 /* clock.c */
@@ -48,5 +50,13 @@ enum ram_size { RAM_1GB, RAM_512MB, RAM_256MB, RAM_128MB, RAM_UNKNOWN };
 extern enum ram_size g_ram_size;
 void sdram_init(void);
 
-/* monitor.c: test builds only (MONITOR=1), never in a release */
+/* monitor.c: test builds only (MONITOR=1), never in a release;
+ * CHAIN_IMAGE=1 for the boot selector build (Makefile CHAIN_IMAGE=path) */
+#ifndef CHAIN_IMAGE
+#define CHAIN_IMAGE 0
+#endif
 void monitor(uint32_t wait_s);
+bool monitor_wait(uint32_t wait_s);
+void monitor_run(void);
+void monitor_chain_builtin(void) __attribute__((noreturn));
+void watchdog_reset(void) __attribute__((noreturn));

@@ -6,6 +6,10 @@
  * Never part of a release: it gives anyone on the serial pins full
  * control of the chip.
  *
+ * Opening: only Enter within the wait opens it. A boot selector build
+ * (CHAIN_IMAGE, see chain-image.S) chains its built-in bootcode.bin when
+ * nobody opens it, on "boot", and after 300 s without input.
+ *
  * Protocol (all numbers hex, "0x" optional; one reply line per command,
  * starting with "ok" or "err", then the prompt "rbc> " again):
  *   r A            read the 32-bit word at A          -> ok A V
@@ -19,9 +23,14 @@
  *                  a wrong CRC-32 with C given        -> err crc32 X want C
  *   crc A N        CRC-32 (zlib) of N bytes at A      -> ok crc32 X
  *   g A [a b c d]  call VPU code at A with r0..r3     -> ok ret X
- *   chain A N      copy a bootcode.bin image (N bytes at A) to 0x80000000
- *                  and start it at 0x80000200; no return
- *   boot           leave the monitor, go on with the normal boot
+ *   chain A N [R]  copy a bootcode.bin image (N bytes at A) to 0x80000000
+ *                  and start it at 0x80000200, SDRAM left running; with
+ *                  R = 1 take the SDRAM down first (experimental: Broadcom's
+ *                  bootcode.bin hangs after it, Pi tests #313, #320); no return
+ *   reset          full chip reset through the watchdog, as a reboot; no return
+ *   boot           leave the monitor, go on with the normal boot (in a
+ *                  boot selector build: reset, so the selector starts again
+ *                  and boots without the monitor)
  * Before any err, input is dropped until the line is quiet for 0.5 s, so
  * the rest of a broken upload is not read as commands; the prompt follows
  * the err line, and the host can retry without a reset once it sees it.
@@ -59,13 +68,39 @@ static void flush_caches(void) {
 /*
  * Runs from its own copy at 0x80019000 (section .tramp, see linker.ld)
  * while it overwrites the rest of us, so it calls nothing.
+ *
+ * After the copy it takes the SDRAM controller down again, as the Boot
+ * ROM leaves it. A chained bootcode.bin expects that: Broadcom's skips
+ * its SDRAM set-up when SD_CS bit 0 (RESTRT, which our set-up leaves
+ * set) reads 1, and then assumes 256 MB (Pi test #269, part E). The
+ * steps are the start of sdram.c's reset_with_timing(): standby, wait
+ * for SDUP to clear, SDRAM clock off; then SD_CS back to the value the
+ * Boot ROM left (EN and RESTRT clear; #313 step 0 hung with SD_CS = 0).
+ * Nothing touches SDRAM after this; the image is in the L2. With
+ * reset false (SDRAM never set up) it only copies and jumps.
  */
-void chain_trampoline(const volatile uint32_t *src, uint32_t words)
+void chain_trampoline(const volatile uint32_t *src, uint32_t words, bool reset, uint32_t sdcs)
 	__attribute__((section(".tramp"), noinline, noreturn));
-void chain_trampoline(const volatile uint32_t *src, uint32_t words) {
+void chain_trampoline(const volatile uint32_t *src, uint32_t words, bool reset, uint32_t sdcs) {
 	volatile uint32_t *dst = (volatile uint32_t *)CHAIN_BASE;
 	for (uint32_t i = 0; i < words; i++)
 		dst[i] = src[i];
+
+	if (!reset)
+		goto go;
+	SD_CS = (SD_CS & ~(SD_CS_DEL_KEEP_SET | SD_CS_DPD_SET | SD_CS_RESTRT_SET)) | SD_CS_STBY_SET;
+	while (SD_CS & SD_CS_SDUP_SET) {
+	}
+	CM_SDCCTL |= CM_PASSWORD | CM_SDCCTL_UPDATE_SET;
+	while (!(CM_SDCCTL & CM_SDCCTL_ACCPT_SET)) {
+	}
+	CM_SDCCTL = (CM_SDCCTL & ~(CM_SDCCTL_ENAB_SET | CM_SDCCTL_CTRL_SET)) | CM_PASSWORD;
+	CM_SDCCTL = CM_PASSWORD | (CM_SDCCTL & CM_SDCCTL_UPDATE_CLR);
+	while (CM_SDCCTL & CM_SDCCTL_ACCPT_SET) {
+	}
+	SD_CS = sdcs;
+go:
+
 	L1_D_CONTROL |= L1_DC_FLUSH;
 	while (L1_D_CONTROL & L1_DC_FLUSH) {
 	}
@@ -212,19 +247,56 @@ static void cmd_dump(uint32_t addr, uint32_t len) {
 	printf("ok\n");
 }
 
-static void cmd_chain(uint32_t addr, uint32_t len) {
+static void cmd_chain(uint32_t addr, uint32_t len, bool reset) {
 	if (len < 0x204 || len > CHAIN_MAX) {
 		drain_input();
 		printf("err length must be 0x204..0x%X\n", CHAIN_MAX);
 		return;
 	}
-	printf("ok chain %u bytes, start 0x%08X\n", len, CHAIN_ENTRY);
+	reset = reset && g_sdram_up;
+	printf("ok chain %u bytes, start 0x%08X, %s\n", len, CHAIN_ENTRY,
+	       !g_sdram_up ? "SDRAM untouched" : reset ? "SDRAM reset" : "SDRAM running");
 	/* let the last characters leave the UART before we go */
 	udelay(2000);
 	for (uint8_t *s = __tramp_load, *d = __tramp_start; d < __tramp_end;)
 		*d++ = *s++;
 	flush_caches();
-	chain_trampoline((const volatile uint32_t *)addr, (len + 3) / 4);
+	chain_trampoline((const volatile uint32_t *)addr, (len + 3) / 4, reset, g_rom_sdcs);
+}
+
+#if CHAIN_IMAGE
+extern const uint8_t chain_image[], chain_image_end[];
+
+/*
+ * Boot selector (CHAIN_IMAGE): chain the bootcode.bin built into us. The
+ * image lies inside our own copy in the L2, above 0x80000000, so the
+ * trampoline's forward copy down to 0x80000000 never overwrites a word
+ * it has yet to read.
+ */
+void monitor_chain_builtin(void) {
+	uint32_t len = (uint32_t)(chain_image_end - chain_image);
+	printf("rbc> chain built-in bootcode.bin, %u bytes, crc32 %08X\n", len, crc32(chain_image, len));
+	cmd_chain((uint32_t)chain_image, len, false);
+	panic("built-in bootcode.bin not chained");
+}
+#endif
+
+/*
+ * Full chip reset through the PM watchdog, as Linux's bcm2835_wdt restart:
+ * 10 ticks (about 150 us), then a full reset. The Boot ROM starts again
+ * and loads bootcode.bin from the card, as after a power cycle.
+ */
+/* PM_RSTC 0x7e10001c, PM_WDOG 0x7e100024 from Broadcom's headers */
+#define PM_RSTC_WRCFG_MASK 0x30u
+#define PM_RSTC_FULL_RESET 0x20u
+
+void watchdog_reset(void) {
+	printf("rbc> watchdog reset\n");
+	udelay(2000);
+	PM_WDOG = CM_PASSWORD | 10;
+	PM_RSTC = CM_PASSWORD | (PM_RSTC & ~PM_RSTC_WRCFG_MASK) | PM_RSTC_FULL_RESET;
+	for (;;) {
+	}
 }
 
 typedef uint32_t (*vpu_fn)(uint32_t, uint32_t, uint32_t, uint32_t);
@@ -270,13 +342,16 @@ static bool run(int argc, char **argv) {
 		flush_caches();
 		uint32_t ret = ((vpu_fn)a[0])(a[1], a[2], a[3], a[4]);
 		printf("ok ret %08X\n", ret);
-	} else if (!strcmp_s(c, "chain") && n == 2) {
-		cmd_chain(a[0], a[1]);
+	} else if (!strcmp_s(c, "chain") && (n == 2 || n == 3)) {
+		cmd_chain(a[0], a[1], n == 3 && a[2] != 0);
+	} else if (!strcmp_s(c, "reset") && n == 0) {
+		printf("ok reset\n");
+		watchdog_reset();
 	} else if (!strcmp_s(c, "boot") && n == 0) {
 		printf("ok boot\n");
 		return true;
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();
@@ -285,18 +360,51 @@ static bool run(int argc, char **argv) {
 	return false;
 }
 
-void monitor(uint32_t wait_s) {
+/*
+ * Only Enter (CR or LF) opens the monitor: other bytes, such as line noise
+ * at power-on, are ignored. A boot selector build also goes on with the
+ * normal boot after MONITOR_IDLE_US without a character, so a monitor
+ * opened by mistake does not keep the Pi from booting.
+ */
+#if CHAIN_IMAGE
+#define MONITOR_IDLE_US (300u * 1000 * 1000)
+#else
+#define MONITOR_IDLE_US 0xffffffffu
+#endif
+
+/* true when Enter came within wait_s */
+bool monitor_wait(uint32_t wait_s) {
 	printf("rbc> monitor: press Enter within %u s\n", wait_s);
-	int c = uart_getc_timeout(wait_s * 1000000u);
-	if (c < 0) {
-		printf("rbc> no input, normal boot\n");
-		return;
+	uint32_t t0 = timer_us(), wait_us = wait_s * 1000000u;
+	for (;;) {
+		uint32_t used = timer_us() - t0;
+		int c = used < wait_us ? uart_getc_timeout(wait_us - used) : -1;
+		if (c < 0) {
+			printf("rbc> no input, normal boot\n");
+			return false;
+		}
+		if (c == '\r' || c == '\n')
+			return true;
 	}
+}
+
+void monitor(uint32_t wait_s) {
+	if (monitor_wait(wait_s))
+		monitor_run();
+}
+
+/* returns on "boot" (and after the idle time in a boot selector build) */
+void monitor_run(void) {
 	printf("ok monitor\n");
 	for (;;) {
 		printf("rbc> ");
-		if (!read_line(0xffffffffu))
+		if (!read_line(MONITOR_IDLE_US)) {
+			if (CHAIN_IMAGE) {
+				printf("\nrbc> idle %u s, normal boot\n", MONITOR_IDLE_US / 1000000u);
+				return;
+			}
 			continue;
+		}
 		char *argv[6];
 		int argc = split(line, argv, 6);
 		if (argc && run(argc, argv))
