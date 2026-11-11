@@ -24,3 +24,20 @@ A read-only Redox tool, similar to the Linux tools `pll-inspector` and
   [librerpi/vpu-x265](https://github.com/librerpi/vpu-x265) (a 2020 VPU
   vector-unit experiment, no license) doesn't matter for booting.
 
+
+## State (2026-11-11)
+
+- Step 1 is merged ([redox-rpi#227](https://github.com/redox-rpi/redox-rpi/pull/227)):
+  PLLH reads 1485 MHz and `pllh_pix` 148.5 MHz at 1080p60. Dump in
+  [tools/socdump/reference](https://github.com/redox-rpi/redox-rpi/tree/main/tools/socdump/reference).
+- Steps 2 and 4 are in [redox-rpi#362](https://github.com/redox-rpi/redox-rpi/pull/362):
+  `socdump display` (HVS channels and planes, pixel valves 0–2, HDMI core
+  and HD blocks with PHY and timing) and `socdump diff A B`.
+- Step 3: the 1080p dump under Broadcom's firmware is Pi test row 337. It
+  goes into `tools/socdump/reference/pi3bp-firmware-1080p-display.{txt,regs}`.
+  The 720p dump needs `hdmi_mode` in the SD card's `config.txt`, so it
+  waits for a card visit.
+- For M4 (HDMI without `start.elf`): the `.regs` files hold every value
+  Broadcom's firmware programs for HDMI (PLLH, pixel valve 2, HDMI core
+  and PHY, HVS). `socdump regs` under our firmware and `socdump diff`
+  against them show what is still missing.
