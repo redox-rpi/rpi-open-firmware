@@ -32,7 +32,7 @@ Branch `vc4` of redox-rpi/tinycc, draft
 |---|---|
 | M0 | **done**: `vc4-tcc` builds; encoder test: 271 instruction forms, 0 failures against `vc4-elf-objdump` and `vc4-elf-as` |
 | M1 | **mostly done**: arithmetic, locals, loops, compares, calls with more than 6 arguments, function pointers, globals, division compile to correct-looking code that links |
-| M2 | **compiles and links**: `fat.c` builds with `vc4-tcc`; the object links into the real bootcode build (`MONITOR=1`) with `vc4-elf-ld`. Functional test not run yet (needs a simulator or the Pi) |
+| M2 | **done (simulator)**: `fat.c` builds with `vc4-tcc`, links into the real bootcode build (`MONITOR=1`), and runs correctly in resim on FAT16 and FAT32 card images (`tests/vc4/fat-sim.sh`). Not tried on the Pi |
 
 | Size | GCC 6.2.1 `-Os` | TCC (no optimisation) |
 |---|---|---|
@@ -103,20 +103,19 @@ the code needs them (`fat.c` does not).
 Two levels:
 
 1. **Encoder test** (M0): every instruction form against `vc4-elf-as`.
-2. **Functional test** (M2): `fat.c` built by TCC runs against the FAT16
-   and FAT32 images of the existing host test (`fat-host`) and must load
-   the same files as the host build. That needs a VC4 simulator:
-   `resim`/`vc4emul` from the vc4-toolchain (it was used to test the VC4
-   GCC port). Building it on homenodellm needs the maintainer's OK (open
-   question 2). Without it: the same test on the real Pi through the
-   bootcode monitor, or GCC/TCC object comparison only.
+2. **Functional test** (M2, `tests/vc4/fat-sim.sh`): `fat.c` built by TCC
+   runs in `resim`/`vc4emul` (the simulator the VC4 GCC port was tested
+   with; built in `~/rbc-build/tcc-vc4-tools/resim` with the maintainer's
+   OK, 2026-11-11). The memory image holds a test driver and a FAT16 or
+   FAT32 card image like `bootcode/tests/fat-test.sh` makes; every file
+   must load with the size and checksum of the original. resim lacks
+   `switch` and `bitflip #imm`, so GCC's `fat.c` cannot run there (the
+   driver brings its own `printf` for the same reason).
 
 ## Open
 
-1. Functional test: may the spike build `resim` (vc4emul, from the same
-   vc4-toolchain sources as the GCC we use) in its own directory on
-   homenodellm? The alternative is a test on the Pi through the bootcode
-   monitor (a row for the Pi test agent).
+1. A test on the real Pi: bootcode with TCC's `fat.c` (a row for the Pi
+   test agent), once there is more than `fat.c` worth testing (M3)?
 2. Clean-room check: while working out the field layouts the spike
    session also read parts of the binutils CGEN description
    (`cpu/vc4.cpu`); nothing was copied and every encoding is verified

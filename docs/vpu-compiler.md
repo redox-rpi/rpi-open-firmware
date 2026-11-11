@@ -140,11 +140,13 @@ questions: [tcc-vc4.md](tcc-vc4.md); code: branch `vc4` of
   that links with `vc4-elf-ld` into the bootcode build (`MONITOR=1`).
   Every instruction form agrees with `vc4-elf-as`/`vc4-elf-objdump`
   (encoder test: 271 forms, 0 failures).
-- **Not checked yet:** running the code. No VC4 simulator is built
-  (resim needs the maintainer's OK); the Pi is the other way.
+- **Runs:** in the resim simulator (vc4emul, built with the maintainer's
+  OK), TCC's `fat.c` loads every file from FAT16 and FAT32 card images
+  with the right size and checksum (`tests/vc4/fat-sim.sh`). Not tried on
+  the Pi yet.
 - **Size:** `fat.c` text 3,454 bytes against 1,672 with GCC 6.2.1 `-Os`
   (2.07×, no optimisation at all); `bootcode.bin` 15,902 against 14,120.
-- **Lines:** encoder 197, code generator 595, relocations 108, tests 275;
+- **Lines:** encoder 197, code generator 595, relocations 108, tests 420;
   about 60 lines of plumbing in TCC's own files.
 - **Open problems:** no `long long`, float, struct arguments, variadic
   function definitions or VLAs; no `stdint.h` of its own; prologue and
