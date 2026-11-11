@@ -10,6 +10,9 @@ OBJDUMP := $(CROSS_COMPILE)objdump
 BUILD_ID ?= $(shell git describe --always --dirty 2>/dev/null || echo unknown)
 # MONITOR=1: serial monitor for test builds (monitor.c), never in a release
 MONITOR ?= 0
+# CHAIN_IMAGE=path (with MONITOR=1): build that bootcode.bin image in and
+# chain it when nobody opens the monitor (boot selector, chain-image.S)
+CHAIN_IMAGE ?=
 
 # Broadcom's register headers (BSD) through upstream's glue, as system
 # headers so their style does not trip our warnings
@@ -24,6 +27,10 @@ LDFLAGS := -nostdlib -nostartfiles -Wl,--build-id=none -T linker.ld
 SRCS := start.S main.c clock.c timer.c uart.c printf.c sdram.c libc.c
 ifeq ($(MONITOR),1)
 SRCS += monitor.c
+ifneq ($(CHAIN_IMAGE),)
+SRCS += chain-image.S
+CFLAGS += -DCHAIN_IMAGE=1
+endif
 endif
 OBJS := $(patsubst %,build/%.o,$(SRCS))
 
@@ -36,6 +43,10 @@ build/%.c.o: %.c hw.h
 build/%.S.o: %.S
 	@mkdir -p build
 	$(CC) $(ASFLAGS) -c $< -o $@
+
+build/chain-image.S.o: chain-image.S $(CHAIN_IMAGE)
+	@mkdir -p build
+	$(CC) $(ASFLAGS) -DCHAIN_IMAGE_PATH='"$(abspath $(CHAIN_IMAGE))"' -c $< -o $@
 
 build/bootcode.elf: $(OBJS) linker.ld
 	$(CC) $(LDFLAGS) $(OBJS) -lgcc -o $@
