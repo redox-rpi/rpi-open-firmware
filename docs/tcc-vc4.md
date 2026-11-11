@@ -14,18 +14,19 @@ Redox, where TCC already runs (redox-rpi experiment `tcc`, #247).
 
 | Topic | Decision |
 |---|---|
-| Where | Its own repository `redox-rpi/tinycc`, a real fork of TinyCC `mob`, not a folder in this repository. The firmware build points at a fixed commit, like `vc4-toolchain` today. |
-| Until then | Branch `vc4` in a clone on homenodellm (`~/rbc-build/tcc-vc4`), based on `mob` 70adbb12, the same commit the Redox `tcc` recipe uses. |
-| Who creates the repo | The maintainer, once the spike shows the approach works. |
+| Where | Its own repository [redox-rpi/tinycc](https://github.com/redox-rpi/tinycc), a real fork of TinyCC `mob`, not a folder in this repository. The firmware build points at a fixed commit, like `vc4-toolchain` today. |
+| Branches | `mob` upstream unchanged, `main` our fork, `vc4` the backend; `vc4` reaches `main` by PR, merged by the maintainer. Build clone: `~/rbc-build/tcc-vc4` on homenodellm. |
 | Redox patches | The four patches of the `tcc` experiment move into the same fork later, as a separate step. |
-| Licence | TCC is LGPL-2.1. The VC4 encoder is written from the vc4-toolchain binutils description (`cpu/vc4.cpu`, GPLv3+), so the VC4 files are marked GPLv3+ and the fork as a whole becomes GPLv3+. Fine for the firmware (GPLv2+ sources, built by the tool, not linked with it). |
+| Licence | LGPL-2.1, as TinyCC upstream, so the backend could go upstream and `libtcc1` stays LGPL. The VC4 encoding is our own, checked against the GNU assembler and disassembler as black boxes; no tables or code from binutils (GPLv3+). |
 | First step | A time-boxed spike: integer subset only (load/store, integer arithmetic, compares, branches, calls, stack frame), enough to compile `bootcode/fat.c`. No float, vector, inline asm or `.S`. |
 | Measure | Size against `vc4-elf-gcc -Os`, and a host test. |
 
 ## Status (2026-11-11, evening)
 
-Branch `vc4` in `~/rbc-build/tcc-vc4` on homenodellm (not on GitHub yet),
-about 900 new lines (`vc4-enc.h`, `vc4-gen.c`, `vc4-link.c`, tests).
+Branch `vc4` of redox-rpi/tinycc, draft
+[PR #1](https://github.com/redox-rpi/tinycc/pull/1) against `main`; about
+1,270 new lines (`vc4-enc.h`, `vc4-gen.c`, `vc4-link.c`, tests). Native
+`make test` still passes.
 
 | Milestone | State |
 |---|---|
@@ -112,14 +113,18 @@ Two levels:
 
 ## Open
 
-1. Repository `redox-rpi/tinycc`: created by the maintainer after the
-   spike (decided), or earlier so the branch is backed up on GitHub?
-2. May the spike build `resim` (vc4emul, from the same vc4-toolchain
-   sources as the GCC we use) in its own directory on homenodellm for the
-   functional test?
-3. Size goal: is "at most 1.5 to 2 times GCC's `-Os`" the bar for M2, or
-   only "it fits and works"?
-4. Upstreaming the VC4 backend to TinyCC `mob`: not planned now; the
-   GPLv3 encoding source would make that a question for upstream.
+1. Functional test: may the spike build `resim` (vc4emul, from the same
+   vc4-toolchain sources as the GCC we use) in its own directory on
+   homenodellm? The alternative is a test on the Pi through the bootcode
+   monitor (a row for the Pi test agent).
+2. Clean-room check: while working out the field layouts the spike
+   session also read parts of the binutils CGEN description
+   (`cpu/vc4.cpu`); nothing was copied and every encoding is verified
+   black-box. Enough for LGPL, or should the layouts be re-checked
+   against Herman Hermitage's public notes?
+3. Size goal: is "at most 1.5 to 2 times GCC's `-Os`" the bar, or only
+   "it fits and works"? Today 2.07× without any optimisation.
+4. Upstreaming the VC4 backend to TinyCC `mob`: possible with LGPL; not
+   planned now.
 5. `armstub8.S`: whether TCC's AArch64 assembler covers it (system
    registers, `eret`) is not checked; not part of this work package.
