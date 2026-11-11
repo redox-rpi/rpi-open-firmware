@@ -143,7 +143,7 @@ questions: [tcc-vc4.md](tcc-vc4.md); code: branch `vc4` of
 - **Runs:** in the resim simulator, TCC's `fat.c` loads every file from
   FAT16 and FAT32 card images correctly, and an ABI test (variadic
   functions, many arguments, narrow types, switch, struct return) prints
-  the same as the host build. On the Pi: queued as pi-tests row 346.
+  the same as the host build. On the Pi (pi-tests row 347): bootcode with all C but `monitor.c` from TCC loads files from the SD card exactly as the GCC build.
 - **Size:** bootcode text 16,945 bytes against 9,534 with GCC 6.2.1 `-Os`
   (1.78×, no optimisation at all); `bootcode.bin` 21,880 against 14,420.
 - **Open problems:** no `long long`, float, struct arguments or VLAs; no

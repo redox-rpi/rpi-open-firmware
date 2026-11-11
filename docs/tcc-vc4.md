@@ -21,7 +21,7 @@ Redox, where TCC already runs (redox-rpi experiment `tcc`, #247).
 | First step | A time-boxed spike: integer subset only (load/store, integer arithmetic, compares, branches, calls, stack frame), enough to compile `bootcode/fat.c`. No float, vector, inline asm or `.S`. |
 | Measure | Size against `vc4-elf-gcc -Os`, and a host test. |
 
-## Status (2026-11-11, late evening)
+## Status (2026-11-11, night)
 
 Branch `vc4` of redox-rpi/tinycc, draft
 [PR #1](https://github.com/redox-rpi/tinycc/pull/1) against `main`. Native
@@ -32,7 +32,7 @@ Branch `vc4` of redox-rpi/tinycc, draft
 | M0 | **done**: `vc4-tcc` builds; encoder test: 271 instruction forms, 0 failures against `vc4-elf-objdump` and `vc4-elf-as` |
 | M1 | **done for integers**: ABI test (`tests/vc4/abi-sim.sh`) prints the same on the host and as TCC code in resim: variadic functions (also called from GCC code), 8 arguments, signed/unsigned narrow types, div/mod, shifts, compares, switch, loops, recursion, struct return, function-pointer tables, data relocations |
 | M2 | **done (simulator)**: `fat.c` runs correctly in resim on FAT16 and FAT32 card images (`tests/vc4/fat-sim.sh`) |
-| M3 | **builds**: every C file of `bootcode/` but `monitor.c` (inline asm, waits for M4) compiles with TCC, and the bootcode links (`tests/vc4/bootcode-build.sh`). Start-up, clock, SDRAM and SD code cannot run in resim. Pi row 346 stopped at the GCC reference (our sdram_init hangs when chained over a running SDRAM); rerun on fat-boot 8f11674 (keeps a running SDRAM), chained as before, in [pi-tests row 347](https://github.com/redox-rpi/pi-tests/blob/main/queue.md) |
+| M3 | **builds**: every C file of `bootcode/` but `monitor.c` (inline asm, waits for M4) compiles with TCC, and the bootcode links (`tests/vc4/bootcode-build.sh`). **Runs on the Pi** ([pi-tests report 347](https://github.com/redox-rpi/pi-tests/blob/main/reports/347.md)): chained from the boot selector, the builds with TCC's `fat.c` (F) and with all C but `monitor.c` from TCC (T) answered `sd`, `ls`, `fl` (up to the 3 MB START.ELF), `sdr` and `crc` exactly as the GCC build (G). TCC's `sdram.c` did not run there (the chained build keeps the running SDRAM) |
 
 | `bootcode/` text | GCC 6.2.1 `-Os` | TCC (no optimisation) | factor |
 |---|---|---|---|
@@ -53,10 +53,10 @@ Branch `vc4` of redox-rpi/tinycc, draft
 16,210 with TCC's `fat.c`, 21,880 with all of the above from TCC. The
 chain limit is 100 KB; the L2 region 108 KB.
 
-Pi rows 346/347 chain three builds over serial from the boot selector's
+Pi row 347 (passed) chained three builds over serial from the boot selector's
 monitor: G (all GCC, the reference), F (`fat.c` from TCC), T (all but
 `monitor.c` from TCC). It runs `sd`, `ls`, `fl` and `sdr` in each; F and T
-must print what G prints.
+printed exactly what G printed. Row 346 before it stopped at G: bootcode 088068d hung re-initialising the running SDRAM, fixed in fat-boot 8f11674.
 
 Where the size goes: every function saves r6, r7 and lr and builds a frame
 (12 bytes, GCC often none); arguments are spilled to the frame and every
@@ -141,7 +141,7 @@ Two levels:
 
 ## Open
 
-1. Pi test: row 346 stopped at G (firmware sdram_init vs running SDRAM); rerun 347 on fat-boot 8f11674 (SDRAM kept), plain chain.
+1. Pi test passed (row 347). Next on the Pi: TCC's `sdram.c` from a cold start, which needs it in the boot selector card's own `bootcode.bin` (a card visit), or a later chain path that resets the SDRAM.
    `monitor.c` stays GCC until TCC's VC4 assembler (M4) handles its
    `__asm__("b %0")`; or should `monitor.c` get that one line from a `.S`
    helper so all C goes through TCC sooner?
