@@ -30,7 +30,24 @@ What it means for us:
   PLLH) differs. The HVS and display-list code is the part we need.
 - **M2:** his ARM handoff (memory map, PLLB, park secondary cores,
   devicetree fix-ups) is the same job as our `boot64` with `armstub8`.
-  Worth comparing before Pi row 332.
+  Compared on 2026-11-11 (his branch `feature/arm-handoff-review`):
+  - He starts 32-bit Linux (`zImage`) and parks cores 1–3 on the
+    BCM2836 local mailbox 3, the way 32-bit Linux releases them. We start
+    AArch64 and park them in `armstub8`'s spin table, which U-Boot and
+    Redox expect. Nothing to take over there.
+  - He powers SDHOST down and clears its clock before Linux takes over
+    (Linux's probe failed now and then otherwise). Taken over:
+    `sd_off()` in `boot64` (rpi-open-firmware 088068d).
+  - His devicetree fix-ups (a fixed PL011 clock, PL011 pins, framebuffer
+    in `reserved-memory` plus a `simple-framebuffer` node) belong to his
+    LK display hand-off. It reminded us that `start.elf` applies
+    config.txt's overlays and our VPU code does not: without
+    `disable-bt`, serial0 is the mini UART. Now
+    `redox-rpi/make-dtb.sh` merges `disable-bt` and `mmc` on the host
+    into `redox-3bp.dtb`, which `boot64` loads by default (088068d).
+  - The framebuffer part (`LFB1` data at ARM 0x34, `simple-framebuffer`)
+    is a model for M4: Redox's graphics could take a framebuffer that our
+    VPU code set up, instead of asking the mailbox.
 - **The 3B+:** he tests a 3B (BCM2837 without "B0", LAN9514). Our 3B+ has
   the newer stepping, LAN7515 and the PMIC, so his results don't carry
   over as they are.
