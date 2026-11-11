@@ -1,6 +1,8 @@
 # Broadcom's firmware: what is in it, per Pi model
 
-What the closed Raspberry Pi firmware consists of, which variant each
+The aim of this repository is to replace everything closed from Broadcom
+on the Pi, as far as possible, not only the VPU boot firmware. This page
+lists what the closed Raspberry Pi firmware consists of, which variant each
 model uses, and what each piece does. Sizes are from the release
 redox-rpi uses, [raspberrypi/firmware](https://github.com/raspberrypi/firmware)
 `1.20260915`. Which of these pieces our own firmware replaces:
@@ -27,6 +29,35 @@ redox-rpi uses, [raspberrypi/firmware](https://github.com/raspberrypi/firmware)
 The Wi-Fi and Bluetooth firmware belongs to the Cypress/Infineon radio
 chip and is loaded by the operating system's driver, not by the boot
 firmware. redox-rpi has no Wi-Fi driver yet.
+
+## Every closed piece and whether it can be replaced
+
+Everything on these boards that comes as closed code. Most is from
+Broadcom; the Wi-Fi chip is Cypress/Infineon (Broadcom's former Wi-Fi
+business).
+
+| Closed piece | Models | Runs on | Replaceable? | Our plan |
+|---|---|---|---|---|
+| Boot ROM | all | VPU, in the chip | **no**: part of the silicon | stays; it is small and only loads the next stage |
+| `bootcode.bin` | Zero, Zero 2 W, 3B+ | VPU | **yes** | our `bootcode.bin`, M1 passed |
+| `start*.elf` + `fixup*.dat`, boot part (clocks, memory split, loading, ARM start) | all up to the Pi 4/400 | VPU | **yes** | M2 |
+| `start*.elf`, run-time part: mailbox (memory, MAC, clocks, temperature, power) | all up to the Pi 4/400 | VPU | **yes** | M3, a small service on the VPU, or the ARM side does it itself |
+| `start*.elf`, display (HDMI, framebuffer, composite) | all up to the Pi 4/400 | VPU | **yes**, with effort: the registers are partly documented by Linux's `vc4` driver | M4 |
+| `start*.elf`, 3D memory and power (V3D) | all up to the Pi 4/400 | VPU | **yes**: V3D itself is open (Mesa, Linux) | M5 |
+| `start*.elf`, video codecs (H.264, MPEG-2, VC-1), camera ISP (`start_x`) | all up to the Pi 4/400 | VPU | **hardly**: undocumented, depends on the rest of the closed firmware | software decoding on the ARM instead; camera not planned |
+| `armstub*` | Zero 2 W, 3B+, Pi 4/400 | ARM | **already open** (BSD source), only built in | our own build of `armstub8`, done |
+| Wi-Fi firmware (`brcmfmac*.bin`, the chip's NVRAM text, CLM blob) | Zero W, Zero 2 W, 3B+, Pi 4/400 | inside the Wi-Fi chip | **no** in practice: the chip's own processor, no documentation; the open-source driver on the host side is enough | load the blob; write our own driver for it (redox-rpi Wi-Fi theme) |
+| Bluetooth firmware patch (`*.hcd`) | same | inside the radio chip | **no** in practice | load the patch, or run Bluetooth without it (may work with the ROM version) |
+| EEPROM bootloader (`pieeprom.bin`, `recovery.bin`) | Pi 4, 400, 5 | VPU / boot processor | **maybe**: lk-overlay has some Pi 4 work; replacing it needs a safe way back | later, a separate experiment (see [other-models.md](other-models.md)) |
+| VL805 USB controller firmware | Pi 4 (Pi 400: probably the same, not checked) | inside the VL805 (VIA) | **no**: not Broadcom, no documentation | keep |
+
+Open already: devicetrees and overlays, U-Boot, the Redox bootloader and
+kernel. The 3B+'s USB/Ethernet chip (LAN7515) and its power chip
+(MxL7704) need no firmware.
+
+So on the 3B+ everything closed except the Boot ROM and the radio
+firmware can in principle be replaced. The video codecs are the one piece
+we would rather leave out than rebuild.
 
 ## The pieces
 

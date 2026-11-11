@@ -2,7 +2,11 @@
 
 On 2026-11-07 the maintainer decided to replace **all** of Broadcom's
 closed boot pieces (`bootcode.bin`, `start*.elf` with `fixup*.dat`,
-`armstub8`) with our own code, instead of taking rpi-open-firmware or
+`armstub8`) with our own code. Since 2026-11-11 the aim covers every
+closed piece from Broadcom, as far as possible, not only the VPU
+firmware: the list is in
+[broadcom-firmware.md](broadcom-firmware.md#every-closed-piece-and-whether-it-can-be-replaced).
+For the boot pieces we write our own code instead of taking rpi-open-firmware or
 lk-overlay as they are. Both start on the 3B+
 ([rpi-open-firmware-2019.md](rpi-open-firmware-2019.md),
 [lk-overlay.md](lk-overlay.md)). But rpi-open-firmware is old C++ with

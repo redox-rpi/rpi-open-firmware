@@ -1,11 +1,22 @@
-# Open boot firmware for the Raspberry Pi 3B+
+# Open firmware for the Raspberry Pi
 
 Part of [redox-rpi](https://github.com/redox-rpi/redox-rpi), the port of
-Redox OS to the Raspberry Pi. The goal is to boot the Pi 3B+ (BCM2837B0)
-without Broadcom's closed firmware: our own code instead of `bootcode.bin`,
-`start*.elf` with `fixup*.dat`, and the `armstub8` built into the
-firmware. Only the Boot ROM inside the chip stays. Plan and progress:
-[redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230).
+Redox OS to the Raspberry Pi. The goal: replace **everything closed that
+comes from Broadcom** on the Pi, as far as that is possible, with open
+code. That means:
+
+- the boot firmware on the VPU: `bootcode.bin`, `start*.elf` with
+  `fixup*.dat`;
+- the ARM start stub built into it;
+- the jobs `start.elf` keeps doing while the OS runs (mailbox, display);
+- the firmware blobs other chips need, such as Wi-Fi and Bluetooth;
+- on newer boards, the EEPROM bootloader.
+
+Only the Boot ROM inside the chip stays. We start with the Pi 3B+
+(BCM2837B0). Plan and progress:
+[redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230). Every
+closed piece, per model, and whether it can be replaced:
+[docs/broadcom-firmware.md](docs/broadcom-firmware.md#every-closed-piece-and-whether-it-can-be-replaced).
 
 The repository started as a fork of Kristina Brooks's
 [rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware) (2019),
