@@ -1,9 +1,9 @@
 # Open firmware for the Raspberry Pi
 
-Part of [redox-rpi](https://github.com/redox-rpi/redox-rpi), the port of
-Redox OS to the Raspberry Pi. The goal: replace **everything closed that
-comes from Broadcom** on the Pi, as far as that is possible, with open
-code. That means:
+An independent sub-project of [redox-rpi](https://github.com/redox-rpi/redox-rpi),
+the port of Redox OS to the Raspberry Pi. The goal: replace **everything
+closed that comes from Broadcom** on the Pi, as far as that is possible,
+with open code. That means:
 
 - the boot firmware on the VPU: `bootcode.bin`, `start*.elf` with
   `fixup*.dat`;
@@ -13,17 +13,39 @@ code. That means:
 - on newer boards, the EEPROM bootloader.
 
 Only the Boot ROM inside the chip stays. The models we look at (Zero W,
-Zero 2 W, 3B+, Pi 400) are described in [docs/models.md](docs/models.md);
+Zero 2 W, 3B+, Pi 400, Pi 5) are described in [docs/models.md](docs/models.md);
 work starts on the Pi 3B+. Plan and progress:
 [redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230). Every
 closed piece, per model, and whether it can be replaced:
 [docs/broadcom-firmware.md](docs/broadcom-firmware.md#every-closed-piece-and-whether-it-can-be-replaced).
 
-The repository started as a fork of Kristina Brooks's
-[rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware) (2019),
-and that code is still here. Our own firmware is a new, small C program
-that takes its hardware sequences from it and names the source in every
-file.
+The firmware is not tied to Redox: it starts U-Boot, Linux or Redox the
+same way, so it has its own docs, Pi tests and pace. What redox-rpi uses
+from it, and how, is on redox-rpi's
+[open firmware page](https://github.com/redox-rpi/redox-rpi/blob/main/docs/topics/open-firmware.md).
+
+## Where it comes from
+
+GitHub shows this repository as a fork of Kristina Brooks's
+[rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware), because
+it started there. That project has been on hold since 2019 (its
+[issue #37](https://github.com/christinaa/rpi-open-firmware/issues/37)).
+Our scope is much wider than upstream's, and we take from several sources.
+Every file names the ones it uses:
+
+| Source | Licence | What we take |
+|---|---|---|
+| [christinaa/rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware) (2019) | GPLv2+ | PLL, SDRAM, SDHOST and ARM start sequences; its code is still on the `redox-rpi` branch, with our fixes |
+| [librerpi/lk-overlay](https://github.com/librerpi/lk-overlay), the newer rewrite by the same community | GPLv2+ | tested on our Pi ([lk-overlay.md](docs/lk-overlay.md)); reference for later steps, no code taken yet |
+| Broadcom's register headers (`hardware.h`, `sdhost.h`, …) | BSD 3-clause | register names and bits |
+| [raspberrypi/tools `armstub8.S`](https://github.com/raspberrypi/tools/tree/master/armstubs) | BSD 3-clause | what the stub must do (ours is new code) |
+| Linux drivers and devicetrees | GPLv2 | register behaviour, the devicetree we load |
+| Specifications: Microsoft FAT (fatgen103), SD (via NetBSD `sdmmcreg.h`, ISC), Devicetree v0.4, Arm Architecture Reference Manual | – | `fat.c`, `sd.c`, `fdt.c`, `armstub8` |
+| Herman Hermitage's VideoCore IV notes, Julian Brown's VC4 GCC | – | the VPU itself, the compiler |
+| An internal disassembly of Broadcom's firmware | – | behaviour notes only, no code; the disassembly is not published |
+
+Our own firmware (`bootcode/`) is new, small C code. Upstream's original
+README, with its credits, is in [docs/upstream-README.md](docs/upstream-README.md).
 
 ## State
 
@@ -33,7 +55,7 @@ file.
 | Monitor | Test builds only: read/write registers, load code over serial, run it, chain another `bootcode.bin` | passed (#269) |
 | Boot selector | The test Pi's card: Enter on the serial line opens our monitor, otherwise Broadcom's `bootcode.bin` (built in) boots as before | passed (#313, #320 rerun); in daily use on the test Pi |
 | `armstub8` | Our build of the 64-bit ARM start stub | booted Redox on the Pi with Broadcom's firmware; not yet proven that it was ours that ran |
-| M2 | Our VPU code starts the ARM in AArch64, then loads stub, U-Boot and devicetree from the SD card | ARM start written (PR #7), Pi test row 332 queued; SD/FAT not started |
+| M2 | Our VPU code starts the ARM in AArch64, then loads stub, kernel and devicetree from the SD card | ARM start (PR #7), SD card and FAT (PR #8), `boot64` (PR #9): written and host-tested, Pi test row 332 queued |
 | M3 | Mailbox service on the VPU (memory, MAC, clocks, temperature) | not started |
 | M4 | HDMI and framebuffer | not started |
 | M5 | Network boot, 3D | not started |
@@ -49,7 +71,7 @@ All in [docs/](docs/README.md):
 - [models.md](docs/models.md): the Pi models and their hardware.
 - [broadcom-firmware.md](docs/broadcom-firmware.md): what is in Broadcom's
   firmware (`bootcode.bin`, `start*.elf`, `armstub*` and their variants),
-  per model: Zero W, Zero 2 W, 3B+, Pi 400.
+  per model: Zero W, Zero 2 W, 3B+, Pi 400, Pi 5.
 - [boot-chain.md](docs/boot-chain.md): Broadcom's boot pieces, how each
   redox-rpi release starts, the steps to the end goal (with pictures).
 - [own-firmware.md](docs/own-firmware.md): our firmware (#230): design,
@@ -92,6 +114,3 @@ code it is taken from. Facts from Broadcom's documents, Linux and an
 internal disassembly of the closed firmware (behaviour only, no code
 copied) are listed with their source; the disassembly itself is not
 published.
-
-Upstream's original README, with its credits, is kept in
-[docs/upstream-README.md](docs/upstream-README.md).
