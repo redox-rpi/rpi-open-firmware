@@ -40,7 +40,8 @@ What it means for us:
   (lk-overlay#8): he'd like to chat and asked for a channel. His goals
   were a custom animation on the VPU while the OS loads, and booting as
   fast as possible (still working on that); avoiding Broadcom's firmware
-  was a side effect.
+  was a side effect. Since then he and the maintainer talk in a Matrix
+  room.
 
 ## Everything else
 
