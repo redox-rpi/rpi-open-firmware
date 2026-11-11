@@ -22,6 +22,40 @@ Redox, where TCC already runs (redox-rpi experiment `tcc`, #247).
 | First step | A time-boxed spike: integer subset only (load/store, integer arithmetic, compares, branches, calls, stack frame), enough to compile `bootcode/fat.c`. No float, vector, inline asm or `.S`. |
 | Measure | Size against `vc4-elf-gcc -Os`, and a host test. |
 
+## Status (2026-11-11, evening)
+
+Branch `vc4` in `~/rbc-build/tcc-vc4` on homenodellm (not on GitHub yet),
+about 900 new lines (`vc4-enc.h`, `vc4-gen.c`, `vc4-link.c`, tests).
+
+| Milestone | State |
+|---|---|
+| M0 | **done**: `vc4-tcc` builds; encoder test: 271 instruction forms, 0 failures against `vc4-elf-objdump` and `vc4-elf-as` |
+| M1 | **mostly done**: arithmetic, locals, loops, compares, calls with more than 6 arguments, function pointers, globals, division compile to correct-looking code that links |
+| M2 | **compiles and links**: `fat.c` builds with `vc4-tcc`; the object links into the real bootcode build (`MONITOR=1`) with `vc4-elf-ld`. Functional test not run yet (needs a simulator or the Pi) |
+
+| Size | GCC 6.2.1 `-Os` | TCC (no optimisation) |
+|---|---|---|
+| `fat.c` text | 1,672 bytes | 3,454 bytes (2.07×) |
+| `bootcode.bin`, `MONITOR=1` | 14,120 bytes | 15,902 bytes with TCC's `fat.c` |
+
+Where the size goes: every function saves r6, r7 and lr and builds a frame
+(12 bytes, GCC often none); arguments are spilled to the frame and every
+use reloads them; globals are addressed with a 48-bit `mov` plus a load
+(GCC: one PC-relative load); constants of 32 and up take 4 bytes. These
+are the M7 targets, none needs a design change.
+
+Findings on the way:
+
+- `vc4-elf-as` encodes `ld rX,(rY-n)` (negative offset) as a PC-relative
+  load, a binutils bug. GCC avoids negative offsets; TCC's encoder writes
+  the correct 32-bit form (checked with objdump).
+- Variadic calls (`printf`) use the normal convention in GCC's port
+  (r0–r5, then the stack), so TCC's calls to GCC's `printf` are right.
+- TCC's `.eh_frame` is rejected by `vc4-elf-ld`; switched off for VC4, as
+  for ARM.
+- TCC has no `stdint.h`; the spike uses newlib's from the vc4 toolchain.
+  For the Pi build a small freestanding `stdint.h` belongs in the fork.
+
 ## How the backend is built
 
 - Target `TCC_TARGET_VC4`, files `vc4-gen.c` (code generator), `vc4-link.c`
