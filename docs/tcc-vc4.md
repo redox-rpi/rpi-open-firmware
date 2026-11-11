@@ -21,23 +21,42 @@ Redox, where TCC already runs (redox-rpi experiment `tcc`, #247).
 | First step | A time-boxed spike: integer subset only (load/store, integer arithmetic, compares, branches, calls, stack frame), enough to compile `bootcode/fat.c`. No float, vector, inline asm or `.S`. |
 | Measure | Size against `vc4-elf-gcc -Os`, and a host test. |
 
-## Status (2026-11-11, evening)
+## Status (2026-11-11, late evening)
 
 Branch `vc4` of redox-rpi/tinycc, draft
-[PR #1](https://github.com/redox-rpi/tinycc/pull/1) against `main`; about
-1,270 new lines (`vc4-enc.h`, `vc4-gen.c`, `vc4-link.c`, tests). Native
+[PR #1](https://github.com/redox-rpi/tinycc/pull/1) against `main`. Native
 `make test` still passes.
 
 | Milestone | State |
 |---|---|
 | M0 | **done**: `vc4-tcc` builds; encoder test: 271 instruction forms, 0 failures against `vc4-elf-objdump` and `vc4-elf-as` |
-| M1 | **mostly done**: arithmetic, locals, loops, compares, calls with more than 6 arguments, function pointers, globals, division compile to correct-looking code that links |
-| M2 | **done (simulator)**: `fat.c` builds with `vc4-tcc`, links into the real bootcode build (`MONITOR=1`), and runs correctly in resim on FAT16 and FAT32 card images (`tests/vc4/fat-sim.sh`). Not tried on the Pi |
+| M1 | **done for integers**: ABI test (`tests/vc4/abi-sim.sh`) prints the same on the host and as TCC code in resim: variadic functions (also called from GCC code), 8 arguments, signed/unsigned narrow types, div/mod, shifts, compares, switch, loops, recursion, struct return, function-pointer tables, data relocations |
+| M2 | **done (simulator)**: `fat.c` runs correctly in resim on FAT16 and FAT32 card images (`tests/vc4/fat-sim.sh`) |
+| M3 | **builds**: every C file of `bootcode/` but `monitor.c` (inline asm, waits for M4) compiles with TCC, and the bootcode links (`tests/vc4/bootcode-build.sh`). Start-up, clock, SDRAM and SD code cannot run in resim; Pi test queued as [pi-tests row 346](https://github.com/redox-rpi/pi-tests/blob/main/queue.md) (no person) |
 
-| Size | GCC 6.2.1 `-Os` | TCC (no optimisation) |
-|---|---|---|
-| `fat.c` text | 1,672 bytes | 3,454 bytes (2.07×) |
-| `bootcode.bin`, `MONITOR=1` | 14,120 bytes | 15,902 bytes with TCC's `fat.c` |
+| `bootcode/` text | GCC 6.2.1 `-Os` | TCC (no optimisation) | factor |
+|---|---|---|---|
+| arm.c | 1,074 | 1,843 | 1.72 |
+| clock.c | 336 | 420 | 1.25 |
+| fat.c | 1,692 | 3,482 | 2.06 |
+| fdt.c | 644 | 1,266 | 1.97 |
+| libc.c | 44 | 178 | 4.05 |
+| main.c | 1,004 | 1,410 | 1.40 |
+| printf.c | 630 | 1,488 | 2.36 |
+| sd.c | 1,428 | 2,539 | 1.78 |
+| sdram.c | 2,410 | 3,831 | 1.59 |
+| timer.c | 24 | 78 | 3.25 |
+| uart.c | 248 | 410 | 1.65 |
+| **total** | **9,534** | **16,945** | **1.78** |
+
+`bootcode.bin` (`fat-boot` 088068d, `MONITOR=1`): 14,420 bytes with GCC,
+16,210 with TCC's `fat.c`, 21,880 with all of the above from TCC. The
+chain limit is 100 KB; the L2 region 108 KB.
+
+Pi row 346 chains three builds over serial from the boot selector's
+monitor: G (all GCC, the reference), F (`fat.c` from TCC), T (all but
+`monitor.c` from TCC). It runs `sd`, `ls`, `fl` and `sdr` in each; F and T
+must print what G prints.
 
 Where the size goes: every function saves r6, r7 and lr and builds a frame
 (12 bytes, GCC often none); arguments are spilled to the frame and every
@@ -56,6 +75,14 @@ Findings on the way:
   for ARM.
 - TCC has no `stdint.h`; the spike uses newlib's from the vc4 toolchain.
   For the Pi build a small freestanding `stdint.h` belongs in the fork.
+- resim's `asr` returns 1 for every negative value (`||` for `|`); fixed
+  in our resim build, noted in README-vc4.md.
+- resim has no `ldsb` (GCC uses the 32-bit form on the Pi), so vc4-tcc
+  loads signed bytes with `ldb` and `shl`/`asr` for now. Going back to
+  `ldsb` saves 2 bytes per load, once a Pi test or a patched resim checks it.
+- `stm r6-r7,lr` puts lr at the top in resim (the order is not
+  documented). Normal functions only pair `stm` with `ldm`, so the order
+  does not matter there; variadic functions save r6, r7 and lr one by one.
 
 ## How the backend is built
 
@@ -114,15 +141,18 @@ Two levels:
 
 ## Open
 
-1. A test on the real Pi: bootcode with TCC's `fat.c` (a row for the Pi
-   test agent), once there is more than `fat.c` worth testing (M3)?
+1. Pi test: queued as pi-tests row 346 (no person); waits for the agent.
+   `monitor.c` stays GCC until TCC's VC4 assembler (M4) handles its
+   `__asm__("b %0")`; or should `monitor.c` get that one line from a `.S`
+   helper so all C goes through TCC sooner?
 2. Clean-room check: while working out the field layouts the spike
    session also read parts of the binutils CGEN description
    (`cpu/vc4.cpu`); nothing was copied and every encoding is verified
    black-box. Enough for LGPL, or should the layouts be re-checked
    against Herman Hermitage's public notes?
 3. Size goal: is "at most 1.5 to 2 times GCC's `-Os`" the bar, or only
-   "it fits and works"? Today 2.07× without any optimisation.
+   "it fits and works"? Today 1.78× over all of bootcode, without any
+   optimisation.
 4. Upstreaming the VC4 backend to TinyCC `mob`: possible with LGPL; not
    planned now.
 5. `armstub8.S`: whether TCC's AArch64 assembler covers it (system
