@@ -1,8 +1,22 @@
 # VPU compiler: fewer dependencies (discussion)
 
 State of the discussion of 2026-11-11 (maintainer and firmware session).
-Nothing is decided and nothing is started; the firmware work (M2, M3) goes
-on with GCC regardless.
+The firmware work (M2, M3) goes on with GCC regardless.
+
+## Decided so far
+
+- 2026-11-11: a time-boxed TCC spike (integer subset, target
+  `bootcode/fat.c`) runs in its own session.
+- The fork lives in its own repository,
+  [redox-rpi/tinycc](https://github.com/redox-rpi/tinycc), not in this
+  one: TCC also ships in the Redox images, and its upstream history and
+  licence stay apart from the firmware. The firmware build will pin a
+  commit of it.
+- Licence: LGPL-2.1, as TinyCC upstream, so the backend could go upstream,
+  and `libtcc1`, which TCC links into every program and so into our
+  firmware, stays LGPL. We write the VC4 encoding ourselves from public
+  documentation and check it against the VC4 GNU assembler's output; no
+  tables or code are taken from binutils (GPLv3+).
 
 ## What we use today
 
@@ -53,7 +67,7 @@ holding the C front end, the code generator, an assembler and a linker.
 
 | Source | Licence | Use |
 |---|---|---|
-| Opcode table in vc4-toolchain's binutils (`opcodes/vc4-*`) | GPLv3+ | the most complete machine-readable table; taking it makes the fork GPL, which is fine for the firmware |
+| Opcode table in vc4-toolchain's binutils (`opcodes/vc4-*`) | GPLv3+ | the most complete machine-readable table; **not used** (it would make the fork GPLv3); the assembler serves only as a black-box check of our bytes |
 | [hermanhermitage/videocoreiv](https://github.com/hermanhermitage/videocoreiv) | none stated, "non-commercial" disclaimer | the VideoCore IV Programmers Manual (wiki), `videocoreiv.arch`, `tinyasm`, an IDA plugin, small samples (`uart01`, `blinker01`); facts to read and check, not code to copy |
 | [thubble's videocore-elf-dis](https://github.com/thubble/videocore-elf-dis) | see repo | a disassembler, to check our output |
 | The internal disassembly of Broadcom's firmware | – | real instruction use, behaviour notes only |
