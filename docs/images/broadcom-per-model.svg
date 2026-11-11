@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="680" height="330" viewBox="0 0 680 330" role="img"><title>Broadcom firmware per Pi model</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="386" viewBox="0 0 680 386" role="img"><title>Broadcom firmware per Pi model</title>
 <style>
 text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:12px;fill:#5F5E5A}
 .h{font-size:14px;font-weight:600;fill:#2C2C2A}
@@ -43,5 +43,11 @@ text{fill:#B4B2A9}.h{fill:#F1EFE8}
 <g class="bc"><rect x="358" y="234" width="86" height="40" rx="4"/><text x="401.0" y="254.0" text-anchor="middle" dominant-baseline="central">start4*.elf</text></g>
 <g class="bc"><rect x="452" y="234" width="86" height="40" rx="4"/><text x="495.0" y="254.0" text-anchor="middle" dominant-baseline="central">armstub8-gic</text></g>
 <g class="open"><rect x="546" y="234" width="86" height="40" rx="4"/><text x="589.0" y="254.0" text-anchor="middle" dominant-baseline="central">kernel8.img</text></g>
-<g class="bc"><rect x="150" y="300" width="14" height="14" rx="3"/></g><text x="172" y="311">Broadcom, closed</text><g class="open"><rect x="330" y="300" width="14" height="14" rx="3"/></g><text x="352" y="311">open source / your OS</text><g class="gone"><rect x="520" y="300" width="14" height="14" rx="3"/></g><text x="542" y="311">not needed</text>
+<text class="h" x="30" y="302" dominant-baseline="central">Pi 5 / CM5</text><text x="30" y="320" dominant-baseline="central">BCM2712, 64-bit</text>
+<g class="bc"><rect x="170" y="290" width="86" height="40" rx="4"/><text x="213.0" y="310.0" text-anchor="middle" dominant-baseline="central">in chip</text></g>
+<g class="bc"><rect x="264" y="290" width="86" height="40" rx="4"/><text x="307.0" y="310.0" text-anchor="middle" dominant-baseline="central">EEPROM boot</text></g>
+<g class="bc"><rect x="358" y="290" width="86" height="40" rx="4"/><text x="401.0" y="310.0" text-anchor="middle" dominant-baseline="central">in EEPROM</text></g>
+<g class="open"><rect x="452" y="290" width="86" height="40" rx="4"/><text x="495.0" y="310.0" text-anchor="middle" dominant-baseline="central">TF-A BL31</text></g>
+<g class="open"><rect x="546" y="290" width="86" height="40" rx="4"/><text x="589.0" y="310.0" text-anchor="middle" dominant-baseline="central">kernel_2712</text></g>
+<g class="bc"><rect x="150" y="356" width="14" height="14" rx="3"/></g><text x="172" y="367">Broadcom, closed</text><g class="open"><rect x="330" y="356" width="14" height="14" rx="3"/></g><text x="352" y="367">open source / your OS</text><g class="gone"><rect x="520" y="356" width="14" height="14" rx="3"/></g><text x="542" y="367">not needed</text>
 </svg>

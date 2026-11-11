@@ -9,20 +9,20 @@ redox-rpi uses, [raspberrypi/firmware](https://github.com/raspberrypi/firmware)
 [own-firmware.md](own-firmware.md); how redox-rpi's releases start:
 [boot-chain.md](boot-chain.md).
 
-![Boot chain per Pi model: Zero W, Zero 2 W, 3B+ and Pi 400](images/broadcom-per-model.svg)
+![Boot chain per Pi model: Zero W, Zero 2 W, 3B+, Pi 400 and Pi 5](images/broadcom-per-model.svg)
 
 ## Firmware per model
 
 The boards themselves (chip, cores, memory, USB, network):
 [models.md](models.md).
 
-| | Pi Zero / Zero W | Pi Zero 2 W | Pi 3B+ | Pi 400 |
-|---|---|---|---|---|
-| First boot code after the ROM | `bootcode.bin` on the SD card | `bootcode.bin` on the SD card | `bootcode.bin` on the SD card, or over USB or the network (in the ROM) | bootloader in the SPI EEPROM on the board |
-| Main firmware | `start*.elf` + `fixup*.dat` | `start*.elf` + `fixup*.dat` | `start*.elf` + `fixup*.dat` | `start4*.elf` + `fixup4*.dat` |
-| ARM start stub | none needed (one core) | `armstub8` built into `start.elf` | `armstub8` built into `start.elf` | `armstub8-gic` built into `start4.elf` (sets up the GIC-400) |
-| Devicetree | `bcm2708-rpi-zero.dtb`, `bcm2708-rpi-zero-w.dtb` | `bcm2710-rpi-zero-2-w.dtb` | `bcm2710-rpi-3-b-plus.dtb` | `bcm2711-rpi-400.dtb` |
-| Other blobs | Wi-Fi/Bluetooth chip firmware (Zero W) | Wi-Fi/Bluetooth chip firmware | Wi-Fi/Bluetooth chip firmware | Wi-Fi/Bluetooth chip firmware; USB controller (VL805) firmware loaded by the EEPROM bootloader |
+| | Pi Zero / Zero W | Pi Zero 2 W | Pi 3B+ | Pi 400 | Pi 5 / CM5 |
+|---|---|---|---|---|---|
+| First boot code after the ROM | `bootcode.bin` on the SD card | `bootcode.bin` on the SD card | `bootcode.bin` on the SD card, or over USB or the network (in the ROM) | bootloader in the SPI EEPROM on the board | bootloader in the SPI EEPROM |
+| Main firmware | `start*.elf` + `fixup*.dat` | `start*.elf` + `fixup*.dat` | `start*.elf` + `fixup*.dat` | `start4*.elf` + `fixup4*.dat` | in the EEPROM too; no `start*.elf` on the card |
+| ARM start stub | none needed (one core) | `armstub8` built into `start.elf` | `armstub8` built into `start.elf` | `armstub8-gic` built into `start4.elf` (sets up the GIC-400) | TF-A's BL31, built into the firmware: gives PSCI |
+| Devicetree | `bcm2708-rpi-zero.dtb`, `bcm2708-rpi-zero-w.dtb` | `bcm2710-rpi-zero-2-w.dtb` | `bcm2710-rpi-3-b-plus.dtb` | `bcm2711-rpi-400.dtb` | `bcm2712-rpi-5-b.dtb`; CM5 on the IO board: `bcm2712-rpi-cm5-cm5io.dtb` |
+| Other blobs | Wi-Fi/Bluetooth chip firmware (Zero W) | Wi-Fi/Bluetooth chip firmware | Wi-Fi/Bluetooth chip firmware | Wi-Fi/Bluetooth chip firmware; USB controller (VL805) firmware loaded by the EEPROM bootloader | Wi-Fi/Bluetooth chip firmware; the RP1 I/O chip runs its own firmware (from the bootloader, not checked) |
 
 The Wi-Fi and Bluetooth firmware belongs to the Cypress/Infineon radio
 chip and is loaded by the operating system's driver, not by the boot
@@ -46,7 +46,8 @@ business).
 | `armstub*` | Zero 2 W, 3B+, Pi 4/400 | ARM | **already open** (BSD source), only built in | our own build of `armstub8`, done |
 | Wi-Fi firmware (`brcmfmac*.bin`, the chip's NVRAM text, CLM blob) | Zero W, Zero 2 W, 3B+, Pi 4/400 | inside the Wi-Fi chip | **no** in practice: the chip's own processor, no documentation; the open-source driver on the host side is enough | load the blob; write our own driver for it (redox-rpi Wi-Fi theme) |
 | Bluetooth firmware patch (`*.hcd`) | same | inside the radio chip | **no** in practice | load the patch, or run Bluetooth without it (may work with the ROM version) |
-| EEPROM bootloader (`pieeprom.bin`, `recovery.bin`) | Pi 4, 400, 5 | VPU / boot processor | **maybe**: lk-overlay has some Pi 4 work; replacing it needs a safe way back | later, a separate experiment (see [other-models.md](other-models.md)) |
+| EEPROM bootloader (`pieeprom.bin`, `recovery.bin`); on the Pi 5 it holds the main firmware too | Pi 4, 400, 5, CM5 | VPU / boot processor | **maybe**: lk-overlay has some Pi 4 work; replacing it needs a safe way back | later, a separate experiment (see [other-models.md](other-models.md)) |
+| RP1 I/O chip firmware (USB, Ethernet MAC, GPIO) | Pi 5, CM5 | inside RP1 (Raspberry Pi's own chip) | **unknown**: RP1 is documented in part (Raspberry Pi's RP1 peripherals document), its firmware is not | keep for now |
 | VL805 USB controller firmware | Pi 4 (Pi 400: probably the same, not checked) | inside the VL805 (VIA) | **no**: not Broadcom, no documentation | keep |
 
 Open already: devicetrees and overlays, U-Boot, the Redox bootloader and
@@ -67,7 +68,7 @@ Inside the chip, cannot be changed or replaced, and cannot be broken.
   first FAT partition. The 3B+ also tries USB and the network when there
   is none (set at the factory). The ROM loads at most 128 KiB into the
   VPU's L2 cache at `0x80000000` and jumps to `0x80000200`.
-- **Pi 4 and 400:** reads the bootloader from the SPI EEPROM. If the
+- **Pi 4, 400 and 5:** reads the bootloader from the SPI EEPROM. If the
   EEPROM is broken, it looks for `recovery.bin` on the SD card to
   rewrite it.
 
@@ -79,7 +80,7 @@ loads `start*.elf` and `fixup*.dat`. It also does USB and network boot
 for a few early settings (`gpu_mem`, `total_mem`, `start_file`). One file
 for all VideoCore IV models.
 
-On the Pi 4 and 400 the **EEPROM bootloader** has this job instead. It
+On the Pi 4, 400 and 5 the **EEPROM bootloader** has this job instead. On the Pi 5 and CM5 the EEPROM also holds the main firmware, so the card carries no `start*.elf`. It
 also knows network, USB and NVMe boot, and has its own settings
 (`rpi-eeprom-config`, for example `BOOT_ORDER`).
 
