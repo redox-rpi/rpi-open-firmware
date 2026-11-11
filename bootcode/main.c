@@ -99,7 +99,18 @@ void bootcode_main(uint32_t cpuid) {
 		monitor_chain_builtin();
 #endif
 	uint32_t t0 = timer_us();
-	sdram_init();
+	/*
+	 * Chained over running SDRAM (the monitor's `chain A N`, as rbc-load.sh
+	 * chainmon does): our set-up already ran and left SDUP and RESTRT set.
+	 * Running it again switches the clock of a live controller and hangs
+	 * (Pi test #346), so keep the SDRAM as it is. The Boot ROM leaves the
+	 * controller down, and a watchdog reset takes it down too.
+	 */
+	const uint32_t up = SD_CS_SDUP_SET | SD_CS_RESTRT_SET;
+	if ((rom.sdcs & up) == up)
+		printf("[sdram] already up (SD_CS 0x%X), kept as it is\n", rom.sdcs);
+	else
+		sdram_init();
 	g_sdram_up = true;
 	printf("SDRAM ready after %u us\n", timer_us() - t0);
 #if MONITOR && CHAIN_IMAGE
