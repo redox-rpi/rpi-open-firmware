@@ -33,8 +33,14 @@ A read-only Redox tool, similar to the Linux tools `pll-inspector` and
 - Steps 2 and 4 are in [redox-rpi#362](https://github.com/redox-rpi/redox-rpi/pull/362):
   `socdump display` (HVS channels and planes, pixel valves 0–2, HDMI core
   and HD blocks with PHY and timing) and `socdump diff A B`.
-- Step 3: the 1080p dump under Broadcom's firmware is Pi test row 337. It
-  goes into `tools/socdump/reference/pi3bp-firmware-1080p-display.{txt,regs}`.
+- Step 3: the 1080p dump under Broadcom's firmware (Pi test row 337,
+  2026-11-12) is in PR #362 as
+  `tools/socdump/reference/pi3bp-firmware-1080p-display.{txt,regs}`.
+  Values for M4: pixel valve 2 control 0x00177005, h 1920/88/44/148, v
+  1080/4/5/36; HDMI scheduler 0x000cb02b, PHY `ctl_0` 0x8c000000; PLLH
+  1485 MHz, `pllh_pix` /10 = 148.5 MHz; HVS channel 1 scales the 1824x984
+  framebuffer to 1920x1035 at y=22. The firmware's dynamic clocking moves
+  PLLA/B/C and some dividers between dumps, so a `diff` always shows those.
   The 720p dump needs `hdmi_mode` in the SD card's `config.txt`, so it
   waits for a card visit.
 - For M4 (HDMI without `start.elf`): the `.regs` files hold every value
