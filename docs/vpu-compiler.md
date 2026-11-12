@@ -33,8 +33,13 @@ needed any more.
 On the Pi, TCC-built code behaves exactly like GCC's: in
 [pi-tests row 347](https://github.com/redox-rpi/pi-tests/blob/main/reports/347.md),
 everything but `monitor.c`/`start.S` from TCC gave the same `sd`, `ls`
-and file-load results, crc32 for crc32. Row 349 (all of it from TCC,
-including the chain trampoline) is queued.
+and file-load results, crc32 for crc32. In
+[row 349](https://github.com/redox-rpi/pi-tests/blob/main/reports/349.md)
+the whole `bootcode.bin` came from TCC (monitor, entry code, chain
+trampoline): every reply was the same as the GCC build's, a TCC-assembled
+payload ran, and chaining a further image worked. One difference: loading
+the 3 MB `START.ELF` took 10 s against 4 s, since TCC's code is
+unoptimised and the SD/FAT loop is CPU-bound.
 
 | `bootcode.bin`, `MONITOR=1` | GCC 6.2.1 `-Os` | TCC (no optimisation) |
 |---|---|---|
@@ -47,7 +52,7 @@ including the chain trampoline) is queued.
 - Assembler: its linked bytes are the same as gas's.
 - ABI: variadic functions, many arguments, narrow types, switch and struct return give the same output as the host build, in the resim simulator.
 - FAT16 and FAT32 loading works in resim.
-- On the Pi: SD and FAT (row 347).
+- On the Pi: SD and FAT (row 347); the whole bootcode from TCC (row 349).
 - TCC's own `make test` still passes.
 
 **What is missing, with rough effort:**
@@ -56,7 +61,7 @@ including the chain trampoline) is queued.
 |---|---|---|
 | TCC's own linker for VC4, with what `linker.ld` does (fixed addresses, `.tramp` stored in the image but run at 0x80019000, `ASSERT`) | about 1 week, or less if the firmware drops the separate load address of `.tramp` | dropping binutils |
 | Own freestanding `stdint.h`/`stdbool.h` in the fork (today newlib's) | 1 day | dropping newlib |
-| Size work: keep arguments in registers, skip frames in leaf functions, shorter global addressing | 1–2 weeks to about 1.3× GCC | only if size matters |
+| Size and speed work: keep arguments in registers, skip frames in leaf functions, shorter global addressing | 1–2 weeks to about 1.3× GCC | only if size or load time matters (SD loads 2.5× slower today) |
 | `long long`, float, struct arguments | about 1 week | not used by `bootcode/` today |
 | TCC for VC4 running on Redox on the Pi (Redox's TCC patches into the fork, after agreement) | days | building firmware on the Pi |
 | Upstream's C++ firmware (`firmware/*.cc`) | not possible: TCC compiles C only | only if we build upstream's firmware rather than our `bootcode/` |
@@ -68,6 +73,7 @@ including the chain trampoline) is queued.
 - **C — TCC now, binutils for the link** (what works today), and decide on A after the linker step. Drops GCC and newlib now, and keeps a binutils build (minutes, not 40).
 
 **Risks:**
+- Slower code until the optimisation work (SD loads 2.5× slower).
 - Code-generation bugs in a young backend. Against them stand the four host tests and one Pi row per firmware change.
 - One extra codebase to keep up.
 - Upstream C++ stays out of reach.
