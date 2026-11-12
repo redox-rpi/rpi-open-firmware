@@ -23,12 +23,18 @@ The firmware work (M2, M3) goes on with GCC regardless.
 State 2026-11-11, written by the tcc-vc4 session. Details:
 [tcc-vc4.md](tcc-vc4.md), code in
 [redox-rpi/tinycc PR #1](https://github.com/redox-rpi/tinycc/pull/1)
-(branch `vc4`, 497e8fd3).
+(branch `vc4`, 8e1c7814).
 
 **Where TCC stands.** The whole `bootcode/` (all C files, `monitor.c`
-with its inline asm, `start.S`) builds with `vc4-tcc`. Only the link
-still needs `vc4-elf-ld` and `vc4-elf-objcopy` from binutils; GCC is not
-needed any more.
+with its inline asm, `start.S`) builds with `vc4-tcc`, and since
+8e1c7814 TCC's own linker also links it into `bootcode.bin` (24,972
+bytes; `tests/vc4/bootcode-build.sh LINK=tcc`). That needs a small
+firmware change, proposed to the open-firmware session: `.tramp` is linked
+where it is stored and copied to 0x80019000 before use, and the section
+symbols are `__start_X`/`__stop_X`. linker.ld's `ASSERT`s become checks on
+TCC's `-Wl,-Map` output. With that change neither GCC nor binutils is
+needed; the Pi test of the TCC-linked image is
+[pi-tests row 358](https://github.com/redox-rpi/pi-tests/blob/main/queue.md) (queued).
 
 On the Pi, TCC-built code behaves exactly like GCC's: in
 [pi-tests row 347](https://github.com/redox-rpi/pi-tests/blob/main/reports/347.md),
@@ -59,7 +65,7 @@ unoptimised and the SD/FAT loop is CPU-bound.
 
 | Item | Effort | Needed for |
 |---|---|---|
-| TCC's own linker for VC4, with what `linker.ld` does (fixed addresses, `.tramp` stored in the image but run at 0x80019000, `ASSERT`) | about 1 week, or less if the firmware drops the separate load address of `.tramp` | dropping binutils |
+| ~~TCC's own linker for VC4~~ **done** (8e1c7814), with the firmware change above; Pi row 358 queued | — | dropping binutils |
 | Own freestanding `stdint.h`/`stdbool.h` in the fork (today newlib's) | 1 day | dropping newlib |
 | Size and speed work: keep arguments in registers, skip frames in leaf functions, shorter global addressing | 1–2 weeks to about 1.3× GCC | only if size or load time matters (SD loads 2.5× slower today) |
 | `long long`, float, struct arguments | about 1 week | not used by `bootcode/` today |
@@ -68,9 +74,9 @@ unoptimised and the SD/FAT loop is CPU-bound.
 
 **Options:**
 
-- **A — move to TCC fully,** once the linker is done: one small compiler (builds in seconds) instead of a 40-minute GCC/binutils/newlib build, and it can run on the Pi. We maintain the backend ourselves.
+- **A — move to TCC fully** (the linker is done, Pi row 358 pending): one small compiler (builds in seconds) instead of a 40-minute GCC/binutils/newlib build, and it can run on the Pi. We maintain the backend ourselves.
 - **B — keep GCC,** and keep TCC as a second compiler and cross-check. No new maintenance, but also no smaller toolchain.
-- **C — TCC now, binutils for the link** (what works today), and decide on A after the linker step. Drops GCC and newlib now, and keeps a binutils build (minutes, not 40).
+- **C — TCC now, binutils for the link**, and decide on A after the linker step (now done, so C and A are close). Drops GCC and newlib now, and keeps a binutils build (minutes, not 40).
 
 **Risks:**
 - Slower code until the optimisation work (SD loads 2.5× slower).
@@ -78,7 +84,7 @@ unoptimised and the SD/FAT loop is CPU-bound.
 - One extra codebase to keep up.
 - Upstream C++ stays out of reach.
 
-**Recommendation of the session:** C now, with GCC frozen as the reference. Then the linker step, and then A, if the maintainer wants the toolchain on the Pi.
+**Recommendation of the session:** C now, with GCC frozen as the reference. Then the linker step, and then A, if the maintainer wants the toolchain on the Pi. Update 2026-11-12: the linker step is done; if row 358 passes and the firmware takes the `.tramp` change, A is possible right away.
 
 ## What we use today
 
@@ -199,7 +205,7 @@ questions: [tcc-vc4.md](tcc-vc4.md); code: branch `vc4` of
 [PR #1](https://github.com/redox-rpi/tinycc/pull/1).
 
 - **Builds:** the whole `bootcode/` (C, inline asm, `.S`) builds with
-  `vc4-tcc`; only the link is `vc4-elf-ld` (see the decision note above). Every instruction form agrees with
+  `vc4-tcc`, and TCC's own linker links it (8e1c7814, with a small firmware change; see the decision note above). Every instruction form agrees with
   `vc4-elf-as`/`vc4-elf-objdump` (271 forms, 0 failures).
 - **Runs:** in the resim simulator, TCC's `fat.c` loads every file from
   FAT16 and FAT32 card images correctly, and an ABI test (variadic
@@ -208,7 +214,7 @@ questions: [tcc-vc4.md](tcc-vc4.md); code: branch `vc4` of
 - **Size:** bootcode text 16,945 bytes against 9,534 with GCC 6.2.1 `-Os`
   (1.78×, no optimisation at all); `bootcode.bin` 21,880 against 14,420.
 - **Open problems:** no `long long`, float, struct arguments or VLAs; no
-  `stdint.h` of its own; no VC4 linker in TCC; prologue and global
+  `stdint.h` of its own; no linker scripts in TCC (no VMA/LMA split); prologue and global
   addressing are large (M7).
 - **So far no blocker:** nothing points against the approach.
 
