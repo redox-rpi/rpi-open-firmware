@@ -253,3 +253,31 @@ bool expander_start(void) {
 	       hiz, ok ? "" : " (a write failed)");
 	return ok;
 }
+
+/*
+ * Register comparison for #230 M3 (monitor `regs`): every clock, PLL and
+ * GPIO register that Pi test 337 dumped under start.elf, with start.elf's
+ * value, next to ours now. USB core registers only when PM_USB is on.
+ */
+struct reg_ref {
+	uint32_t addr, ref;
+	const char *name;
+};
+#include "regs337.h"
+
+void regs_compare(void) {
+	int diff = 0;
+	for (uint32_t i = 0; i < sizeof g_regs / sizeof g_regs[0]; i++) {
+		const struct reg_ref *r = &g_regs[i];
+		if ((r->addr >> 12) == 0x7e980 || (r->addr >> 12) == 0x7e981) {
+			if (!(PM_USB & 1))
+				continue;
+		}
+		uint32_t v = HW_REGISTER_RW(r->addr);
+		bool same = r->ref == 0xffffffffu || v == r->ref;
+		if (!same)
+			diff++;
+		printf("reg %08X %08X %08X %s%s\n", r->addr, v, r->ref, r->name, same ? "" : " DIFF");
+	}
+	printf("ok regs %d differ\n", diff);
+}

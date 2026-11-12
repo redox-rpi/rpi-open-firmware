@@ -94,3 +94,4 @@ void i2c_write(uint32_t addr, uint32_t reg, uint32_t value);
 bool expander_start(void);
 void pllc_per_on(void);
 void eth_clock_on(void);
+void regs_compare(void);
