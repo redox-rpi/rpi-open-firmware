@@ -206,6 +206,33 @@ void vpu_clock(uint32_t div) {
 	sd_clock_update(); /* the SD data clock divides the core clock */
 }
 
+/*
+ * The LAN7515's boot-time reset is GPIO 30 (dt-blob.dts pins_3bplus
+ * LAN_RUN_BOOT, internal 30; lk-overlay arm.c pulses the same pin on the
+ * 3B+ after starting the clock). GPIO 30 is an input with a pull-up from
+ * power-on, so the chip leaves reset before its clock runs (rows 368-382:
+ * "USB device not accepting new address"). Hold it low across the clock
+ * start and LAN_RUN, then high, then an input again as start.elf leaves it
+ * (Pi test 337: GPFSEL3 0, GPIO 30 high). GPIO 31 reads high under
+ * start.elf and low under ours; printed for comparison.
+ */
+#define LAN_RUN_BOOT 30
+
+void lan_reset_pulse_begin(void) {
+	GP_CLR0 = 1u << LAN_RUN_BOOT;
+	GP_FSEL3 = (GP_FSEL3 & ~7u) | 1u; /* GPIO 30 output, low */
+	udelay(1000);
+}
+
+void lan_reset_pulse_end(void) {
+	GP_SET0 = 1u << LAN_RUN_BOOT;
+	udelay(1000);
+	GP_FSEL3 = GP_FSEL3 & ~7u; /* input again */
+	udelay(50000);
+	printf("power: LAN reset on GPIO 30 pulsed, GPLEV0 %08X (GPIO 31 %u)\n", GP_LEV0,
+	       (GP_LEV0 >> 31) & 1);
+}
+
 bool usb_power_on(void) {
 	PM_USB = PM_PASSWORD; /* USB domain off while the image domain starts */
 	udelay(200000);
@@ -228,6 +255,8 @@ bool usb_power_on(void) {
 	 */
 	eth_clock_on();
 	udelay(1000);
+	lan_reset_pulse_begin();
 	expander_start();
+	lan_reset_pulse_end();
 	return true;
 }

@@ -98,3 +98,5 @@ void regs_compare(void);
 void sd_pullups(void);
 void vpu_clock(uint32_t div);
 void sd_clock_update(void);
+void lan_reset_pulse_begin(void);
+void lan_reset_pulse_end(void);
