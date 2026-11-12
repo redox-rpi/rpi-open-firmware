@@ -83,3 +83,6 @@ extern bool g_mbox_on;
 void mbox_start(void);
 void mbox_poll(void);
 void mbox_serve(void) __attribute__((noreturn));
+
+/* power.c (monitor builds): image and USB power domains, USB PHY */
+bool usb_power_on(void);

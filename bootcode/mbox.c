@@ -250,9 +250,11 @@ static bool handle(volatile struct tag *t) {
 		reply(t, r, 8);
 		return true;
 	case 0x00028001: /* set power state: bit 0 on, bit 1 wait */
-		/* USB is not switched yet (PM_USB, image domain, USB PHY: M3
-		 * step 2), so its state stays what the hardware says */
+		/* USB is powered in mbox_start() and never switched off: its
+		 * state stays what the hardware says (power.c) */
 		r[0] = a;
+		if (a == POWER_USB && (b & POWER_ON) && !g_power[a] && usb_power_on())
+			g_power[a] = POWER_ON;
 		if (a < POWER_DEVICES) {
 			if (a != POWER_USB)
 				g_power[a] = b & POWER_ON;
@@ -367,7 +369,8 @@ void mbox_start(void) {
 	g_revision = otp_read(30);
 	for (int i = 0; i < POWER_DEVICES; i++)
 		g_power[i] = POWER_ON;
-	g_power[POWER_USB] = (PM_USB & PM_USB_CTRLEN_SET) ? POWER_ON : 0;
+	/* as start.elf: USB is on before the ARM starts (power.c) */
+	g_power[POWER_USB] = ((PM_USB & PM_USB_CTRLEN_SET) || usb_power_on()) ? POWER_ON : 0;
 	emmc_clock();
 	/* requests left from an earlier run of the ARM */
 	while (!(ARM_1_MAIL1_STA & ARM_MS_EMPTY))
