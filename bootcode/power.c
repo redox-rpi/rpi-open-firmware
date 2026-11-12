@@ -145,6 +145,30 @@ static bool usb_phy_on(void) {
 	return true;
 }
 
+#define GPC_ENAB (1u << 4)
+#define GPC_BUSY (1u << 7)
+
+static void gp_clock(volatile uint32_t *ctl, volatile uint32_t *div, uint32_t src, uint32_t divi,
+                     uint32_t mash) {
+	*ctl = CM_PASSWORD | src; /* off while the divider changes */
+	for (int i = 0; i < 100000 && (*ctl & GPC_BUSY); i++) {
+	}
+	*div = CM_PASSWORD | divi;
+	*ctl = CM_PASSWORD | (mash << 9) | src;
+	*ctl = CM_PASSWORD | (mash << 9) | GPC_ENAB | src;
+}
+
+/* GPIO 42 GPCLK1 25 MHz for the LAN7515, GPIO 43 GPCLK2 32.768 kHz for the WiFi */
+void eth_clock_on(void) {
+	pllc_per_on();
+	gp_clock((volatile uint32_t *)&CM_GP1CTL, (volatile uint32_t *)&CM_GP1DIV, 5, 20u << 12, 0);
+	/* 19.2 MHz / 585.9375, MASH 1 */
+	gp_clock((volatile uint32_t *)&CM_GP2CTL, (volatile uint32_t *)&CM_GP2DIV, 1, (585u << 12) | 3840u, 1);
+	/* ALT0 (GPCLK1, GPCLK2) on GPIO 42 and 43 */
+	GP_FSEL4 = (GP_FSEL4 & ~((7u << 6) | (7u << 9))) | (4u << 6) | (4u << 9);
+	printf("power: ETH_CLK GPIO 42 on, CM_GP1CTL %08X DIV %08X\n", CM_GP1CTL, CM_GP1DIV);
+}
+
 bool usb_power_on(void) {
 	PM_USB = PM_PASSWORD; /* USB domain off while the image domain starts */
 	udelay(200000);
@@ -159,7 +183,14 @@ bool usb_power_on(void) {
 		return false;
 	}
 	printf("power: USB on, PM_IMAGE %08X PM_USB %08X\n", PM_IMAGE, PM_USB);
-	/* the LAN7515 hub and Ethernet leave reset (LAN_RUN on the expander) */
+	/*
+	 * The LAN7515 has no crystal on the 3B+: its 25 MHz comes from GPCLK1 on
+	 * GPIO 42 (dt-blob.dts pins_3bplus: "ETH_CLK - Ethernet 25MHz output").
+	 * Row 368 released LAN_RUN without it: U-Boot saw a device that could
+	 * not send its descriptor. The clock first, then the reset.
+	 */
+	eth_clock_on();
+	udelay(1000);
 	expander_start();
 	return true;
 }

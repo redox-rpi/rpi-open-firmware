@@ -155,14 +155,23 @@ static uint32_t clock_hz(uint32_t id) {
  * card with dtoverlay=mmc: PLLC PER = 1000 / 2 = 500 MHz, then / 2.5 =
  * 200 MHz. clock.c leaves the PER channel held; release only that hold.
  */
-static void emmc_clock(void) {
-	if (cm_hz(CM_EMMCCTL, CM_EMMCDIV))
+/* PLLC's PER channel at PLLC / 2 (500 MHz), for the EMMC and Ethernet clocks */
+void pllc_per_on(void) {
+	static bool done;
+	if (done)
 		return;
+	done = true;
 	uint32_t hold = CM_PLLC & ~CM_PLLC_HOLDPER_SET & 0xffffff;
 	A2W_PLLC_PER = A2W_PASSWORD | 2;
 	CM_PLLC = CM_PASSWORD | hold | CM_PLLC_HOLDPER_SET | CM_PLLC_LOADPER_SET;
 	CM_PLLC = CM_PASSWORD | hold | CM_PLLC_HOLDPER_SET;
 	CM_PLLC = CM_PASSWORD | hold;
+}
+
+static void emmc_clock(void) {
+	if (cm_hz(CM_EMMCCTL, CM_EMMCDIV))
+		return;
+	pllc_per_on();
 
 	CM_EMMCCTL = CM_PASSWORD | 5; /* PLLC PER, disabled while the divider changes */
 	while (CM_EMMCCTL & 0x80) {   /* BUSY */
