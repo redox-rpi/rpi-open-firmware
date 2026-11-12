@@ -1,0 +1,16 @@
+diff --git a/app/linux-bootloader/loader.c b/app/linux-bootloader/loader.c
+index 4fc7bc3..c1d8854 100644
+--- a/app/linux-bootloader/loader.c
++++ b/app/linux-bootloader/loader.c
+@@ -442,7 +442,10 @@ static bool patch_dtb(uint32_t initrd_size) {
+   int ret;
+   void* v_fdt = dtb_virtual;
+ 
+-  ret = fdt_open_into(v_fdt, v_fdt, 16 * 1024);
++  // redox-rpi: 16 KB is smaller than the Raspberry Pi devicetree for the
++  // 3B+ (35 KB), so fdt_open_into() failed with -FDT_ERR_NOSPACE (Pi test
++  // #268). The dtb buffer is mapped with 1 MB; leave room to grow.
++  ret = fdt_open_into(v_fdt, v_fdt, 128 * 1024);
+   if (ret) {
+     printf("ERROR: fdt_open_into() == %d\n", ret);
+     return false;
