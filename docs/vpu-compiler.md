@@ -67,7 +67,7 @@ unoptimised and the SD/FAT loop is CPU-bound.
 |---|---|---|
 | ~~TCC's own linker for VC4~~ **done** (8e1c7814), with the firmware change above; Pi row 358 passed | — | dropping binutils |
 | Own freestanding `stdint.h`/`stdbool.h` in the fork (today newlib's) | 1 day | dropping newlib |
-| Size and speed work: keep arguments in registers, skip frames in leaf functions, shorter global addressing | 1–2 weeks to about 1.3× GCC | only if size or load time matters (SD loads 2.5× slower today) |
+| Size and speed work: first cheap step done on branch `vc4-opt` (1.71× → 1.54×, `fat.c` 24 % fewer instructions; Pi row 371); the rest needs register allocation for locals | 1–2 weeks to about 1.3× GCC | the condition for moving to TCC (maintainer, 2026-11-12) |
 | `long long`, float, struct arguments | about 1 week | not used by `bootcode/` today |
 | TCC for VC4 running on Redox on the Pi (Redox's TCC patches into the fork, after agreement) | days | building firmware on the Pi |
 | Upstream's C++ firmware (`firmware/*.cc`) | not possible: TCC compiles C only | only if we build upstream's firmware rather than our `bootcode/` |
