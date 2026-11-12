@@ -158,10 +158,17 @@ static void gp_clock(volatile uint32_t *ctl, volatile uint32_t *div, uint32_t sr
 	*ctl = CM_PASSWORD | (mash << 9) | GPC_ENAB | src;
 }
 
-/* GPIO 42 GPCLK1 25 MHz for the LAN7515, GPIO 43 GPCLK2 32.768 kHz for the WiFi */
+/*
+ * GPIO 42 GPCLK1 24 MHz for the LAN7515, GPIO 43 GPCLK2 32.768 kHz for the
+ * WiFi. The 24 MHz is what start.elf sets (Pi test 337, socdump: GP1CTL
+ * 0x296, GP1DIV 0x14d55, PLLD PER 500 MHz / 20.8333, MASH 1), although
+ * dt-blob.dts calls it a 25 MHz output; row 373 with 25 MHz got as far as
+ * "USB device not accepting new address". Ours runs from PLLC PER, also
+ * 500 MHz.
+ */
 void eth_clock_on(void) {
 	pllc_per_on();
-	gp_clock((volatile uint32_t *)&CM_GP1CTL, (volatile uint32_t *)&CM_GP1DIV, 5, 20u << 12, 0);
+	gp_clock((volatile uint32_t *)&CM_GP1CTL, (volatile uint32_t *)&CM_GP1DIV, 5, 0x14d55u, 1);
 	/* 19.2 MHz / 585.9375, MASH 1 */
 	gp_clock((volatile uint32_t *)&CM_GP2CTL, (volatile uint32_t *)&CM_GP2DIV, 1, (585u << 12) | 3840u, 1);
 	/* ALT0 (GPCLK1, GPCLK2) on GPIO 42 and 43 */
@@ -184,10 +191,10 @@ bool usb_power_on(void) {
 	}
 	printf("power: USB on, PM_IMAGE %08X PM_USB %08X\n", PM_IMAGE, PM_USB);
 	/*
-	 * The LAN7515 has no crystal on the 3B+: its 25 MHz comes from GPCLK1 on
-	 * GPIO 42 (dt-blob.dts pins_3bplus: "ETH_CLK - Ethernet 25MHz output").
-	 * Row 368 released LAN_RUN without it: U-Boot saw a device that could
-	 * not send its descriptor. The clock first, then the reset.
+	 * The LAN7515 has no crystal on the 3B+: its clock comes from GPCLK1 on
+	 * GPIO 42 (dt-blob.dts pins_3bplus, ETH_CLK). Row 368 released LAN_RUN
+	 * without it: U-Boot saw a device that could not send its descriptor.
+	 * The clock first, then the reset.
 	 */
 	eth_clock_on();
 	udelay(1000);
