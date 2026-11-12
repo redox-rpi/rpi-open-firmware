@@ -34,7 +34,7 @@ where it is stored and copied to 0x80019000 before use, and the section
 symbols are `__start_X`/`__stop_X`. linker.ld's `ASSERT`s become checks on
 TCC's `-Wl,-Map` output. With that change neither GCC nor binutils is
 needed; the Pi test of the TCC-linked image is
-[pi-tests row 358](https://github.com/redox-rpi/pi-tests/blob/main/queue.md) (queued).
+[pi-tests report 358](https://github.com/redox-rpi/pi-tests/blob/main/reports/358.md): **passed**.
 
 On the Pi, TCC-built code behaves exactly like GCC's: in
 [pi-tests row 347](https://github.com/redox-rpi/pi-tests/blob/main/reports/347.md),
@@ -65,7 +65,7 @@ unoptimised and the SD/FAT loop is CPU-bound.
 
 | Item | Effort | Needed for |
 |---|---|---|
-| ~~TCC's own linker for VC4~~ **done** (8e1c7814), with the firmware change above; Pi row 358 queued | — | dropping binutils |
+| ~~TCC's own linker for VC4~~ **done** (8e1c7814), with the firmware change above; Pi row 358 passed | — | dropping binutils |
 | Own freestanding `stdint.h`/`stdbool.h` in the fork (today newlib's) | 1 day | dropping newlib |
 | Size and speed work: keep arguments in registers, skip frames in leaf functions, shorter global addressing | 1–2 weeks to about 1.3× GCC | only if size or load time matters (SD loads 2.5× slower today) |
 | `long long`, float, struct arguments | about 1 week | not used by `bootcode/` today |
@@ -74,7 +74,7 @@ unoptimised and the SD/FAT loop is CPU-bound.
 
 **Options:**
 
-- **A — move to TCC fully** (the linker is done, Pi row 358 pending): one small compiler (builds in seconds) instead of a 40-minute GCC/binutils/newlib build, and it can run on the Pi. We maintain the backend ourselves.
+- **A — move to TCC fully** (the linker is done and passed on the Pi, row 358): one small compiler (builds in seconds) instead of a 40-minute GCC/binutils/newlib build, and it can run on the Pi. We maintain the backend ourselves.
 - **B — keep GCC,** and keep TCC as a second compiler and cross-check. No new maintenance, but also no smaller toolchain.
 - **C — TCC now, binutils for the link**, and decide on A after the linker step (now done, so C and A are close). Drops GCC and newlib now, and keeps a binutils build (minutes, not 40).
 
