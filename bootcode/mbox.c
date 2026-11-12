@@ -384,6 +384,7 @@ void mbox_start(void) {
 	/* as start.elf: USB is on before the ARM starts (power.c) */
 	g_power[POWER_USB] = ((PM_USB & PM_USB_CTRLEN_SET) || usb_power_on()) ? POWER_ON : 0;
 	emmc_clock();
+	sd_pullups();
 	/* requests left from an earlier run of the ARM */
 	while (!(ARM_1_MAIL1_STA & ARM_MS_EMPTY))
 		(void)ARM_1_MAIL1_RD;

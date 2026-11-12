@@ -176,6 +176,35 @@ void eth_clock_on(void) {
 	printf("power: ETH_CLK GPIO 42 on, CM_GP1CTL %08X DIV %08X\n", CM_GP1CTL, CM_GP1DIV);
 }
 
+/*
+ * Pull-ups on the SD card's CMD and DAT lines (GPIO 49-53), as start.elf
+ * leaves them (Pi test 380: GPLEV1 bits 17-21 high under start.elf, low
+ * under ours). U-Boot's pin control sets the function, not the pulls, and
+ * its "Card did not respond to voltage select" after autoboot came and went
+ * between rows 365-380.
+ */
+void sd_pullups(void) {
+	GP_PUD = 2; /* pull up */
+	udelay(5);
+	GP_PUDCLK1 = 0x1fu << 17;
+	udelay(5);
+	GP_PUD = 0;
+	GP_PUDCLK1 = 0;
+}
+
+/*
+ * The VPU (core) clock: PLLC CORE0 (500 MHz) / div. clock.c starts it at
+ * /4 = 125 MHz; start.elf runs it faster (Pi test 380: VPUDIV 3 from a
+ * 1200 MHz CORE0). Oscillator while the divider changes, as in clock.c.
+ */
+void vpu_clock(uint32_t div) {
+	uint32_t src = CM_VPUCTL & 0xf;
+	CM_VPUCTL = CM_PASSWORD | CM_VPUCTL_FRAC_SET | CM_SRC_OSC | CM_VPUCTL_GATE_SET;
+	CM_VPUDIV = CM_PASSWORD | (div << 12);
+	CM_VPUCTL = CM_PASSWORD | src | CM_VPUCTL_GATE_SET;
+	CM_VPUCTL = CM_PASSWORD | src | CM_VPUCTL_GATE_SET | 0x10; /* ENAB */
+}
+
 bool usb_power_on(void) {
 	PM_USB = PM_PASSWORD; /* USB domain off while the image domain starts */
 	udelay(200000);

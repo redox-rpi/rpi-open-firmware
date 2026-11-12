@@ -95,3 +95,5 @@ bool expander_start(void);
 void pllc_per_on(void);
 void eth_clock_on(void);
 void regs_compare(void);
+void sd_pullups(void);
+void vpu_clock(uint32_t div);
