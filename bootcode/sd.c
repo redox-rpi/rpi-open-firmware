@@ -34,6 +34,24 @@
 #define HSTS_ERRORS (SH_HSTS_CMD_TIME_OUT_SET | SH_HSTS_CRC7_ERROR_SET | \
                      SH_HSTS_CRC16_ERROR_SET | SH_HSTS_REW_TIME_OUT_SET | SH_HSTS_FIFO_ERROR_SET)
 #define CDIV_IDENT 0x148 /* about 750 kHz from the core clock */
+
+/*
+ * Data clock: core clock / (SH_CDIV + 2), no faster than g_sd_khz. Upstream
+ * assumed a 250 MHz core clock (div 5 or 10); ours is PLLC CORE0 (500 MHz)
+ * / CM_VPUDIV, 125 MHz from clock.c, and the monitor's vpuclk changes it
+ * (Pi test 381: at 250 MHz with the old divider the reads went bad). So the
+ * same 25 MHz (SDHC) or 12.5 MHz (SDSC) that worked at 125 MHz.
+ */
+static uint32_t g_sd_khz;
+
+void sd_clock_update(void) {
+	if (!g_sd_khz)
+		return;
+	uint32_t vdiv = (CM_VPUDIV >> 12) & 0xfff;
+	uint32_t core_khz = 500000 / (vdiv ? vdiv : 1);
+	uint32_t div = (core_khz + g_sd_khz - 1) / g_sd_khz;
+	SH_CDIV = div < 2 ? 0 : div - 2;
+}
 #define EDM_THRESHOLD_MASK 0x1f
 #define EDM_READ_SHIFT 14
 #define EDM_WRITE_SHIFT 9
@@ -231,19 +249,19 @@ bool sd_init(void) {
 		printf("err sd: no CSD\n");
 		return false;
 	}
-	uint32_t csdver = rbits(resp, 126, 2), div;
+	uint32_t csdver = rbits(resp, 126, 2);
 	if (csdver == 1) {
 		g_sd.mb = (rbits(resp, 48, 22) + 1) / 2; /* (C_SIZE + 1) * 512 KiB */
-		div = 5;
+		g_sd_khz = 25000;
 	} else {
 		uint32_t blocks = (rbits(resp, 62, 12) + 1) << (rbits(resp, 47, 3) + 2);
 		g_sd.mb = (blocks >> 11) << rbits(resp, 80, 4) >> 9;
-		div = 10;
+		g_sd_khz = 12500;
 	}
 	cmd(CMD_SELECT, rca << 16);
 	if (csdver != 1)
 		cmd(CMD_SET_BLOCKLEN, 512);
-	SH_CDIV = div - 2; /* 250 MHz core clock assumed, as upstream: 50 or 25 MHz */
+	sd_clock_update();
 	g_sd.ready = true;
 	/* upstream reads three sectors and drops them before the first real read */
 	for (int i = 0; i < 3; i++)

@@ -97,3 +97,4 @@ void eth_clock_on(void);
 void regs_compare(void);
 void sd_pullups(void);
 void vpu_clock(uint32_t div);
+void sd_clock_update(void);

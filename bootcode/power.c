@@ -203,6 +203,7 @@ void vpu_clock(uint32_t div) {
 	CM_VPUDIV = CM_PASSWORD | (div << 12);
 	CM_VPUCTL = CM_PASSWORD | src | CM_VPUCTL_GATE_SET;
 	CM_VPUCTL = CM_PASSWORD | src | CM_VPUCTL_GATE_SET | 0x10; /* ENAB */
+	sd_clock_update(); /* the SD data clock divides the core clock */
 }
 
 bool usb_power_on(void) {
