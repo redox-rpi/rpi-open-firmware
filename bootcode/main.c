@@ -25,7 +25,7 @@ uint32_t g_cpuid;
 uint32_t g_rom_sdcs;
 bool g_sdram_up;
 
-extern uint32_t __bss_start[], __bss_end[];
+extern uint32_t __start_bss[], __stop_bss[];
 extern const uint32_t exc_stub_table[33];
 
 #define VECTORS ((volatile uint32_t *)0x8001b000)
@@ -73,7 +73,7 @@ struct rom_state {
 
 void bootcode_main(uint32_t cpuid) __attribute__((noreturn));
 void bootcode_main(uint32_t cpuid) {
-	for (uint32_t *p = __bss_start; p < __bss_end; p++)
+	for (uint32_t *p = __start_bss; p < __stop_bss; p++)
 		*p = 0;
 	g_cpuid = cpuid;
 

@@ -122,7 +122,11 @@ go:
 	}
 }
 
-extern uint8_t __tramp_start[], __tramp_end[], __tramp_load[];
+/* .tramp is linked where it is stored; it is position independent and is
+ * copied to TRAMP_RUN before use (__start_/__stop_ as GNU ld and TCC name
+ * them) */
+#define TRAMP_RUN 0x80019000u
+extern uint8_t __start_tramp[], __stop_tramp[];
 
 static uint32_t crc32(const volatile uint8_t *p, uint32_t n) {
 	uint32_t crc = 0xffffffffu;
@@ -265,10 +269,14 @@ static void cmd_chain(uint32_t addr, uint32_t len, bool reset) {
 	       !g_sdram_up ? "SDRAM untouched" : reset ? "SDRAM reset" : "SDRAM running");
 	/* let the last characters leave the UART before we go */
 	udelay(2000);
-	for (uint8_t *s = __tramp_load, *d = __tramp_start; d < __tramp_end;)
+	for (uint8_t *s = __start_tramp, *d = (uint8_t *)TRAMP_RUN; s < __stop_tramp;)
 		*d++ = *s++;
 	flush_caches();
-	chain_trampoline((const volatile uint32_t *)addr, (len + 3) / 4, reset, g_rom_sdcs);
+	void (*run)(const volatile uint32_t *, uint32_t, bool, uint32_t) =
+		(void *)(TRAMP_RUN + ((uintptr_t)chain_trampoline - (uintptr_t)__start_tramp));
+	run((const volatile uint32_t *)addr, (len + 3) / 4, reset, g_rom_sdcs);
+	for (;;) {
+	}
 }
 
 #if CHAIN_IMAGE
