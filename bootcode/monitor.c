@@ -36,6 +36,8 @@
  *   sdr L A N      read N sectors from L to A      -> ok crc32 X
  *   ls             list the FAT partition's root   -> lines, then ok
  *   fl NAME A      load file NAME from it to A     -> ok NAME N bytes crc32 X
+ *   i2cscan        addresses answering on GPIO 46/47 (i2c.c) -> ok i2cscan N
+ *   i2cr A R N     read N bytes from register R of I2C device A -> ok
  *   boot64 [K [D]] load armstub8, kernel K and devicetree D from the FAT
  *                  partition and start the ARM in AArch64 -> ok boot64;
  *                  then only the mailbox is served (mbox.c), no return
@@ -473,6 +475,10 @@ static bool run(int argc, char **argv) {
 	} else if (!strcmp_s(c, "ls") && n == 0) {
 		if (fat_list())
 			printf("ok\n");
+	} else if (!strcmp_s(c, "i2cscan") && n == 0) {
+		i2c_scan();
+	} else if (!strcmp_s(c, "i2cr") && n == 3) {
+		i2c_read(a[0], a[1], a[2]);
 	} else if (!strcmp_s(c, "reset") && n == 0) {
 		printf("ok reset\n");
 		watchdog_reset();
@@ -480,7 +486,7 @@ static bool run(int argc, char **argv) {
 		printf("ok boot\n");
 		return true;
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | boot64 [K [DTB]] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | boot64 [K [DTB]] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();

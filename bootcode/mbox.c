@@ -279,7 +279,10 @@ static bool handle(volatile struct tag *t) {
 		reply(t, r, 8);
 		return true;
 	case 0x00038042: { /* set SDHOST clock: rate, then two rates back */
-		uint32_t w[3] = {a, a, a};
+		/* ~0 = we do not set SH_CDIV for the driver: U-Boot and Linux
+		 * then program it themselves from the core clock (U-Boot
+		 * bcm2835_sdhost.c, firmware_sets_cdiv; Pi test row 365) */
+		uint32_t w[3] = {a, 0xffffffffu, 0xffffffffu};
 		reply(t, w, 12);
 		return true;
 	}
