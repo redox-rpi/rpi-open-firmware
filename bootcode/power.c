@@ -12,8 +12,8 @@
  * drivers/BCM2708PowerManagement.cc (image domain power-up in two CFG
  * rounds, peripheral reset with the PERII clock ungated) and
  * drivers/BCM2708UsbPhy.cc (USB PHY over MDIO). Upstream's LAN reset on
- * GPIO 31 is left out: on the 3B+ LAN_RUN is pin 131 of the firmware's
- * GPIO expander, not a SoC pin (Raspberry Pi's dt-blob.dts, pins_3bplus).
+ * GPIO 31 does not apply: on the 3B+ LAN_RUN is pin 3 of the FXL6408 GPIO
+ * expander (i2c.c expander_start), not a SoC pin.
  * Rewritten in C.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -159,5 +159,7 @@ bool usb_power_on(void) {
 		return false;
 	}
 	printf("power: USB on, PM_IMAGE %08X PM_USB %08X\n", PM_IMAGE, PM_USB);
+	/* the LAN7515 hub and Ethernet leave reset (LAN_RUN on the expander) */
+	expander_start();
 	return true;
 }

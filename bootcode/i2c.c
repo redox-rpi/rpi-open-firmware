@@ -1,13 +1,13 @@
 /*
  * redox-rpi bootcode: bit-banged I2C on GPIO 46/47 (monitor builds), to
- * find the 3B+'s GPIO expander (#230 M3).
+ * find and drive the 3B+'s GPIO expander (#230 M3).
  *
  * On the Pi 3B+ the Ethernet chip's reset line LAN_RUN, the power LED, BT_ON
  * and WL_ON are pins 128-134 of a GPIO expander that start.elf drives
  * (Raspberry Pi's dt-blob.dts, pins_3bplus); GPIO 46/47 are the board's
  * SMPS lines (clock and data, order below). Until we know the chip, the monitor's i2cscan
- * lists the addresses that answer, and i2cr reads their registers. Reads
- * only. Standard I2C, open drain: a line is pulled low by making the pin an
+ * lists the addresses that answer, i2cr reads their registers and i2cw
+ * writes one. Standard I2C, open drain: a line is pulled low by making the pin an
  * output at 0 and let go by making it an input. About 50 kHz. New code.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
@@ -181,4 +181,75 @@ void i2c_read(uint32_t addr, uint32_t reg, uint32_t n) {
 	stop();
 	bus_close();
 	printf("\nok\n");
+}
+
+static bool i2c_write_reg(uint32_t addr, uint32_t reg, uint32_t value) {
+	bus_open();
+	start();
+	bool ok = write_byte(addr << 1) && write_byte(reg) && write_byte(value);
+	stop();
+	bus_close();
+	return ok;
+}
+
+static bool i2c_read_reg(uint32_t addr, uint32_t reg, uint32_t *value) {
+	bus_open();
+	start();
+	bool ok = write_byte(addr << 1) && write_byte(reg);
+	if (ok) {
+		start();
+		ok = write_byte((addr << 1) | 1);
+	}
+	if (ok)
+		*value = read_byte(false);
+	stop();
+	bus_close();
+	return ok;
+}
+
+void i2c_write(uint32_t addr, uint32_t reg, uint32_t value) {
+	if (addr > 0x7f || reg > 0xff || value > 0xff) {
+		printf("err usage: i2cw ADDR REG VALUE\n");
+		return;
+	}
+	if (i2c_write_reg(addr, reg, value))
+		printf("ok i2cw %02X @%02X = %02X\n", addr, reg, value);
+	else
+		printf("err i2c: no answer from %02X\n", addr);
+}
+
+/*
+ * The 3B+'s GPIO expander: an FXL6408 at 0x43 on the SMPS bus (Pi test row
+ * 367: register 1 reads A2, manufacturer 101 = Fairchild, part 000 =
+ * FXL6408). Its pins after power-on are inputs, outputs high-Z, pulled down.
+ * dt-blob.dts pins_3bplus: pin 0 BT_ON, 1 WL_ON, 2 PWR_LED (active low,
+ * starts on), 3 LAN_RUN (starts on), 5 camera shutdown, 6 camera LED.
+ * Registers from the FXL6408 datasheet: 0x03 direction (1 = output),
+ * 0x05 output state, 0x07 output high-Z (1 = high-Z).
+ */
+#define EXP_ADDR 0x43
+#define EXP_DIR 0x03
+#define EXP_OUT 0x05
+#define EXP_HIZ 0x07
+#define EXP_PWR_LED (1u << 2)
+#define EXP_LAN_RUN (1u << 3)
+
+/* LAN_RUN high (the LAN7515 leaves reset), power LED on, as start.elf does */
+bool expander_start(void) {
+	uint32_t id = 0;
+	if (!i2c_read_reg(EXP_ADDR, 0x01, &id) || (id & 0xfc) != 0xa0) {
+		printf("err expander: no FXL6408 at 43 (id %02X)\n", id);
+		return false;
+	}
+	uint32_t pins = EXP_PWR_LED | EXP_LAN_RUN;
+	bool ok = i2c_write_reg(EXP_ADDR, EXP_OUT, EXP_LAN_RUN) /* PWR_LED low = on */
+		&& i2c_write_reg(EXP_ADDR, EXP_DIR, pins)
+		&& i2c_write_reg(EXP_ADDR, EXP_HIZ, 0xffu & ~pins);
+	uint32_t dir = 0, out = 0, hiz = 0;
+	i2c_read_reg(EXP_ADDR, EXP_DIR, &dir);
+	i2c_read_reg(EXP_ADDR, EXP_OUT, &out);
+	i2c_read_reg(EXP_ADDR, EXP_HIZ, &hiz);
+	printf("expander: FXL6408 id %02X, LAN_RUN on, dir %02X out %02X hiz %02X%s\n", id, dir, out,
+	       hiz, ok ? "" : " (a write failed)");
+	return ok;
 }

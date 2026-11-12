@@ -39,6 +39,8 @@
  *   i2cscan        addresses answering on GPIO 46/47, both pin orders (i2c.c)
  *                  -> ok i2cscan N SCL s SDA d
  *   i2cr A R N     read N bytes from register R of I2C device A -> ok
+ *   i2cw A R V     write V to register R of I2C device A -> ok i2cw
+ *   exp            GPIO expander: LAN_RUN and power LED on -> ok exp
  *   boot64 [K [D]] load armstub8, kernel K and devicetree D from the FAT
  *                  partition and start the ARM in AArch64 -> ok boot64;
  *                  then only the mailbox is served (mbox.c), no return
@@ -480,6 +482,11 @@ static bool run(int argc, char **argv) {
 		i2c_scan();
 	} else if (!strcmp_s(c, "i2cr") && n == 3) {
 		i2c_read(a[0], a[1], a[2]);
+	} else if (!strcmp_s(c, "i2cw") && n == 3) {
+		i2c_write(a[0], a[1], a[2]);
+	} else if (!strcmp_s(c, "exp") && n == 0) {
+		if (expander_start())
+			printf("ok exp\n");
 	} else if (!strcmp_s(c, "reset") && n == 0) {
 		printf("ok reset\n");
 		watchdog_reset();
@@ -487,7 +494,7 @@ static bool run(int argc, char **argv) {
 		printf("ok boot\n");
 		return true;
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | boot64 [K [DTB]] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | boot64 [K [DTB]] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();
