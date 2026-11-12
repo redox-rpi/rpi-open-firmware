@@ -86,6 +86,8 @@ unoptimised and the SD/FAT loop is CPU-bound.
 
 **Recommendation of the session:** C now, with GCC frozen as the reference. Then the linker step, and then A, if the maintainer wants the toolchain on the Pi. Update 2026-11-12: the linker step is done; if row 358 passes and the firmware takes the `.tramp` change, A is possible right away.
 
+**Maintainer's decision (2026-11-12):** GCC stays the firmware compiler. The firmware moves to TCC only once TCC's code is close to GCC's in size and speed; until then TCC is the second compiler and cross-check (option C without the switch). Finding out what the closed binaries do comes first.
+
 ## What we use today
 
 | Part | Tool |
