@@ -147,6 +147,8 @@ bool arm_start(bool aarch64) {
 	arm_clock();
 	if (!arm_power_on())
 		return false;
+	/* answer the mailbox (memory, revision, MAC, clocks) once the ARM runs */
+	mbox_start();
 
 	/* bridge: out of reset, cycle the response bits, then let it run */
 	arm_release_reset();

@@ -29,11 +29,16 @@
  *                  bootcode.bin hangs after it, Pi tests #313, #320); no return
  *   arm [M]        start the ARM cores at ARM address 0 (bus 0xc0000000,
  *                  load an armstub8 there first): M = 0 AArch32, otherwise
- *                  AArch64 (default); the monitor keeps running (arm.c)
+ *                  AArch64 (default); the monitor keeps running and
+ *                  answers the ARM's mailbox requests while it waits for
+ *                  input (arm.c, mbox.c)
  *   sd             set up the SD card (SDHOST)    -> ok sd NAME N MB SDHC|SDSC
  *   sdr L A N      read N sectors from L to A      -> ok crc32 X
  *   ls             list the FAT partition's root   -> lines, then ok
  *   fl NAME A      load file NAME from it to A     -> ok NAME N bytes crc32 X
+ *   boot64 [K [D]] load armstub8, kernel K and devicetree D from the FAT
+ *                  partition and start the ARM in AArch64 -> ok boot64;
+ *                  then only the mailbox is served (mbox.c), no return
  *   reset          full chip reset through the watchdog, as a reboot; no return
  *   boot           leave the monitor, go on with the normal boot (in a
  *                  boot selector build: reset, so the selector starts again
@@ -342,7 +347,7 @@ static void cmd_fl(const char *name, const char *addr_s) {
 #define B64_KERNEL 0xc0080000u
 #define B64_DTB 0xc2000000u
 #define B64_ARM(bus) ((bus) - 0xc0000000u)
-#define B64_MEM_SIZE 0x3e000000u /* 62 x 16 MB, as mapped by arm_start() */
+#define B64_MEM_SIZE MBOX_ARM_MEM_SIZE
 
 static bool load_one(const char *name, uint32_t addr, uint32_t max) {
 	int32_t n = fat_load(name, addr, max);
@@ -386,8 +391,10 @@ static void cmd_boot64(const char *kernel, const char *dtb) {
 		printf("boot64: %s %u bytes at ARM %08X, memory 0-%08X\n", dtb, (uint32_t)n, B64_ARM(B64_DTB), B64_MEM_SIZE);
 	}
 	sd_off();
-	if (arm_start(true))
-		printf("ok boot64\n");
+	if (arm_start(true)) {
+		printf("ok boot64, the monitor stops: the serial line is the ARM's\n");
+		mbox_serve();
+	}
 }
 
 static void cmd_sd(void) {

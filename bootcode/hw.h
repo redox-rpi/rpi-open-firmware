@@ -74,3 +74,12 @@ bool fat_mount(void);
 bool fat_list(void);
 int32_t fat_load(const char *name, uint32_t addr, uint32_t max);
 bool fdt_set_memory(uint8_t *dtb, uint32_t len, uint32_t base, uint32_t size);
+
+/* mbox.c (monitor builds): answer the ARM's mailbox property requests once
+ * the ARM runs; mbox_poll() is called from uart_getc_timeout()'s wait loop.
+ * The ARM gets 0 .. MBOX_ARM_MEM_SIZE (62 x 16 MB, as arm_start() maps it). */
+#define MBOX_ARM_MEM_SIZE 0x3e000000u
+extern bool g_mbox_on;
+void mbox_start(void);
+void mbox_poll(void);
+void mbox_serve(void) __attribute__((noreturn));
