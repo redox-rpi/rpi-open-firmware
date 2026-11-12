@@ -36,7 +36,8 @@
  *   sdr L A N      read N sectors from L to A      -> ok crc32 X
  *   ls             list the FAT partition's root   -> lines, then ok
  *   fl NAME A      load file NAME from it to A     -> ok NAME N bytes crc32 X
- *   i2cscan        addresses answering on GPIO 46/47 (i2c.c) -> ok i2cscan N
+ *   i2cscan        addresses answering on GPIO 46/47, both pin orders (i2c.c)
+ *                  -> ok i2cscan N SCL s SDA d
  *   i2cr A R N     read N bytes from register R of I2C device A -> ok
  *   boot64 [K [D]] load armstub8, kernel K and devicetree D from the FAT
  *                  partition and start the ARM in AArch64 -> ok boot64;

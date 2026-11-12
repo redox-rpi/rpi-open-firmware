@@ -5,7 +5,7 @@
  * On the Pi 3B+ the Ethernet chip's reset line LAN_RUN, the power LED, BT_ON
  * and WL_ON are pins 128-134 of a GPIO expander that start.elf drives
  * (Raspberry Pi's dt-blob.dts, pins_3bplus); GPIO 46/47 are the board's
- * SMPS_SCL/SMPS_SDA lines. Until we know the chip, the monitor's i2cscan
+ * SMPS lines (clock and data, order below). Until we know the chip, the monitor's i2cscan
  * lists the addresses that answer, and i2cr reads their registers. Reads
  * only. Standard I2C, open drain: a line is pulled low by making the pin an
  * output at 0 and let go by making it an input. About 50 kHz. New code.
@@ -14,8 +14,14 @@
  */
 #include "hw.h"
 
-#define I2C_SCL 46
-#define I2C_SDA 47
+/*
+ * Which of 46/47 is the clock is not clear: the pin comments in dt-blob.dts
+ * say 46 SMPS_SCL, its pin_defines (what start.elf uses) say SMPS_SDA 46 and
+ * SMPS_SCL 47. Row 366 found nothing with SCL on 46, so i2cscan tries both
+ * and keeps the order where a device answers.
+ */
+static int I2C_SCL = 47;
+static int I2C_SDA = 46;
 #define I2C_HALF_US 10
 
 static void pin_mode(int pin, uint32_t mode) {
@@ -116,9 +122,10 @@ static void bus_open(void) {
 /* leave 46/47 as we found them */
 static void bus_close(void) { GP_FSEL4 = g_fsel4; }
 
-void i2c_scan(void) {
+static int scan_once(void) {
 	bus_open();
-	printf("i2c: GPIO 46/47 idle levels SCL %d SDA %d\n", line_read(I2C_SCL), line_read(I2C_SDA));
+	printf("i2c: SCL GPIO %d, SDA GPIO %d, idle levels SCL %d SDA %d\n", I2C_SCL, I2C_SDA,
+	       line_read(I2C_SCL), line_read(I2C_SDA));
 	printf("i2c: answering:");
 	int n = 0;
 	for (uint32_t a = 0x08; a < 0x78; a++) {
@@ -132,7 +139,22 @@ void i2c_scan(void) {
 	}
 	printf("\n");
 	bus_close();
-	printf("ok i2cscan %d\n", n);
+	return n;
+}
+
+void i2c_scan(void) {
+	int n = scan_once();
+	if (n == 0) {
+		int t = I2C_SCL;
+		I2C_SCL = I2C_SDA;
+		I2C_SDA = t;
+		n = scan_once();
+		if (n == 0) { /* back to the pin_defines' order */
+			I2C_SCL = 47;
+			I2C_SDA = 46;
+		}
+	}
+	printf("ok i2cscan %d SCL %d SDA %d\n", n, I2C_SCL, I2C_SDA);
 }
 
 void i2c_read(uint32_t addr, uint32_t reg, uint32_t n) {
