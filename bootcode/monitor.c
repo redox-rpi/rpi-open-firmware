@@ -27,6 +27,9 @@
  *                  and start it at 0x80000200, SDRAM left running; with
  *                  R = 1 take the SDRAM down first (experimental: Broadcom's
  *                  bootcode.bin hangs after it, Pi tests #313, #320); no return
+ *   arm [M]        start the ARM cores at ARM address 0 (bus 0xc0000000,
+ *                  load an armstub8 there first): M = 0 AArch32, otherwise
+ *                  AArch64 (default); the monitor keeps running (arm.c)
  *   reset          full chip reset through the watchdog, as a reboot; no return
  *   boot           leave the monitor, go on with the normal boot (in a
  *                  boot selector build: reset, so the selector starts again
@@ -344,6 +347,8 @@ static bool run(int argc, char **argv) {
 		printf("ok ret %08X\n", ret);
 	} else if (!strcmp_s(c, "chain") && (n == 2 || n == 3)) {
 		cmd_chain(a[0], a[1], n == 3 && a[2] != 0);
+	} else if (!strcmp_s(c, "arm") && n <= 1) {
+		arm_start(n == 0 || a[0] != 0);
 	} else if (!strcmp_s(c, "reset") && n == 0) {
 		printf("ok reset\n");
 		watchdog_reset();
@@ -351,7 +356,7 @@ static bool run(int argc, char **argv) {
 		printf("ok boot\n");
 		return true;
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();
