@@ -69,6 +69,8 @@ struct sd_card { bool ready, high_capacity; uint32_t mb; char name[6]; };
 extern struct sd_card g_sd;
 bool sd_init(void);
 bool sd_read(uint32_t lba, uint32_t *buf);
+void sd_off(void);
 bool fat_mount(void);
 bool fat_list(void);
 int32_t fat_load(const char *name, uint32_t addr, uint32_t max);
+bool fdt_set_memory(uint8_t *dtb, uint32_t len, uint32_t base, uint32_t size);

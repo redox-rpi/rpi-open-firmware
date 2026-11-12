@@ -164,6 +164,29 @@ bool sd_read(uint32_t lba, uint32_t *buf) {
 	return false;
 }
 
+/*
+ * Power the controller down before the ARM takes over, so the OS driver
+ * finds it idle (no identification clock running). Order from glennra's
+ * arm-handoff-review branch of rpi-open-firmware, where leaving it on made
+ * Linux's probe intermittent.
+ */
+void sd_off(void) {
+	if (!g_sd.ready)
+		return;
+	drain_fifo();
+	SH_VDD = 0;
+	udelay(1000);
+	SH_HCFG = 0;
+	SH_CMD = 0;
+	SH_ARG = 0;
+	SH_CDIV = 0;
+	SH_TOUT = 0;
+	SH_HBCT = 0;
+	SH_HBLC = 0;
+	SH_HSTS = 0x7f8;
+	g_sd.ready = false;
+}
+
 bool sd_init(void) {
 	g_sd.ready = false;
 	g_sd.high_capacity = false;

@@ -25,7 +25,7 @@ uint32_t g_cpuid;
 uint32_t g_rom_sdcs;
 bool g_sdram_up;
 
-extern uint32_t __bss_start[], __bss_end[];
+extern uint32_t __start_bss[], __stop_bss[];
 extern const uint32_t exc_stub_table[33];
 
 #define VECTORS ((volatile uint32_t *)0x8001b000)
@@ -73,7 +73,7 @@ struct rom_state {
 
 void bootcode_main(uint32_t cpuid) __attribute__((noreturn));
 void bootcode_main(uint32_t cpuid) {
-	for (uint32_t *p = __bss_start; p < __bss_end; p++)
+	for (uint32_t *p = __start_bss; p < __stop_bss; p++)
 		*p = 0;
 	g_cpuid = cpuid;
 
@@ -99,7 +99,18 @@ void bootcode_main(uint32_t cpuid) {
 		monitor_chain_builtin();
 #endif
 	uint32_t t0 = timer_us();
-	sdram_init();
+	/*
+	 * Chained over running SDRAM (the monitor's `chain A N`, as rbc-load.sh
+	 * chainmon does): our set-up already ran and left SDUP and RESTRT set.
+	 * Running it again switches the clock of a live controller and hangs
+	 * (Pi test #346), so keep the SDRAM as it is. The Boot ROM leaves the
+	 * controller down, and a watchdog reset takes it down too.
+	 */
+	const uint32_t up = SD_CS_SDUP_SET | SD_CS_RESTRT_SET;
+	if ((rom.sdcs & up) == up)
+		printf("[sdram] already up (SD_CS 0x%X), kept as it is\n", rom.sdcs);
+	else
+		sdram_init();
 	g_sdram_up = true;
 	printf("SDRAM ready after %u us\n", timer_us() - t0);
 #if MONITOR && CHAIN_IMAGE

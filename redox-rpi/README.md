@@ -14,6 +14,7 @@ unchanged apart from the chainloader fixes listed in the top-level [README](../R
 | `toolchain.sha256` | Checksums of the GNU source tarballs the script downloads |
 | `build.sh` | Runs upstream `buildall.sh` with those toolchains and builds the test payload |
 | `payload/` | A 32-bit test program the chainloader starts as `zImage`; it prints the CPU mode and IDs on the UART |
+| `make-dtb.sh` | Makes `redox-3bp.dtb` for the bootcode monitor's `boot64`: Broadcom's 3B+ devicetree with redox-rpi's overlays (`disable-bt`, `mmc`) applied, since our VPU code does not apply overlays |
 | `make-sdcard.sh` | Makes a small SD card image (FAT16: `bootcode.bin`, `rpi.dtb`, `cmdline.txt`, `zImage`) without root |
 | `build-lk-overlay.sh` | Builds [librerpi/lk-overlay](https://github.com/librerpi/lk-overlay) (pinned `50c95c1`) without Nix: the 64-bit ARM stage, VPU stage 2 and stage 1 (`bootcode.bin`) |
 | `payload64/` | A 64-bit test program, started by lk-overlay's ARM loader as `Image-aarch64`; it prints EL, MIDR, MPIDR, x0, SCTLR and CNTFRQ |

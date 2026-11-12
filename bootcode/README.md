@@ -64,6 +64,7 @@ the prompt `rbc> `. Numbers are hex.
 | `sdr L A N` | read N sectors from sector L to A | `ok crc32 X` |
 | `ls` | list the root directory of the card's first FAT partition (FAT16/32) | lines, then `ok` |
 | `fl NAME A` | load a root-directory file to A (long names, any case) | `ok NAME N bytes crc32 X` |
+| `boot64 [K [DTB]]` | load `armstub8-redox.bin` (or `armstub8.bin`) to ARM 0, the kernel K (default `kernel8.img`) to 0x80000 and the devicetree (default `redox-3bp.dtb` from `redox-rpi/make-dtb.sh`, else `bcm2710-rpi-3-b-plus.dtb` without overlays; `-` for none) to 0x2000000; set the memory size in the devicetree, `kernel_entry32` and `dtb_ptr32`; power the SD controller down; start the ARM in AArch64 | `ok boot64` |
 | `reset` | full chip reset through the watchdog, as a reboot | `ok reset`, `rbc> watchdog reset`, no return |
 | `boot` | leave the monitor (boot selector: chain the built-in image) | `ok boot` |
 
@@ -130,6 +131,7 @@ our own VPU loader (M2) replaces the built-in Broadcom image.
 | `timer.c`, `printf.c` | delay, small printf | new |
 | `sd.c` | SD card through SDHOST, read-only; ported from rpi-open-firmware's `sdhost_impl.cc`, with the slower-clock retry from Pi test #249 |
 | `fat.c` | FAT16/32 root directory and file reads, new code from the FAT specification; host test in `tests/fat-test.sh` (FAT16 and FAT32 images made with mtools) |
+| `fdt.c` | writes `/memory@0 reg` in the devicetree, as `start.elf` does; new code from the Devicetree Specification; host test in `tests/fdt-test.sh` |
 | `arm.c` | ARM start for the monitor's `arm`: address map, ARM clock (PLLB), ARM power domain, bridge; ported from rpi-open-firmware's ARM control and power drivers |
 | `chain-image.S` | places a `bootcode.bin` image in the boot selector build | new; the image is Broadcom's, unchanged |
 | `monitor.c`, `go-test.S`, `rbc-load.sh`, `libc.c` | serial monitor (test builds), its test payload and host script, `memset`/`memcpy` | new; cache flush registers from Broadcom's `vpu_l1_cache_ctrl.h` |

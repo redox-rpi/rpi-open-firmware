@@ -177,7 +177,7 @@ static bool print_entry(const char *name, uint32_t clus, uint32_t size, void *ct
 }
 
 bool fat_list(void) {
-	if (!v.ok && !fat_mount())
+	if ((!v.ok || !g_sd.ready) && !fat_mount())
 		return false;
 	walk_root(print_entry, NULL);
 	return true;
@@ -197,7 +197,7 @@ static bool find_entry(const char *name, uint32_t clus, uint32_t size, void *ctx
 
 /* load a root-directory file to addr; returns its size, or -1 */
 int32_t fat_load(const char *name, uint32_t addr, uint32_t max) {
-	if (!v.ok && !fat_mount())
+	if ((!v.ok || !g_sd.ready) && !fat_mount())
 		return -1;
 	struct find f = {name, 0, 0, false};
 	walk_root(find_entry, &f);
