@@ -140,7 +140,14 @@ bool arm_start(bool aarch64) {
 	arm_map(ARM_PERIPH_BUS, ARM_PERIPH_ARM);
 
 	uint32_t id = ARM_ID;
-	ARM_CONTROL0 |= 0x008 | ARM_C0_APROTPASS | ARM_C0_SIZ1G | ARM_C0_FULLPERI |
+	/*
+	 * APROT: mark every ARM access as system mode. Upstream used
+	 * APROTPASS (the ARM's user/system bit passed 1:1), and then user-mode
+	 * (EL0) accesses to the ARM control block, e.g. the mailbox, read 0
+	 * and their writes are dropped. Redox's rpi-firmwared talks to the
+	 * mailbox from EL0, as it does under start.elf (Pi test rows 399, 402).
+	 */
+	ARM_CONTROL0 |= 0x008 | ARM_C0_APROTSYST | ARM_C0_SIZ1G | ARM_C0_FULLPERI |
 	                (aarch64 ? ARM_C0_AARCH64 : 0);
 	ARM_CONTROL1 |= ARM_C1_PERSON;
 
