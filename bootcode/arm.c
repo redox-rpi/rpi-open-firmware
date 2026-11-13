@@ -126,47 +126,78 @@ static void arm_clock(void) {
 
 /*
  * ARM clock changes for the mailbox (rpi-firmwared's governor, tag
- * 0x00038002). The ARM channel stays at PLLB / 2; PLLB is moved to twice
- * the wanted rate. The channel is held while PLLB relocks, so the cores
- * just stop for a moment (the generic timer runs from the crystal and
- * keeps time). Above 1750 MHz the VCO uses the feedback prescaler (ANA1
- * bit 14), as Linux clk-bcm2835 does; the KI/KP/KA values stay as
- * arm_clock() set them. There is no PMIC voltage control yet, so the top
- * rate is capped (arm_max_mhz, 1200 by default, monitor "armmax").
+ * 0x00038002). Pi test row 404: moving PLLB to 2400 MHz with the feedback
+ * prescaler (ANA1 bit 14 written alone) never locked and left the ARM
+ * stalled. So now PLLB stays between 600 and 1750 MHz, where arm_clock()'s
+ * 939 MHz and its ANA values work, with no ANA write: up to 875 MHz the
+ * ARM channel divides PLLB by 2, above that by 1. The channel is held
+ * while PLLB relocks, so the cores just stop for a moment (the generic
+ * timer runs from the crystal). If PLLB does not lock, the old setting
+ * goes back before the hold is released. There is no PMIC voltage
+ * control yet, so the top rate is capped (arm_max_mhz, monitor "armmax").
  */
 #define ARM_MIN_MHZ 600u
 uint32_t arm_max_mhz = 1200;
+static uint32_t g_arm_ndiv = 48, g_arm_frac = 0xeaaa8, g_arm_div = 2;
+
+uint32_t arm_khz(void) {
+	return (19200u * g_arm_ndiv + (((g_arm_frac >> 4) * 19200u) >> 16)) / g_arm_div;
+}
+
+static bool pllb_lock_wait(void) {
+	for (uint32_t i = 0; i < 10000; i++) {
+		if (CM_LOCK & CM_LOCK_FLOCKB_SET)
+			return true;
+		udelay(1);
+	}
+	return false;
+}
+
+/* PLLB to ndiv/frac and the ARM channel to div; the channel must be held */
+static void pllb_set(uint32_t ndiv, uint32_t frac, uint32_t div) {
+	A2W_PLLB_FRAC = A2W_PASSWORD | frac;
+	A2W_PLLB_CTRL = A2W_PASSWORD | 0x20000 | 0x1000 | ndiv;
+	if (div != g_arm_div) {
+		A2W_PLLB_ARM = A2W_PASSWORD | div;
+		CM_PLLB = CM_PASSWORD | CM_PLLB_HOLDARM_SET | CM_PLLB_LOADARM_SET;
+		CM_PLLB = CM_PASSWORD | CM_PLLB_HOLDARM_SET;
+	}
+}
 
 uint32_t arm_set_mhz(uint32_t mhz) {
 	if (mhz < ARM_MIN_MHZ)
 		mhz = ARM_MIN_MHZ;
 	if (mhz > arm_max_mhz)
 		mhz = arm_max_mhz;
-	uint32_t vco_khz = mhz * 2000u;
-	bool prediv = vco_khz > 1750000u;
-	if (prediv)
-		vco_khz /= 2;
+	uint32_t div = mhz > 875u ? 1 : 2;
+	uint32_t vco_khz = mhz * 1000u * div;
 	uint32_t ndiv = vco_khz / 19200u, rem = vco_khz % 19200u;
 	uint32_t frac = rem * 4096u / 75u; /* rem * 2^20 / 19200 */
-	uint32_t ana1 = (A2W_PLLB_ANA1 & ~(1u << 14)) | (prediv ? (1u << 14) : 0);
+	uint32_t lock_before = CM_LOCK;
 
 	CM_PLLB = CM_PASSWORD | CM_PLLB_HOLDARM_SET;
 	udelay(1);
-	A2W_PLLB_ANA1 = A2W_PASSWORD | ana1;
-	A2W_PLLB_FRAC = A2W_PASSWORD | frac;
-	A2W_PLLB_CTRL = A2W_PASSWORD | ((A2W_PLLB_CTRL & ~0x3ffu) | ndiv);
-	bool locked = false;
-	for (uint32_t i = 0; i < 1000; i++) {
-		if (CM_LOCK & CM_LOCK_FLOCKB_SET) {
-			locked = true;
-			break;
-		}
-		udelay(1);
+	pllb_set(ndiv, frac, div);
+	bool locked = pllb_lock_wait();
+	uint32_t lock_after = CM_LOCK;
+	if (locked) {
+		g_arm_ndiv = ndiv;
+		g_arm_frac = frac;
+		g_arm_div = div;
+	} else {
+		pllb_set(g_arm_ndiv, g_arm_frac, g_arm_div);
+		/* also the old channel divider, which pllb_set skipped */
+		A2W_PLLB_ARM = A2W_PASSWORD | g_arm_div;
+		CM_PLLB = CM_PASSWORD | CM_PLLB_HOLDARM_SET | CM_PLLB_LOADARM_SET;
+		CM_PLLB = CM_PASSWORD | CM_PLLB_HOLDARM_SET;
+		pllb_lock_wait();
 	}
 	CM_PLLB = CM_PASSWORD;
-	if (!locked)
-		printf("arm: PLLB did not lock at %u MHz\n", mhz);
-	return mhz;
+	printf("arm: clock %u MHz %s (ndiv %u frac %05X div %u), CM_LOCK %08X -> %08X, "
+	       "CTRL %08X FRAC %08X ARM %08X, now %u kHz\n",
+	       mhz, locked ? "set" : "NOT LOCKED, old clock back", ndiv, frac, div,
+	       lock_before, lock_after, A2W_PLLB_CTRL, A2W_PLLB_FRAC, A2W_PLLB_ARM, arm_khz());
+	return arm_khz();
 }
 
 /* one 16 MB window: ARM address arm -> bus address bus */

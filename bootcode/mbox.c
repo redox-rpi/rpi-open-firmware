@@ -157,7 +157,9 @@ static uint32_t clock_hz(uint32_t id) {
 		return cm_hz(CM_PWMCTL, CM_PWMDIV);
 	case CLK_ARM:
 		/* arm.c: CM_ARMCTL source 4 = the PLLB ARM channel */
-		return chan_khz(pll_khz(A2W_PLLB_CTRL, A2W_PLLB_FRAC, A2W_PLLB_ANA1), A2W_PLLB_ARM) * 1000;
+		/* from arm.c's own state: the A2W readback after a change was
+		 * not trusted in row 404 */
+		return arm_khz() * 1000;
 	case CLK_CORE:
 		return core_khz() * 1000;
 	case CLK_SDRAM:
@@ -333,9 +335,7 @@ static bool handle(volatile struct tag *t) {
 		else if (a == CLK_ARM && t->id == 0x00030007)
 			r[1] = 600000000u;
 		else if (a == CLK_ARM && t->id == 0x00038002) {
-			arm_set_mhz(b / 1000000u);
-			r[1] = clock_hz(a);
-			printf("mbox: ARM clock set to %u kHz\n", r[1] / 1000);
+			r[1] = arm_set_mhz(b / 1000000u) * 1000u;
 		}
 		reply(t, r, 8);
 		return true;

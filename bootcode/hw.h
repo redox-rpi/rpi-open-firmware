@@ -65,6 +65,7 @@ void watchdog_reset(void) __attribute__((noreturn));
 bool arm_start(bool aarch64);
 extern uint32_t arm_max_mhz;
 uint32_t arm_set_mhz(uint32_t mhz);
+uint32_t arm_khz(void);
 
 /* sd.c, fat.c (monitor builds): read the SD card and its FAT partition */
 struct sd_card { bool ready, high_capacity; uint32_t mb; char name[6]; };
