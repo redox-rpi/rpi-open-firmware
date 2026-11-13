@@ -1,7 +1,7 @@
 # TinyCC with a VC4 backend: plan
 
 **Draft**, 2026-11-11. Work package of its own; background and the
-alternatives in [vpu-compiler.md](vpu-compiler.md). The firmware work goes
+alternatives in [vpu-compiler.md](vpu-compiler.md). The parts of the backend, one by one: [tcc-vc4-components.md](tcc-vc4-components.md). The firmware work goes
 on with GCC 6.2.1 regardless.
 
 ## Goal

@@ -13,6 +13,7 @@
 | [forks.md](forks.md) | Forks of every source we use: glennra's November 2026 Pi 3B Linux boot without Broadcom firmware (DSI display, ARM handoff), and what the rest hold |
 | [vpu-compiler.md](vpu-compiler.md) | Discussion: fewer toolchain dependencies (TinyCC fork with a VC4 backend, the existing LLVM VideoCore4 backend, alternatives, sources for the instruction encoding) |
 | [tcc-vc4.md](tcc-vc4.md) | Draft plan: TinyCC fork with a VC4 backend (decisions, milestones, host test, open questions) |
+| [tcc-vc4-components.md](tcc-vc4-components.md) | Draft: the parts of the TinyCC VC4 backend (encoder, code generator, assembler, linker, resim, tests) and how they fit together |
 | [socdump.md](socdump.md) | Register dumps as reference values for the firmware |
 | [other-models.md](other-models.md) | Pi 4 and Pi 5 later |
 | [upstream-README.md](upstream-README.md) | Kristina Brooks's original README, with its credits |
