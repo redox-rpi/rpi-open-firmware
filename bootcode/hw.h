@@ -93,6 +93,8 @@ void i2c_read(uint32_t addr, uint32_t reg, uint32_t n);
 void i2c_write(uint32_t addr, uint32_t reg, uint32_t value);
 bool expander_start(void);
 void pllc_per_on(void);
+uint32_t core_khz(void);
+uint32_t pllc_per_khz(void);
 void eth_clock_on(void);
 void regs_compare(void);
 void sd_pullups(void);

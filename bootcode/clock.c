@@ -4,7 +4,8 @@
  * The PLLC sequence and its values are taken unchanged from
  * rpi-open-firmware firmware/romstage.c, switch_vpu_to_pllc()
  * (commit 82a6264, GPLv2+), which ran on our Pi 3B+ in Pi test #224.
- * PLLC = 19.2 MHz * (52 + 87380/2^20) = 1000 MHz, CORE0 = /2, VPU = CORE0 / 4.
+ * PLLC = 19.2 MHz * (52 + 87380/2^20) * 2 (ANA1 prescaler) = 2000 MHz,
+ * CORE0 = /2 = 1000 MHz, VPU = CORE0 / 4 = 250 MHz.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */

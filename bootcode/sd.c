@@ -37,19 +37,19 @@
 
 /*
  * Data clock: core clock / (SH_CDIV + 2), no faster than g_sd_khz. Upstream
- * assumed a 250 MHz core clock (div 5 or 10); ours is PLLC CORE0 (500 MHz)
- * / CM_VPUDIV, 125 MHz from clock.c, and the monitor's vpuclk changes it
- * (Pi test 381: at 250 MHz with the old divider the reads went bad). So the
- * same 25 MHz (SDHC) or 12.5 MHz (SDSC) that worked at 125 MHz.
+ * assumed a 250 MHz core clock (div 5 or 10); ours is PLLC CORE0 (1000 MHz)
+ * / CM_VPUDIV, 250 MHz from clock.c, and the monitor's vpuclk changes it
+ * (Pi test 381: at /2 with the old divider the reads went bad). 25 MHz
+ * (SDHC) or 12.5 MHz (SDSC). Before payload l core_khz() missed the PLL
+ * prescaler and the card actually ran at 50 MHz.
  */
 static uint32_t g_sd_khz;
 
 void sd_clock_update(void) {
 	if (!g_sd_khz)
 		return;
-	uint32_t vdiv = (CM_VPUDIV >> 12) & 0xfff;
-	uint32_t core_khz = 500000 / (vdiv ? vdiv : 1);
-	uint32_t div = (core_khz + g_sd_khz - 1) / g_sd_khz;
+	uint32_t core = core_khz();
+	uint32_t div = (core + g_sd_khz - 1) / g_sd_khz;
 	SH_CDIV = div < 2 ? 0 : div - 2;
 }
 #define EDM_THRESHOLD_MASK 0x1f

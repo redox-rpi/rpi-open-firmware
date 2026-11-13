@@ -43,7 +43,7 @@
  *   exp            GPIO expander: LAN_RUN and power LED on -> ok exp
  *   usbon          power up USB as boot64 does (clocks, expander) -> ok usbon
  *   regs           clock/PLL/GPIO registers next to start.elf's -> ok regs N
- *   vpuclk D       VPU clock PLLC CORE0 / D (2..8; 4 = 125 MHz) -> ok vpuclk
+ *   vpuclk D       VPU clock PLLC CORE0 / D (3..8; 4 = 250 MHz) -> ok vpuclk
  *   boot64 [K [D]] load armstub8, kernel K and devicetree D from the FAT
  *                  partition and start the ARM in AArch64 -> ok boot64;
  *                  then only the mailbox is served (mbox.c), no return
@@ -487,7 +487,7 @@ static bool run(int argc, char **argv) {
 		i2c_read(a[0], a[1], a[2]);
 	} else if (!strcmp_s(c, "i2cw") && n == 3) {
 		i2c_write(a[0], a[1], a[2]);
-	} else if (!strcmp_s(c, "vpuclk") && n == 1 && a[0] >= 2 && a[0] <= 8) {
+	} else if (!strcmp_s(c, "vpuclk") && n == 1 && a[0] >= 3 && a[0] <= 8) {
 		vpu_clock(a[0]);
 		printf("ok vpuclk PLLC CORE0 / %u, CM_VPUCTL %08X DIV %08X\n", a[0], CM_VPUCTL, CM_VPUDIV);
 	} else if (!strcmp_s(c, "regs") && n == 0) {

@@ -164,7 +164,8 @@ static void gp_clock(volatile uint32_t *ctl, volatile uint32_t *div, uint32_t sr
  * 0x296, GP1DIV 0x14d55, PLLD PER 500 MHz / 20.8333, MASH 1), although
  * dt-blob.dts calls it a 25 MHz output; row 373 with 25 MHz got as far as
  * "USB device not accepting new address". Ours runs from PLLC PER, also
- * 500 MHz.
+ * 500 MHz since payload l; before, PER was 1000 MHz and the LAN7515 got
+ * 48 MHz (rows 373-385, 50 MHz in row 373).
  */
 void eth_clock_on(void) {
 	pllc_per_on();
@@ -173,7 +174,8 @@ void eth_clock_on(void) {
 	gp_clock((volatile uint32_t *)&CM_GP2CTL, (volatile uint32_t *)&CM_GP2DIV, 1, (585u << 12) | 3840u, 1);
 	/* ALT0 (GPCLK1, GPCLK2) on GPIO 42 and 43 */
 	GP_FSEL4 = (GP_FSEL4 & ~((7u << 6) | (7u << 9))) | (4u << 6) | (4u << 9);
-	printf("power: ETH_CLK GPIO 42 on, CM_GP1CTL %08X DIV %08X\n", CM_GP1CTL, CM_GP1DIV);
+	printf("power: ETH_CLK GPIO 42 on, CM_GP1CTL %08X DIV %08X, PLLC PER %u kHz, core %u kHz\n",
+	       CM_GP1CTL, CM_GP1DIV, pllc_per_khz(), core_khz());
 }
 
 /*
@@ -193,8 +195,8 @@ void sd_pullups(void) {
 }
 
 /*
- * The VPU (core) clock: PLLC CORE0 (500 MHz) / div. clock.c starts it at
- * /4 = 125 MHz; start.elf runs it faster (Pi test 380: VPUDIV 3 from a
+ * The VPU (core) clock: PLLC CORE0 (1000 MHz) / div. clock.c starts it at
+ * /4 = 250 MHz; start.elf runs it at 400 MHz (Pi test 380: VPUDIV 3 from a
  * 1200 MHz CORE0). Oscillator while the divider changes, as in clock.c.
  */
 void vpu_clock(uint32_t div) {

@@ -82,11 +82,22 @@ static uint32_t g_serial, g_revision;
 #define SDRAM_KHZ (19200u * 0x53 / 4) /* DDR PLL as set in sdram.c */
 
 /* PLL output: xosc * (NDIV + FRAC / 2^20) / PDIV, in kHz */
-static uint32_t pll_khz(uint32_t ctrl, uint32_t frac) {
+/*
+ * A PLL's output: 19.2 MHz * (NDIV + FRAC / 2^20) / PDIV, doubled when the
+ * feedback prescaler (ANA1 bit 14) is on. clock.c and start.elf both set
+ * ANA1 0x144000, so PLLC (NDIV 52.083) runs at 2000 MHz, not 1000: Linux
+ * clk-bcm2835 (fb_prediv_mask BIT(14)), and start.elf's 400 MHz core clock
+ * from PLLC 2400 / CORE0 2 / VPUDIV 3 (Pi test 380) only add up with it.
+ */
+#define PLL_PREDIV (1u << 14)
+
+static uint32_t pll_khz(uint32_t ctrl, uint32_t frac, uint32_t ana1) {
 	uint32_t ndiv = ctrl & 0x3ff, pdiv = (ctrl >> 12) & 7;
 	if (!pdiv)
 		pdiv = 1;
 	uint32_t khz = XOSC_KHZ * ndiv + ((((frac & 0xfffff) >> 4) * XOSC_KHZ) >> 16);
+	if (ana1 & PLL_PREDIV)
+		khz *= 2;
 	return khz / pdiv;
 }
 
@@ -98,7 +109,13 @@ static uint32_t chan_khz(uint32_t pll, uint32_t chan) {
 	return pll / (div ? div : 256);
 }
 
-static uint32_t pllc_khz(void) { return pll_khz(A2W_PLLC_CTRL, A2W_PLLC_FRAC); }
+static uint32_t pllc_khz(void) { return pll_khz(A2W_PLLC_CTRL, A2W_PLLC_FRAC, A2W_PLLC_ANA1); }
+
+/* the VPU (core) clock: PLLC CORE0 / CM_VPUDIV (clock.c) */
+uint32_t core_khz(void) {
+	uint32_t div = (CM_VPUDIV >> 12) & 0xfff;
+	return div ? chan_khz(pllc_khz(), A2W_PLLC_CORE0) / div : 0;
+}
 
 /* clock manager sources of the peripheral clocks */
 static uint32_t src_khz(uint32_t src) {
@@ -106,14 +123,16 @@ static uint32_t src_khz(uint32_t src) {
 	case 1:
 		return XOSC_KHZ;
 	case 4:
-		return chan_khz(pll_khz(A2W_PLLA_CTRL, A2W_PLLA_FRAC), A2W_PLLA_PER);
+		return chan_khz(pll_khz(A2W_PLLA_CTRL, A2W_PLLA_FRAC, A2W_PLLA_ANA1), A2W_PLLA_PER);
 	case 5:
 		return chan_khz(pllc_khz(), A2W_PLLC_PER);
 	case 6:
-		return chan_khz(pll_khz(A2W_PLLD_CTRL, A2W_PLLD_FRAC), A2W_PLLD_PER);
+		return chan_khz(pll_khz(A2W_PLLD_CTRL, A2W_PLLD_FRAC, A2W_PLLD_ANA1), A2W_PLLD_PER);
 	}
 	return 0;
 }
+
+uint32_t pllc_per_khz(void) { return src_khz(5); }
 
 /* a CM_xxCTL/CM_xxDIV pair: ENAB bit 4, source bits 0-3, divider 12.12 */
 static uint32_t cm_hz(uint32_t ctl, uint32_t div) {
@@ -138,12 +157,9 @@ static uint32_t clock_hz(uint32_t id) {
 		return cm_hz(CM_PWMCTL, CM_PWMDIV);
 	case CLK_ARM:
 		/* arm.c: CM_ARMCTL source 4 = the PLLB ARM channel */
-		return chan_khz(pll_khz(A2W_PLLB_CTRL, A2W_PLLB_FRAC), A2W_PLLB_ARM) * 1000;
-	case CLK_CORE: {
-		/* clock.c: the VPU (core) clock is PLLC CORE0 / CM_VPUDIV */
-		uint32_t div = (CM_VPUDIV >> 12) & 0xfff;
-		return div ? chan_khz(pllc_khz(), A2W_PLLC_CORE0) / div * 1000 : 0;
-	}
+		return chan_khz(pll_khz(A2W_PLLB_CTRL, A2W_PLLB_FRAC, A2W_PLLB_ANA1), A2W_PLLB_ARM) * 1000;
+	case CLK_CORE:
+		return core_khz() * 1000;
 	case CLK_SDRAM:
 		return SDRAM_KHZ * 1000;
 	}
@@ -152,17 +168,19 @@ static uint32_t clock_hz(uint32_t id) {
 
 /*
  * The EMMC (Arasan SDHCI) clock, which U-Boot and Redox use for the SD
- * card with dtoverlay=mmc: PLLC PER = 1000 / 2 = 500 MHz, then / 2.5 =
+ * card with dtoverlay=mmc: PLLC PER = 2000 / 4 = 500 MHz, then / 2.5 =
  * 200 MHz. clock.c leaves the PER channel held; release only that hold.
+ * Until payload l the channel divided by 2 (1000 MHz), so EMMC ran at
+ * 400 MHz and ETH_CLK at 48 MHz instead of 24.
  */
-/* PLLC's PER channel at PLLC / 2 (500 MHz), for the EMMC and Ethernet clocks */
+/* PLLC's PER channel at PLLC / 4 (500 MHz), for the EMMC and Ethernet clocks */
 void pllc_per_on(void) {
 	static bool done;
 	if (done)
 		return;
 	done = true;
 	uint32_t hold = CM_PLLC & ~CM_PLLC_HOLDPER_SET & 0xffffff;
-	A2W_PLLC_PER = A2W_PASSWORD | 2;
+	A2W_PLLC_PER = A2W_PASSWORD | 4;
 	CM_PLLC = CM_PASSWORD | hold | CM_PLLC_HOLDPER_SET | CM_PLLC_LOADPER_SET;
 	CM_PLLC = CM_PASSWORD | hold | CM_PLLC_HOLDPER_SET;
 	CM_PLLC = CM_PASSWORD | hold;
