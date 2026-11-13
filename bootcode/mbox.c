@@ -444,6 +444,7 @@ static bool handle(volatile struct tag *t) {
 /* the first requests are logged on the serial line, the rest not */
 #define MBOX_LOG_MAX 400 /* U-Boot alone used 40 (Pi test 391) */
 static uint32_t g_logged;
+static uint32_t g_requests;
 
 static bool in_arm_memory(uint32_t bus, uint32_t len) {
 	uint32_t phys = bus & 0x3fffffffu;
@@ -457,6 +458,7 @@ static void property(uint32_t bus) {
 		printf("mbox: bad buffer %08X size %u, dropped\n", bus, size);
 		return;
 	}
+	g_requests++;
 	bool log = g_logged < MBOX_LOG_MAX;
 	if (log && ++g_logged == MBOX_LOG_MAX)
 		printf("mbox: requests after this one are not logged\n");
@@ -501,8 +503,22 @@ void mbox_poll(void) {
  * input, so keys typed for U-Boot or Redox reach them. Never returns.
  */
 void mbox_serve(void) {
-	for (;;)
+	/*
+	 * A line every 10 s for 10 minutes: the VPU is alive, and what the
+	 * mailboxes hold. In Pi tests 391-393 Redox's rpi-firmwared went silent
+	 * before any request reached us; this tells a dead VPU from a request
+	 * that never comes.
+	 */
+	uint32_t start = timer_us(), next = start + 10000000u, beats = 0;
+	for (;;) {
 		mbox_poll();
+		if (beats < 60 && (int32_t)(timer_us() - next) >= 0) {
+			beats++;
+			next += 10000000u;
+			printf("mbox: alive %u s, %u requests, ARM->VPU %08X VPU->ARM %08X\n", beats * 10,
+			       g_requests, ARM_1_MAIL1_STA, ARM_1_MAIL0_STA);
+		}
+	}
 }
 
 /* start serving, right before the ARM starts */
