@@ -208,6 +208,31 @@ static void emmc_clock(void) {
 
 static uint32_t g_power[POWER_DEVICES];
 
+/* ---- framebuffer ---- */
+
+/*
+ * A framebuffer in memory only: the tags answer as start.elf does, but
+ * nothing scans it out (no HVS, pixel valve or HDMI set up yet). U-Boot
+ * sets up no video without tag 0x40003 (Pi test 391: "Could not query
+ * display resolution"), so the Redox bootloader gets no GOP output: no
+ * menu, no env editor, no FRAMEBUFFER_* for vesad. It sits in the
+ * VideoCore's part of the memory, above MBOX_ARM_MEM_SIZE.
+ */
+#define FB_BASE (MBOX_ARM_MEM_SIZE + 0x400000u)
+#define FB_MAX 0xc00000u /* to 0x3f000000, the peripherals */
+
+static struct {
+	uint32_t w, h, vw, vh, depth, order, alpha, xoff, yoff;
+	bool allocated;
+} g_fb = {1024, 768, 1024, 768, 32, 1, 2, 0, 0, false};
+
+static uint32_t fb_pitch(void) { return g_fb.vw * ((g_fb.depth + 7) / 8); }
+
+static bool fb_fits(uint32_t vw, uint32_t vh, uint32_t depth) {
+	return vw && vh && vw <= 4096 && vh <= 4096 && (depth == 8 || depth == 16 || depth == 24 || depth == 32) &&
+	       vw * ((depth + 7) / 8) * vh <= FB_MAX;
+}
+
 /* ---- tags ---- */
 
 struct tag {
@@ -325,6 +350,93 @@ static bool handle(volatile struct tag *t) {
 	case 0x00030048: /* notify reboot */
 		reply(t, r, 0);
 		return true;
+
+	/* framebuffer (see g_fb) */
+	case 0x00040001: /* allocate: alignment -> bus base, size */
+		g_fb.allocated = true;
+		r[0] = 0xc0000000u | FB_BASE;
+		r[1] = fb_pitch() * g_fb.vh;
+		reply(t, r, 8);
+		return true;
+	case 0x00048001: /* release */
+		g_fb.allocated = false;
+		reply(t, r, 0);
+		return true;
+	case 0x00040002: /* blank screen */
+		r[0] = a & 1;
+		reply(t, r, 4);
+		return true;
+	case 0x00048003: /* set physical size */
+		if (fb_fits(a, b, g_fb.depth)) {
+			g_fb.w = a;
+			g_fb.h = b;
+		}
+		/* fall through */
+	case 0x00040003: /* get physical size */
+	case 0x00044003: /* test physical size */
+		r[0] = g_fb.w;
+		r[1] = g_fb.h;
+		reply(t, r, 8);
+		return true;
+	case 0x00048004: /* set virtual size */
+		if (fb_fits(a, b, g_fb.depth)) {
+			g_fb.vw = a;
+			g_fb.vh = b;
+		}
+		/* fall through */
+	case 0x00040004:
+	case 0x00044004:
+		r[0] = g_fb.vw;
+		r[1] = g_fb.vh;
+		reply(t, r, 8);
+		return true;
+	case 0x00048005: /* set depth */
+		if (fb_fits(g_fb.vw, g_fb.vh, a))
+			g_fb.depth = a;
+		/* fall through */
+	case 0x00040005:
+	case 0x00044005:
+		r[0] = g_fb.depth;
+		reply(t, r, 4);
+		return true;
+	case 0x00048006: /* set pixel order, 0 BGR 1 RGB */
+		g_fb.order = a & 1;
+		/* fall through */
+	case 0x00040006:
+	case 0x00044006:
+		r[0] = g_fb.order;
+		reply(t, r, 4);
+		return true;
+	case 0x00048007: /* set alpha mode */
+		if (a <= 2)
+			g_fb.alpha = a;
+		/* fall through */
+	case 0x00040007:
+	case 0x00044007:
+		r[0] = g_fb.alpha;
+		reply(t, r, 4);
+		return true;
+	case 0x00040008: /* pitch */
+		r[0] = fb_pitch();
+		reply(t, r, 4);
+		return true;
+	case 0x00048009: /* set virtual offset */
+		g_fb.xoff = a;
+		g_fb.yoff = b;
+		/* fall through */
+	case 0x00040009:
+	case 0x00044009:
+		r[0] = g_fb.xoff;
+		r[1] = g_fb.yoff;
+		reply(t, r, 8);
+		return true;
+	case 0x0004000a: /* overscan: none */
+	case 0x0004400a:
+	case 0x0004800a: {
+		uint32_t w[4] = {0, 0, 0, 0};
+		reply(t, w, 16);
+		return true;
+	}
 	}
 	return false;
 }
