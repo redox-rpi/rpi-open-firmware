@@ -124,6 +124,51 @@ static void arm_clock(void) {
 	CM_ARMCTL = CM_PASSWORD | 4 | CM_ARMCTL_ENAB_SET; /* source 4 = PLLB ARM */
 }
 
+/*
+ * ARM clock changes for the mailbox (rpi-firmwared's governor, tag
+ * 0x00038002). The ARM channel stays at PLLB / 2; PLLB is moved to twice
+ * the wanted rate. The channel is held while PLLB relocks, so the cores
+ * just stop for a moment (the generic timer runs from the crystal and
+ * keeps time). Above 1750 MHz the VCO uses the feedback prescaler (ANA1
+ * bit 14), as Linux clk-bcm2835 does; the KI/KP/KA values stay as
+ * arm_clock() set them. There is no PMIC voltage control yet, so the top
+ * rate is capped (arm_max_mhz, 1200 by default, monitor "armmax").
+ */
+#define ARM_MIN_MHZ 600u
+uint32_t arm_max_mhz = 1200;
+
+uint32_t arm_set_mhz(uint32_t mhz) {
+	if (mhz < ARM_MIN_MHZ)
+		mhz = ARM_MIN_MHZ;
+	if (mhz > arm_max_mhz)
+		mhz = arm_max_mhz;
+	uint32_t vco_khz = mhz * 2000u;
+	bool prediv = vco_khz > 1750000u;
+	if (prediv)
+		vco_khz /= 2;
+	uint32_t ndiv = vco_khz / 19200u, rem = vco_khz % 19200u;
+	uint32_t frac = rem * 4096u / 75u; /* rem * 2^20 / 19200 */
+	uint32_t ana1 = (A2W_PLLB_ANA1 & ~(1u << 14)) | (prediv ? (1u << 14) : 0);
+
+	CM_PLLB = CM_PASSWORD | CM_PLLB_HOLDARM_SET;
+	udelay(1);
+	A2W_PLLB_ANA1 = A2W_PASSWORD | ana1;
+	A2W_PLLB_FRAC = A2W_PASSWORD | frac;
+	A2W_PLLB_CTRL = A2W_PASSWORD | ((A2W_PLLB_CTRL & ~0x3ffu) | ndiv);
+	bool locked = false;
+	for (uint32_t i = 0; i < 1000; i++) {
+		if (CM_LOCK & CM_LOCK_FLOCKB_SET) {
+			locked = true;
+			break;
+		}
+		udelay(1);
+	}
+	CM_PLLB = CM_PASSWORD;
+	if (!locked)
+		printf("arm: PLLB did not lock at %u MHz\n", mhz);
+	return mhz;
+}
+
 /* one 16 MB window: ARM address arm -> bus address bus */
 static void arm_map(uint32_t bus, uint32_t arm) {
 	(&ARM_TRANSLATE)[arm >> 24] = bus >> 21;

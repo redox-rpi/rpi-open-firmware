@@ -44,6 +44,8 @@
  *   usbon          power up USB as boot64 does (clocks, expander) -> ok usbon
  *   regs           clock/PLL/GPIO registers next to start.elf's -> ok regs N
  *   vpuclk D       VPU clock PLLC CORE0 / D (3..8; 4 = 250 MHz) -> ok vpuclk
+ *   armmax M       top ARM clock for the mailbox in MHz, hex (258..578;
+ *                  4B0 = 1200, the default; 578 = 1400) -> ok armmax
  *   boot64 [K [D]] load armstub8, kernel K and devicetree D from the FAT
  *                  partition and start the ARM in AArch64 -> ok boot64;
  *                  then only the mailbox is served (mbox.c), no return
@@ -499,6 +501,9 @@ static bool run(int argc, char **argv) {
 		i2c_read(a[0], a[1], a[2]);
 	} else if (!strcmp_s(c, "i2cw") && n == 3) {
 		i2c_write(a[0], a[1], a[2]);
+	} else if (!strcmp_s(c, "armmax") && n == 1 && a[0] >= 600 && a[0] <= 1400) {
+		arm_max_mhz = a[0];
+		printf("ok armmax %u MHz\n", arm_max_mhz);
 	} else if (!strcmp_s(c, "vpuclk") && n == 1 && a[0] >= 3 && a[0] <= 8) {
 		vpu_clock(a[0]);
 		printf("ok vpuclk PLLC CORE0 / %u, CM_VPUCTL %08X DIV %08X\n", a[0], CM_VPUCTL, CM_VPUDIV);
@@ -517,7 +522,7 @@ static bool run(int argc, char **argv) {
 		printf("ok boot\n");
 		return true;
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | regs | vpuclk D | boot64 [K [DTB]] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | regs | vpuclk D | armmax M | boot64 [K [DTB]] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();

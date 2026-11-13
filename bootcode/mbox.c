@@ -325,9 +325,18 @@ static bool handle(volatile struct tag *t) {
 	case 0x00030004: /* max */
 	case 0x00030007: /* min */
 	case 0x00030047: /* measured */
-	case 0x00038002: /* set clock rate: not changed yet, current rate */
+	case 0x00038002: /* set clock rate: the ARM clock only, others keep their rate */
 		r[0] = a;
 		r[1] = clock_hz(a);
+		if (a == CLK_ARM && t->id == 0x00030004)
+			r[1] = arm_max_mhz * 1000000u;
+		else if (a == CLK_ARM && t->id == 0x00030007)
+			r[1] = 600000000u;
+		else if (a == CLK_ARM && t->id == 0x00038002) {
+			arm_set_mhz(b / 1000000u);
+			r[1] = clock_hz(a);
+			printf("mbox: ARM clock set to %u kHz\n", r[1] / 1000);
+		}
 		reply(t, r, 8);
 		return true;
 	case 0x00038042: { /* set SDHOST clock: rate, then two rates back */
