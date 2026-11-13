@@ -330,7 +330,7 @@ static bool handle(volatile struct tag *t) {
 }
 
 /* the first requests are logged on the serial line, the rest not */
-#define MBOX_LOG_MAX 40
+#define MBOX_LOG_MAX 400 /* U-Boot alone used 40 (Pi test 391) */
 static uint32_t g_logged;
 
 static bool in_arm_memory(uint32_t bus, uint32_t len) {
