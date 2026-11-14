@@ -1,7 +1,7 @@
 # Pi models: hardware
 
 The Raspberry Pi models this project looks at, and what is on each board.
-Which firmware each one boots with: [broadcom-firmware.md](broadcom-firmware.md).
+Which firmware each one boots with: [broadcom/](broadcom/README.md).
 One page per model with everything we know about its hardware:
 [Pi 3B+](hardware/pi3b-plus.md), [Pi 400](hardware/pi400.md),
 [Pi 5 and CM5](hardware/pi5.md).

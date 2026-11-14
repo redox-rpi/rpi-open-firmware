@@ -17,7 +17,7 @@ Zero 2 W, 3B+, Pi 400, Pi 5) are described in [docs/models.md](docs/models.md);
 work starts on the Pi 3B+. Plan and progress:
 [redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230). Every
 closed piece, per model, and whether it can be replaced:
-[docs/broadcom-firmware.md](docs/broadcom-firmware.md#every-closed-piece-and-whether-it-can-be-replaced).
+[docs/broadcom/](docs/broadcom/README.md#every-closed-piece-and-whether-it-can-be-replaced).
 
 The firmware is not tied to Redox: it starts U-Boot, Linux or Redox the
 same way, so it has its own docs, Pi tests and pace. What redox-rpi uses
@@ -70,9 +70,10 @@ each release starts, and what is still Broadcom's after each step:
 All in [docs/](docs/README.md):
 
 - [models.md](docs/models.md): the Pi models and their hardware.
-- [broadcom-firmware.md](docs/broadcom-firmware.md): what is in Broadcom's
-  firmware (`bootcode.bin`, `start*.elf`, `armstub*` and their variants),
-  per model: Zero W, Zero 2 W, 3B+, Pi 400, Pi 5.
+- [broadcom/](docs/broadcom/README.md): Broadcom's firmware per model
+  (Zero W, Zero 2 W, 3B+, Pi 400, Pi 5), every closed piece, and one page
+  per file (`bootcode.bin`, `start*.elf`, `fixup*.dat`, `armstub8`,
+  devicetree, overlays, licence) with what is inside it.
 - [boot-chain.md](docs/boot-chain.md): Broadcom's boot pieces, how each
   redox-rpi release starts, the steps to the end goal (with pictures).
 - [own-firmware.md](docs/own-firmware.md): our firmware (#230): design,
@@ -85,7 +86,6 @@ All in [docs/](docs/README.md):
 - [sources.md](docs/sources.md): every outside source (librerpi, glennra, toolchain, simulator), its last change, and whether we watch it.
 - [vpu-compiler.md](docs/vpu-compiler.md), [socdump.md](docs/socdump.md): ideas and later work.
 - [docs/hardware/](docs/hardware/): one page per model (3B+, Pi 400, Pi 5/CM5) with what we know about its hardware.
-- [docs/broadcom/](docs/broadcom/README.md): one page per Broadcom firmware file and what is inside it.
 
 ## Branches and directories
 

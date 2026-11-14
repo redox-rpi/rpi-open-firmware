@@ -6,8 +6,7 @@
 | [hardware/pi3b-plus.md](hardware/pi3b-plus.md) | Pi 3B+ hardware: chip block diagram, address maps, boot, clocks, power chip, peripherals, GPIO, USB |
 | [hardware/pi400.md](hardware/pi400.md) | Pi 400 hardware (BCM2711): address maps, EEPROM boot, GIC, PCIe and VL805, GENET |
 | [hardware/pi5.md](hardware/pi5.md) | Pi 5 and CM5 hardware (BCM2712 + RP1): boot, PSCI, debug UART, from public documents |
-| [broadcom-firmware.md](broadcom-firmware.md) | What is in Broadcom's firmware and its variants, per model, with a picture |
-| [broadcom/](broadcom/README.md) | One page per Broadcom file (`bootcode.bin`, `start*.elf`, `fixup*.dat`, `armstub8`, devicetree, overlays, licence): what is inside |
+| [broadcom/](broadcom/README.md) | Broadcom's firmware per model, every closed piece, and one page per file (`bootcode.bin`, `start*.elf`, `fixup*.dat`, `armstub8`, devicetree, overlays, licence): what is inside |
 | [boot-chain.md](boot-chain.md) | Broadcom's boot pieces, how each redox-rpi release starts, the steps to the end goal, with pictures |
 | [own-firmware.md](own-firmware.md) | Our firmware ([redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230)): milestones, monitor, boot selector, ARM start, findings |
 | [test-results.md](test-results.md) | Every Pi test of this repository |
