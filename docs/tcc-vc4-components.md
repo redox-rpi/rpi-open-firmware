@@ -182,7 +182,7 @@ same automatically.
 | Plan, decisions, milestones | [tcc-vc4.md](tcc-vc4.md), [vpu-compiler.md](vpu-compiler.md) |
 | Build clone, test images | homenodellm `~/rbc-build/tcc-vc4`, `~/rbc-build/payloads` |
 | resim | [redox-rpi/resim](https://github.com/redox-rpi/resim), branch `vc4-tests`; built on homenodellm in `~/rbc-build/tcc-vc4-tools/resim` |
-| Toolchain versions, build scripts | [redox-rpi/vc4-toolchain](https://github.com/redox-rpi/vc4-toolchain) (being set up) |
+| Toolchain versions, build scripts | [redox-rpi/vc4-toolchain](https://github.com/redox-rpi/vc4-toolchain) (PR #1: `toolchain.lock`, `build.sh`, `test.sh`) |
 | GCC toolchain (reference) | homenodellm `~/rbc-build/toolchains/prefix` (vc4-elf-gcc 6.2.1) |
 | Pi test reports | redox-rpi/pi-tests `reports/` |
 | csmith results | redox-rpi/pi-tests `tcc.jsonl`; programs and logs on homenodellm `~/rbc-build/tcc-csmith-work` |
