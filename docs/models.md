@@ -2,7 +2,9 @@
 
 The Raspberry Pi models this project looks at, and what is on each board.
 Which firmware each one boots with: [broadcom-firmware.md](broadcom-firmware.md).
-More on the Pi 4 and Pi 5 and how our work carries over: [other-models.md](other-models.md).
+One page per model with everything we know about its hardware:
+[Pi 3B+](hardware/pi3b-plus.md), [Pi 400](hardware/pi400.md),
+[Pi 5 and CM5](hardware/pi5.md).
 
 | | Pi Zero / Zero W | Pi Zero 2 W | Pi 3B+ | Pi 400 | Pi 5 / CM5 |
 |---|---|---|---|---|---|
@@ -21,7 +23,7 @@ More on the Pi 4 and Pi 5 and how our work carries over: [other-models.md](other
 | Display | mini-HDMI | mini-HDMI | HDMI | 2 × micro-HDMI | 2 × micro-HDMI (CM5 IO board: 2 × HDMI) |
 | Power chip | none (discrete regulators) | none (discrete regulators) | MaxLinear MxL7704 | not checked | Renesas DA9091 |
 | Keyboard | – | – | – | built in, through its own USB controller | – |
-| In redox-rpi | not supported: 32-bit ARM, Redox needs 64-bit | supported | supported; the test Pi | bring-up (Pi test row 325) | on the wish list; the maintainer has a CM5 IO board |
+| In redox-rpi | not supported: 32-bit ARM, Redox needs 64-bit | supported | supported; the test Pi | boots to a login over the network (row 325) | not run yet; the maintainer has a CM5 IO board |
 
 ## Our test hardware
 

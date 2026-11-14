@@ -84,8 +84,9 @@ All in [docs/](docs/README.md):
 - [lk-overlay.md](docs/lk-overlay.md): librerpi/lk-overlay on our Pi.
 - [librerpi.md](docs/librerpi.md): every librerpi repository and what it is good for.
 - [forks.md](docs/forks.md): forks of our sources; glennra booted Linux on a Pi 3B without Broadcom firmware (November 2026).
-- [vpu-compiler.md](docs/vpu-compiler.md), [socdump.md](docs/socdump.md),
-  [other-models.md](docs/other-models.md): ideas and later work.
+- [vpu-compiler.md](docs/vpu-compiler.md), [socdump.md](docs/socdump.md): ideas and later work.
+- [docs/hardware/](docs/hardware/): one page per model (3B+, Pi 400, Pi 5/CM5) with what we know about its hardware.
+- [docs/broadcom/](docs/broadcom/README.md): one page per Broadcom firmware file and what is inside it.
 
 ## Branches and directories
 

@@ -46,7 +46,7 @@ business).
 | `armstub*` | Zero 2 W, 3B+, Pi 4/400 | ARM | **already open** (BSD source), only built in | our own build of `armstub8`, done |
 | Wi-Fi firmware (`brcmfmac*.bin`, the chip's NVRAM text, CLM blob) | Zero W, Zero 2 W, 3B+, Pi 4/400 | inside the Wi-Fi chip | **no** in practice: the chip's own processor, no documentation; the open-source driver on the host side is enough | load the blob; write our own driver for it (redox-rpi Wi-Fi theme) |
 | Bluetooth firmware patch (`*.hcd`) | same | inside the radio chip | **no** in practice | load the patch, or run Bluetooth without it (may work with the ROM version) |
-| EEPROM bootloader (`pieeprom.bin`, `recovery.bin`); on the Pi 5 it holds the main firmware too | Pi 4, 400, 5, CM5 | VPU / boot processor | **maybe**: lk-overlay has some Pi 4 work; replacing it needs a safe way back | later, a separate experiment (see [other-models.md](other-models.md)) |
+| EEPROM bootloader (`pieeprom.bin`, `recovery.bin`); on the Pi 5 it holds the main firmware too | Pi 4, 400, 5, CM5 | VPU / boot processor | **maybe**: lk-overlay has some Pi 4 work; replacing it needs a safe way back | later, a separate experiment |
 | RP1 I/O chip firmware (USB, Ethernet MAC, GPIO) | Pi 5, CM5 | inside RP1 (Raspberry Pi's own chip) | **unknown**: RP1 is documented in part (Raspberry Pi's RP1 peripherals document), its firmware is not | keep for now |
 | VL805 USB controller firmware | Pi 4 (Pi 400: probably the same, not checked) | inside the VL805 (VIA) | **no**: not Broadcom, no documentation | keep |
 
