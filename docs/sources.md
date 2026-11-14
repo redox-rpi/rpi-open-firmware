@@ -46,7 +46,8 @@ A source moves to **no** after 12 months without a change, and back to
 
 ## VPU toolchain and simulator
 
-Our own forks: [redox-rpi/tinycc](https://github.com/redox-rpi/tinycc),
+Our own forks: [redox-rpi/tinycc](https://github.com/redox-rpi/tinycc)
+(VC4 backend docs in its `docs/`: decisions, components),
 [redox-rpi/resim](https://github.com/redox-rpi/resim) (its README lists
 where each change comes from), [redox-rpi/vc4-toolchain](https://github.com/redox-rpi/vc4-toolchain).
 

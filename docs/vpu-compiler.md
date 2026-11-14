@@ -20,10 +20,9 @@ The firmware work (M2, M3) goes on with GCC regardless.
 
 ## Decision: TCC or GCC for the VPU firmware (draft, for the maintainer)
 
-State 2026-11-11, written by the tcc-vc4 session. Details:
-[tcc-vc4.md](tcc-vc4.md), code in
-[redox-rpi/tinycc PR #1](https://github.com/redox-rpi/tinycc/pull/1)
-(branch `vc4`, 8e1c7814).
+State 2026-11-11, written by the tcc-vc4 session. Today: code in
+[redox-rpi/tinycc](https://github.com/redox-rpi/tinycc) `main`, decisions
+and licence in tinycc [vc4-decisions.md](https://github.com/redox-rpi/tinycc/blob/main/docs/vc4-decisions.md), the parts in [vc4-components.md](https://github.com/redox-rpi/tinycc/blob/main/docs/vc4-components.md).
 
 **Where TCC stands.** The whole `bootcode/` (all C files, `monitor.c`
 with its inline asm, `start.S`) builds with `vc4-tcc`, and since
@@ -201,10 +200,9 @@ within a day how complete the backend is.
 
 ## TCC spike result
 
-State 2026-11-11, end of the first day. Details, milestones and open
-questions: [tcc-vc4.md](tcc-vc4.md); code: branch `vc4` of
-[redox-rpi/tinycc](https://github.com/redox-rpi/tinycc), draft
-[PR #1](https://github.com/redox-rpi/tinycc/pull/1).
+State 2026-11-11, end of the first day. Decisions: tinycc
+[vc4-decisions.md](https://github.com/redox-rpi/tinycc/blob/main/docs/vc4-decisions.md); code: [redox-rpi/tinycc](https://github.com/redox-rpi/tinycc)
+`main`; open work: its issues.
 
 - **Builds:** the whole `bootcode/` (C, inline asm, `.S`) builds with
   `vc4-tcc`, and TCC's own linker links it (8e1c7814, with a small firmware change; see the decision note above). Every instruction form agrees with
@@ -222,8 +220,8 @@ questions: [tcc-vc4.md](tcc-vc4.md); code: branch `vc4` of
 
 ## Proposed next steps
 
-The TCC spike has started as a work package of its own: plan and
-decisions in [tcc-vc4.md](tcc-vc4.md).
+The TCC spike has started as a work package of its own: decisions
+in tinycc [vc4-decisions.md](https://github.com/redox-rpi/tinycc/blob/main/docs/vc4-decisions.md).
 
 1. **Freeze GCC** (container, or Nix's `pkgsCross.vc4` as librerpi does, see [sources.md](sources.md)), as fallback and reference.
 2. **Check the LLVM backend** (above, about a day): if it is nearly
