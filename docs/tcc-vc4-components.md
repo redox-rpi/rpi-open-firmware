@@ -1,10 +1,9 @@
 # TinyCC VC4: the components
 
-**Draft**, 2026-11-13. This page describes the parts of the TinyCC VC4
+**Draft**, 2026-11-14. This page describes the parts of the TinyCC VC4
 backend, what each one does and how they fit together. Plan, milestones
 and decisions are in [tcc-vc4.md](tcc-vc4.md). The code is in
-[redox-rpi/tinycc](https://github.com/redox-rpi/tinycc), branch `vc4`
-(PR #1); the file `README-vc4.md` there has the build commands.
+[redox-rpi/tinycc](https://github.com/redox-rpi/tinycc), branch `main`; the file `README-vc4.md` there has the build commands.
 
 The firmware build stays on GCC 6.2.1. TCC is our own, independent
 toolchain, tested every night next to it (WBS 2.15).
@@ -142,6 +141,9 @@ vc4-toolchain project, built on homenodellm in
 simulated mini UART. Our build carries local fixes and additions:
 - `asr` fixed twice: negative values (`||` for `|`) and a shift by 0 of a
   negative value (gave -1; found by the csmith test)
+- the first csmith run also found a TCC bug: offsets in data relocations
+  (`&b[1]` in a static initializer) were lost with `vc4-elf-ld`
+  (tinycc#6, fixed by #7); after the fix, 0 of 1,000 programs differ
 - an instruction counter (`VC4EMUL_COUNT`) and a pc histogram
   (`VC4EMUL_PROF`) for speed work
 - `bitflip` (so GCC's `fat.c` runs for comparison)
@@ -162,6 +164,7 @@ resim runs about 20 M VC4 instructions per second per core.
 | `tests2-diff.sh` | TinyCC's own test programs (tests/tests2) in resim, compiled by this build and by a reference build; outputs must match |
 | `csmith-diff.sh` | random programs from csmith in the integer subset, host gcc against vc4-tcc in resim, checksums must match; one JSON line per run for the KPIs (tinycc#3) |
 | `csmith-reduce.sh` | shrinks a mismatching csmith program with creduce to a small case for an issue |
+| `csmith-weekly.sh` | the weekly run (systemd timer on homenodellm, Tuesday 12:00 UTC): 1,000 programs from the newest `main`, line to pi-tests `tcc.jsonl` |
 
 Support files: `sim-crt.S` (start code), `sim-rt.c` (small printf on the
 simulated UART), `sim-libc.c` (`memcpy` and friends for all-TCC builds).
@@ -175,9 +178,10 @@ same automatically.
 
 | What | Where |
 |---|---|
-| Code, PRs | redox-rpi/tinycc, branch `vc4` (PR #1), csmith test PR #4 |
+| Code, PRs | redox-rpi/tinycc, `main` (backend PR #1 merged 2026-11-14), csmith test PR #4 |
 | Plan, decisions, milestones | [tcc-vc4.md](tcc-vc4.md), [vpu-compiler.md](vpu-compiler.md) |
 | Build clone, test images | homenodellm `~/rbc-build/tcc-vc4`, `~/rbc-build/payloads` |
 | resim build | homenodellm `~/rbc-build/tcc-vc4-tools/resim` |
 | GCC toolchain (reference) | homenodellm `~/rbc-build/toolchains/prefix` (vc4-elf-gcc 6.2.1) |
 | Pi test reports | redox-rpi/pi-tests `reports/` |
+| csmith results | redox-rpi/pi-tests `tcc.jsonl`; programs and logs on homenodellm `~/rbc-build/tcc-csmith-work` |
