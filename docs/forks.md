@@ -60,6 +60,32 @@ What it means for us:
   was a side effect. Since then he and the maintainer talk in a Matrix
   room.
 
+## resim, the VPU simulator (2026-11-14)
+
+resim runs vc4-tcc's tests (tinycc `tests/vc4`). All forks and their
+branches were cloned and compared commit by commit:
+
+| Repository | Own commits | What | Licence |
+|---|---|---|---|
+| [mgottschlag/resim](https://github.com/mgottschlag/resim) (original) | – | Mathias Gottschlag, 2012: libresim, an ARM part and the VideoCore IV scalar core with `vc4emul`; last code change 2012-11, `LICENSE` added 2020-03 (77de984) | MIT |
+| [itszor/resim](https://github.com/itszor/resim) (= puppeh/resim, renamed) | 15 | Julian Brown, 2015-16, for the GCC port's test suite: semihosted mini UART, DejaGNU target `vc4-teststub`, ROR, FABS, fmin/fmax, division by immediate, sign-extension and carry fixes (his own messages: "guessed", "unverified"); plus andryblack's "remove qt dependency" (2022) | none stated; branched off before the `LICENSE` commit |
+| [cleverca22/resim](https://github.com/cleverca22/resim) | 2 on top of itszor's `cdc7808` (2020-02) | Michael Bishop (librerpi), for running Broadcom's boot ROM: **`switch` (`switchb`, `switch16`)**, `bitflip`, `abs`, `mulhd.uu`, divide decode, 16-bit MMIO, a start of the vector register file, a UART relay over TCP; also a debug call-graph hack that needs `entry-points.txt` and crashes without it | none stated |
+| andryblack/resim, Bin-Samuel/resim | 0 | copies of itszor's (andryblack's Qt commit is in itszor's) | – |
+| [redox-rpi/resim](https://github.com/redox-rpi/resim) | – | our fork of the original (2026-11-14), so it has `LICENSE` | MIT |
+
+Not in any fork, ours only (local patch so far): `asr` for negative values
+and for a shift by 0, an instruction counter and a pc profile, and the
+build fixes for current g++ and CMake 4.
+
+**Plan for redox-rpi/resim:** take itszor's 15 commits (what the GCC
+toolchain uses) on top of the original with `LICENSE`, then our patch,
+then from cleverca22 only `switch`, `abs` and `mulhd.uu` (with his name in
+the commit), without the boot-ROM debug code. `switch` closes the gap that
+makes GCC code need `-fno-jump-tables` in the tests. Licence: the
+additions of Julian Brown and Michael Bishop state no licence of their
+own; they were made as public forks of an MIT project. Asking them to
+confirm MIT is the user's call (outside contact).
+
 ## Everything else
 
 | Network | Forks | With own work | Verdict |
@@ -78,6 +104,7 @@ What it means for us:
 | phire/llvm | 6 | ryarnyah (2013, older) | – |
 | maazl/vc4asm (QPU) | 17 | small fixes (Jay-Madden 2026, LoekHabets 2024, YggdrasiI 2017) | – |
 | thubble/videocore-elf-dis | 1 | none | – |
+| mgottschlag/resim (VPU simulator) | 3 | itszor (15), cleverca22 (2 more) | see the resim section above |
 
 Method: `scratchpad/forks.sh`-style walk with the GitHub API (forks of
 forks included); for the big network every branch of every fork was
