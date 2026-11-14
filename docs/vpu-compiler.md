@@ -225,7 +225,7 @@ questions: [tcc-vc4.md](tcc-vc4.md); code: branch `vc4` of
 The TCC spike has started as a work package of its own: plan and
 decisions in [tcc-vc4.md](tcc-vc4.md).
 
-1. **Freeze GCC** (container, or Nix's `pkgsCross.vc4` as librerpi does, see [librerpi.md](librerpi.md)), as fallback and reference.
+1. **Freeze GCC** (container, or Nix's `pkgsCross.vc4` as librerpi does, see [sources.md](sources.md)), as fallback and reference.
 2. **Check the LLVM backend** (above, about a day): if it is nearly
    complete, it changes the picture, at least for a modern compiler and
    Rust.

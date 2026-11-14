@@ -13,8 +13,7 @@
 | [test-results.md](test-results.md) | Every Pi test of this repository |
 | [rpi-open-firmware-2019.md](rpi-open-firmware-2019.md) | Upstream's firmware on our Pi 3B+, and the 3B+ risks |
 | [lk-overlay.md](lk-overlay.md) | librerpi/lk-overlay on our Pi 3B+, with our three patches |
-| [librerpi.md](librerpi.md) | Every librerpi repository (lk-overlay, their continued rpi-open-firmware with about 100 hardware notes, rpi-tools, RP1, JTAG) and what it is good for |
-| [forks.md](forks.md) | Forks of every source we use: glennra's November 2026 Pi 3B Linux boot without Broadcom firmware (DSI display, ARM handoff), and what the rest hold |
+| [sources.md](sources.md) | Every outside source (Raspberry Pi, librerpi, glennra, VPU toolchain and simulator) with its last change and whether we watch it |
 | [vpu-compiler.md](vpu-compiler.md) | Discussion: fewer toolchain dependencies (TinyCC fork with a VC4 backend, the existing LLVM VideoCore4 backend, alternatives, sources for the instruction encoding) |
 | [tcc-vc4.md](tcc-vc4.md) | Draft plan: TinyCC fork with a VC4 backend (decisions, milestones, host test, open questions) |
 | [tcc-vc4-components.md](tcc-vc4-components.md) | Draft: the parts of the TinyCC VC4 backend (encoder, code generator, assembler, linker, resim, tests) and how they fit together |

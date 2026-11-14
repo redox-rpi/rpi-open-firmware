@@ -138,7 +138,7 @@ define (list in `README-vc4.md`):
 Most tests run VC4 code in resim's `vc4emul`, a VPU simulator by Mathias
 Gottschlag (2012, MIT) that Julian Brown extended for the vc4 GCC port.
 We use our fork [redox-rpi/resim](https://github.com/redox-rpi/resim)
-(PR #1; all forks compared in [forks.md](forks.md)); versions and build
+(PR #1; sources and their status in [sources.md](sources.md)); versions and build
 scripts are in [redox-rpi/vc4-toolchain](https://github.com/redox-rpi/vc4-toolchain).
 Test programs print through a simulated mini UART. Our fork adds:
 - `asr` fixed for negative values and for a shift by 0 (found by the
