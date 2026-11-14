@@ -135,21 +135,21 @@ define (list in `README-vc4.md`):
 
 ## The simulator: resim (vc4emul)
 
-Most tests run VC4 code in resim's `vc4emul`, a VPU simulator from the
-vc4-toolchain project. Our fork with all fixes is [redox-rpi/resim](https://github.com/redox-rpi/resim) (MIT; origin,
-changes and build in its README; branch `vc4-tests`). Test programs print
-through a simulated mini UART. The fork's fixes and additions:
-- `asr` fixed twice: negative values (`||` for `|`) and a shift by 0 of a
-  negative value (gave -1; found by the csmith test)
-- the first csmith run also found a TCC bug: offsets in data relocations
-  (`&b[1]` in a static initializer) were lost with `vc4-elf-ld`
-  (tinycc#6, fixed by #7); after the fix, 0 of 1,000 programs differ
+Most tests run VC4 code in resim's `vc4emul`, a VPU simulator by Mathias
+Gottschlag (2012, MIT) that Julian Brown extended for the vc4 GCC port.
+We use our fork [redox-rpi/resim](https://github.com/redox-rpi/resim)
+(PR #1; all forks compared in [forks.md](forks.md)); versions and build
+scripts are in [redox-rpi/vc4-toolchain](https://github.com/redox-rpi/vc4-toolchain).
+Test programs print through a simulated mini UART. Our fork adds:
+- `asr` fixed for negative values and for a shift by 0 (found by the
+  csmith test)
+- `switch` (GCC jump tables), `bitflip`, `abs`, `mulhd.uu`
 - an instruction counter (`VC4EMUL_COUNT`) and a pc histogram
   (`VC4EMUL_PROF`) for speed work
-- `bitflip` (so GCC's `fat.c` runs for comparison)
+- builds with current g++ and CMake 4
 
 Known gaps: no `ldsb` (so vc4-tcc loads signed bytes with `ldb` plus
-shifts) and no `switch` instruction (GCC code needs `-fno-jump-tables`).
+shifts) and no vector instructions.
 resim runs about 20 M VC4 instructions per second per core.
 
 ## Tests (`tests/vc4` in the tinycc repo)
