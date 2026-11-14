@@ -136,9 +136,9 @@ define (list in `README-vc4.md`):
 ## The simulator: resim (vc4emul)
 
 Most tests run VC4 code in resim's `vc4emul`, a VPU simulator from the
-vc4-toolchain project, built on homenodellm in
-`~/rbc-build/tcc-vc4-tools/resim`. Test programs print through a
-simulated mini UART. Our build carries local fixes and additions:
+vc4-toolchain project. Our fork with all fixes is [redox-rpi/resim](https://github.com/redox-rpi/resim) (MIT; origin,
+changes and build in its README; branch `vc4-tests`). Test programs print
+through a simulated mini UART. The fork's fixes and additions:
 - `asr` fixed twice: negative values (`||` for `|`) and a shift by 0 of a
   negative value (gave -1; found by the csmith test)
 - the first csmith run also found a TCC bug: offsets in data relocations
@@ -181,7 +181,8 @@ same automatically.
 | Code, PRs | redox-rpi/tinycc, `main` (backend PR #1 merged 2026-11-14), csmith test PR #4 |
 | Plan, decisions, milestones | [tcc-vc4.md](tcc-vc4.md), [vpu-compiler.md](vpu-compiler.md) |
 | Build clone, test images | homenodellm `~/rbc-build/tcc-vc4`, `~/rbc-build/payloads` |
-| resim build | homenodellm `~/rbc-build/tcc-vc4-tools/resim` |
+| resim | [redox-rpi/resim](https://github.com/redox-rpi/resim), branch `vc4-tests`; built on homenodellm in `~/rbc-build/tcc-vc4-tools/resim` |
+| Toolchain versions, build scripts | [redox-rpi/vc4-toolchain](https://github.com/redox-rpi/vc4-toolchain) (being set up) |
 | GCC toolchain (reference) | homenodellm `~/rbc-build/toolchains/prefix` (vc4-elf-gcc 6.2.1) |
 | Pi test reports | redox-rpi/pi-tests `reports/` |
 | csmith results | redox-rpi/pi-tests `tcc.jsonl`; programs and logs on homenodellm `~/rbc-build/tcc-csmith-work` |

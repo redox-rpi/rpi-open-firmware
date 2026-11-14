@@ -80,7 +80,7 @@ Findings on the way:
 - TCC has no `stdint.h`; the spike uses newlib's from the vc4 toolchain.
   For the Pi build a small freestanding `stdint.h` belongs in the fork.
 - resim's `asr` returns 1 for every negative value (`||` for `|`); fixed
-  in our resim build, noted in README-vc4.md.
+  in our fork [redox-rpi/resim](https://github.com/redox-rpi/resim).
 - resim has no `ldsb` (GCC uses the 32-bit form on the Pi), so vc4-tcc
   loads signed bytes with `ldb` and `shl`/`asr` for now. Going back to
   `ldsb` saves 2 bytes per load, once a Pi test or a patched resim checks it.
@@ -136,12 +136,13 @@ Two levels:
 1. **Encoder test** (M0): every instruction form against `vc4-elf-as`.
 2. **Functional test** (M2, `tests/vc4/fat-sim.sh`): `fat.c` built by TCC
    runs in `resim`/`vc4emul` (the simulator the VC4 GCC port was tested
-   with; built in `~/rbc-build/tcc-vc4-tools/resim` with the maintainer's
-   OK, 2026-11-11). The memory image holds a test driver and a FAT16 or
+   with; our fork is [redox-rpi/resim](https://github.com/redox-rpi/resim), first built with the
+   maintainer's OK, 2026-11-11). The memory image holds a test driver and a FAT16 or
    FAT32 card image like `bootcode/tests/fat-test.sh` makes; every file
-   must load with the size and checksum of the original. resim lacks
-   `switch` and `bitflip #imm`, so GCC's `fat.c` cannot run there (the
-   driver brings its own `printf` for the same reason).
+   must load with the size and checksum of the original. resim lacked
+   `switch` and `bitflip #imm` at first, so GCC's `fat.c` could not run
+   there (the driver brings its own `printf` for the same reason); the fork
+   has both now.
 
 ## Open
 
