@@ -137,7 +137,7 @@ our own VPU loader (M2) replaces the built-in Broadcom image.
 | `monitor.c`, `go-test.S`, `rbc-load.sh`, `libc.c` | serial monitor (test builds), its test payload and host script, `memset`/`memcpy` | new; cache flush registers from Broadcom's `vpu_l1_cache_ctrl.h` |
 | `sdram.c` | LPDDR2 set-up and self test | rpi-open-firmware `firmware/sdram.c` (Julian Brown and the rpi-open-firmware authors); sequence, timings and magic values unchanged; self test extended |
 | `hw.h` | common header | new; register names from Broadcom's headers |
-| `../firmware/broadcom/` | VideoCore IV register definitions | released by Broadcom (BSD), used as they are |
+| `../broadcom/` | VideoCore IV register definitions | released by Broadcom (BSD), used as they are |
 
 rpi-open-firmware commit `82a6264` (GPLv2+). Its VPU code brought up our
 Pi's 1 GB Elpida LPDDR2 in Pi test #224. lk-overlay (librerpi, `50c95c1`,

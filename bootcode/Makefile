@@ -18,7 +18,8 @@ CHAIN_IMAGE ?=
 
 # Broadcom's register headers (BSD) through upstream's glue, as system
 # headers so their style does not trip our warnings
-INCLUDES := -I. -isystem ../firmware -isystem ../firmware/vc4_include
+FW_DIR ?= ..
+INCLUDES := -I. -isystem $(FW_DIR) -isystem $(FW_DIR)/vc4_include
 
 CFLAGS := -std=c11 -Os -ffreestanding -fno-builtin -nostdlib \
 	-Wall -Wextra -Werror -Wno-multichar \
