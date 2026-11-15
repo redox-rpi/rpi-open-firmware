@@ -17,6 +17,9 @@
  * Every wait has a time limit, so a missing step shows up as a line on the
  * UART, not as a hang. The HDMI core is only touched after its power
  * domain, PLLH and the HSM clock are on: without them a read hangs the bus.
+ * Pixel valve 2 and the HD block need the image power domain: a read there
+ * hung the bus while it was off (Pi test row 433; the boot path powers it
+ * with USB, the monitor did not).
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -255,6 +258,10 @@ static bool dvi_mode(void) {
 }
 
 void hdmi_status(void) {
+	if (!(PM_IMAGE & PM_IMAGE_PERIRSTN_SET)) {
+		printf("hdmi: image power domain off, not reading the pixel valve or HD\n");
+		return;
+	}
 	if (!(CM_HSMCTL & XCM_ENAB)) {
 		printf("hdmi: HSM clock off, not reading the HDMI core\n");
 		return;
@@ -272,6 +279,11 @@ void hdmi_status(void) {
 bool hdmi_on(uint32_t rgb) {
 	printf("hdmi: 1920x1080 60 Hz DVI, colour %06X\n", rgb & 0xffffff);
 	hvs_channel(rgb);
+	if (!image_domain_on()) {
+		printf("hdmi: image power domain did not come up, PM_IMAGE %08X\n", PM_IMAGE);
+		return false;
+	}
+	printf("hdmi: image power domain on, PM_IMAGE %08X\n", PM_IMAGE);
 	if (!hdmi_power() || !pllh_on() || !hsm_on())
 		return false;
 	hdmi_reset_and_timing();

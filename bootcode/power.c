@@ -87,6 +87,17 @@ static bool image_power_on(void) {
 	return true;
 }
 
+/*
+ * The image domain on its own, for HDMI (hdmi.c): pixel valve 2 and the HD
+ * block sit in it, and a read there hangs the bus while it is off (Pi test
+ * row 433). Nothing to do when it is already up, e.g. after usb_power_on.
+ */
+bool image_domain_on(void) {
+	if (PM_IMAGE & PM_IMAGE_PERIRSTN_SET)
+		return true;
+	return image_power_on();
+}
+
 static void mdio_wait(void) {
 	for (int i = 0; i < 100000 && (USB_GMDIOCSR & MDIO_BUSY); i++) {
 	}

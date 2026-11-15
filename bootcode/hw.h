@@ -94,6 +94,7 @@ void mbox_serve(void) __attribute__((noreturn));
 
 /* power.c (monitor builds): image and USB power domains, USB PHY */
 bool usb_power_on(void);
+bool image_domain_on(void);
 
 /* hdmi.c (monitor builds): 1080p60 DVI with one colour (#442 step 1) */
 bool hdmi_on(uint32_t rgb);
