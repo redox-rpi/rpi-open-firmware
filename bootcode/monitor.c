@@ -42,6 +42,10 @@
  *   i2cw A R V     write V to register R of I2C device A -> ok i2cw
  *   exp            GPIO expander: LAN_RUN and power LED on -> ok exp
  *   usbon          power up USB as boot64 does (clocks, expander) -> ok usbon
+ *   hdmi [RGB]     1920x1080 60 Hz DVI on HDMI, one colour 0xRRGGBB from the
+ *                  HVS background (default ff8000, orange) (hdmi.c, #442)
+ *                  -> step lines, then ok hdmi or err hdmi
+ *   hdmistat       frame counter, pixel valve, scheduler, hotplug -> ok hdmistat
  *   regs           clock/PLL/GPIO registers next to start.elf's -> ok regs N
  *   vpuclk D       VPU clock PLLC CORE0 / D (3..8; 4 = 250 MHz) -> ok vpuclk
  *   armmax M       top ARM clock for the mailbox in MHz, hex (258..578;
@@ -435,6 +439,14 @@ static bool run(int argc, char **argv) {
 	} else if (!strcmp_s(c, "vpuclk") && n == 1 && a[0] >= 3 && a[0] <= 8) {
 		vpu_clock(a[0]);
 		printf("ok vpuclk PLLC CORE0 / %u, CM_VPUCTL %08X DIV %08X\n", a[0], CM_VPUCTL, CM_VPUDIV);
+	} else if (!strcmp_s(c, "hdmi") && n <= 1) {
+		if (hdmi_on(n ? a[0] : 0xff8000u))
+			printf("ok hdmi\n");
+		else
+			printf("err hdmi: see the lines above\n");
+	} else if (!strcmp_s(c, "hdmistat") && n == 0) {
+		hdmi_status();
+		printf("ok hdmistat\n");
 	} else if (!strcmp_s(c, "regs") && n == 0) {
 		regs_compare();
 	} else if (!strcmp_s(c, "usbon") && n == 0) {
@@ -450,7 +462,7 @@ static bool run(int argc, char **argv) {
 		printf("ok boot\n");
 		return true;
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | regs | vpuclk D | armmax M | boot64 [K [DTB]] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | hdmi [RGB] | hdmistat | regs | vpuclk D | armmax M | boot64 [K [DTB]] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();
