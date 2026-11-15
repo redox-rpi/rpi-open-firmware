@@ -1,0 +1,20 @@
+diff --git a/platform/bcm28xx/sdhost/sdhost_impl.cpp b/platform/bcm28xx/sdhost/sdhost_impl.cpp
+index f5c31ea..c590eff 100644
+--- a/platform/bcm28xx/sdhost/sdhost_impl.cpp
++++ b/platform/bcm28xx/sdhost/sdhost_impl.cpp
+@@ -627,6 +627,15 @@ struct BCM2708SDHost : BlockDevice {
+ 
+   status_t restart_controller() {
+     LTRACEF("\n");
++#ifndef ARCH_VPU
++    // redox-rpi: on the ARM nothing sets vpu_clock (platform.c only does it
++    // on the VPU), so it stays 0, SH_CDIV becomes 0 and the card clock runs
++    // at core/2, about 125 MHz: multi-block reads then fail with FIFO
++    // errors (Pi test #254). Stage 2 on the VPU leaves the core clock at
++    // PLLC 500 MHz / CORE0 2 = 250 MHz (PLLC_FREQ_MHZ, PLLC_CORE0_DIV).
++    if (!vpu_clock)
++      vpu_clock = 250;
++#endif
+     is_sdhc = false;
+     rca = 0;
+ 

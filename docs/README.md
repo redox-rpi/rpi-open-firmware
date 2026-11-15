@@ -1,0 +1,20 @@
+# Documentation
+
+| Page | What |
+|---|---|
+| [models.md](models.md) | The Pi models and their hardware: chip, cores, memory, USB, network, Wi-Fi, our test boards |
+| [hardware/pi3b-plus.md](hardware/pi3b-plus.md) | Pi 3B+ hardware: chip block diagram, address maps, boot, clocks, power chip, peripherals, GPIO, USB |
+| [hardware/pi400.md](hardware/pi400.md) | Pi 400 hardware (BCM2711): address maps, EEPROM boot, GIC, PCIe and VL805, GENET |
+| [hardware/pi5.md](hardware/pi5.md) | Pi 5 and CM5 hardware (BCM2712 + RP1): boot, PSCI, debug UART, from public documents |
+| [broadcom/](broadcom/README.md) | Broadcom's firmware per model, every closed piece, and one page per file (`bootcode.bin`, `start*.elf`, `fixup*.dat`, `armstub8`, devicetree, overlays, licence): what is inside |
+| [boot-chain.md](boot-chain.md) | Broadcom's boot pieces, how each redox-rpi release starts, the steps to the end goal, with pictures |
+| [own-firmware.md](own-firmware.md) | Our firmware ([redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230)): milestones, monitor, boot selector, ARM start, findings |
+| [test-results.md](test-results.md) | Every Pi test of this repository |
+| [rpi-open-firmware-2019.md](rpi-open-firmware-2019.md) | Upstream's firmware on our Pi 3B+, and the 3B+ risks |
+| [lk-overlay.md](lk-overlay.md) | librerpi/lk-overlay on our Pi 3B+, with our three patches |
+| [sources.md](sources.md) | Every outside source (Raspberry Pi, librerpi, glennra, VPU toolchain and simulator) with its last change and whether we watch it |
+| [vpu-compiler.md](vpu-compiler.md) | Discussion: fewer toolchain dependencies (TinyCC fork with a VC4 backend, the existing LLVM VideoCore4 backend, alternatives, sources for the instruction encoding). The TinyCC VC4 backend itself is documented in redox-rpi/tinycc `docs/` ([vc4-decisions.md](https://github.com/redox-rpi/tinycc/blob/main/docs/vc4-decisions.md), [vc4-components.md](https://github.com/redox-rpi/tinycc/blob/main/docs/vc4-components.md)) |
+| [socdump.md](socdump.md) | Register dumps as reference values for the firmware |
+| [upstream-README.md](upstream-README.md) | Kristina Brooks's original README, with its credits |
+
+Command reference for our firmware: [bootcode/README.md](https://github.com/redox-rpi/rpi-open-firmware/blob/bootcode/bootcode/README.md) on branch `bootcode`.

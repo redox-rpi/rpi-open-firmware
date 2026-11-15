@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="340" viewBox="0 0 680 340" role="img"><title>Steps towards no Broadcom code after the Boot ROM</title>
+<style>
+text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:12px;fill:#5F5E5A}
+.h{font-size:14px;font-weight:600;fill:#2C2C2A}
+.bc rect{fill:#FAECE7;stroke:#993C1D}.bc text{fill:#712B13}
+.ours rect{fill:#E1F5EE;stroke:#0F6E56}.ours text{fill:#085041}
+.open rect{fill:#F1EFE8;stroke:#5F5E5A}.open text{fill:#444441}
+.gone rect{fill:none;stroke:#888780;stroke-dasharray:3 3}
+rect{stroke-width:0.6}.sep{stroke:#888780;stroke-width:0.6;stroke-dasharray:4 4}
+@media (prefers-color-scheme:dark){
+text{fill:#B4B2A9}.h{fill:#F1EFE8}
+.bc rect{fill:#712B13;stroke:#F0997B}.bc text{fill:#FAECE7}
+.ours rect{fill:#085041;stroke:#5DCAA5}.ours text{fill:#E1F5EE}
+.open rect{fill:#444441;stroke:#B4B2A9}.open text{fill:#F1EFE8}
+.gone rect{stroke:#B4B2A9}}
+</style>
+<text class="h" x="205.0" y="50" text-anchor="middle">ROM</text>
+<text class="h" x="283.0" y="50" text-anchor="middle">bootcode</text>
+<text class="h" x="361.0" y="50" text-anchor="middle">start.elf</text>
+<text class="h" x="439.0" y="50" text-anchor="middle">mailbox</text>
+<text class="h" x="517.0" y="50" text-anchor="middle">HDMI</text>
+<text class="h" x="595.0" y="50" text-anchor="middle">armstub8</text>
+<text class="h" x="40" y="88" dominant-baseline="central">today</text>
+<g class="bc"><rect x="170" y="70" width="70" height="36" rx="4"/><text x="205.0" y="88.0" text-anchor="middle" dominant-baseline="central">in chip</text></g>
+<g class="bc"><rect x="248" y="70" width="70" height="36" rx="4"/><text x="283.0" y="88.0" text-anchor="middle" dominant-baseline="central">Broadcom</text></g>
+<g class="bc"><rect x="326" y="70" width="70" height="36" rx="4"/><text x="361.0" y="88.0" text-anchor="middle" dominant-baseline="central">Broadcom</text></g>
+<g class="bc"><rect x="404" y="70" width="70" height="36" rx="4"/><text x="439.0" y="88.0" text-anchor="middle" dominant-baseline="central">Broadcom</text></g>
+<g class="bc"><rect x="482" y="70" width="70" height="36" rx="4"/><text x="517.0" y="88.0" text-anchor="middle" dominant-baseline="central">Broadcom</text></g>
+<g class="bc"><rect x="560" y="70" width="70" height="36" rx="4"/><text x="595.0" y="88.0" text-anchor="middle" dominant-baseline="central">Broadcom</text></g>
+<text class="h" x="40" y="132" dominant-baseline="central">own armstub8</text>
+<g class="bc"><rect x="170" y="114" width="70" height="36" rx="4"/><text x="205.0" y="132.0" text-anchor="middle" dominant-baseline="central">in chip</text></g>
+<g class="bc"><rect x="248" y="114" width="70" height="36" rx="4"/><text x="283.0" y="132.0" text-anchor="middle" dominant-baseline="central">Broadcom</text></g>
+<g class="bc"><rect x="326" y="114" width="70" height="36" rx="4"/><text x="361.0" y="132.0" text-anchor="middle" dominant-baseline="central">Broadcom</text></g>
+<g class="bc"><rect x="404" y="114" width="70" height="36" rx="4"/><text x="439.0" y="132.0" text-anchor="middle" dominant-baseline="central">Broadcom</text></g>
+<g class="bc"><rect x="482" y="114" width="70" height="36" rx="4"/><text x="517.0" y="132.0" text-anchor="middle" dominant-baseline="central">Broadcom</text></g>
+<g class="ours"><rect x="560" y="114" width="70" height="36" rx="4"/><text x="595.0" y="132.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<text class="h" x="40" y="176" dominant-baseline="central">M1 + M2</text>
+<g class="bc"><rect x="170" y="158" width="70" height="36" rx="4"/><text x="205.0" y="176.0" text-anchor="middle" dominant-baseline="central">in chip</text></g>
+<g class="ours"><rect x="248" y="158" width="70" height="36" rx="4"/><text x="283.0" y="176.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<g class="ours"><rect x="326" y="158" width="70" height="36" rx="4"/><text x="361.0" y="176.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<g class="gone"><rect x="404" y="158" width="70" height="36" rx="4"/><text x="439.0" y="176.0" text-anchor="middle" dominant-baseline="central">missing</text></g>
+<g class="gone"><rect x="482" y="158" width="70" height="36" rx="4"/><text x="517.0" y="176.0" text-anchor="middle" dominant-baseline="central">missing</text></g>
+<g class="ours"><rect x="560" y="158" width="70" height="36" rx="4"/><text x="595.0" y="176.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<text class="h" x="40" y="220" dominant-baseline="central">M3 mailbox</text>
+<g class="bc"><rect x="170" y="202" width="70" height="36" rx="4"/><text x="205.0" y="220.0" text-anchor="middle" dominant-baseline="central">in chip</text></g>
+<g class="ours"><rect x="248" y="202" width="70" height="36" rx="4"/><text x="283.0" y="220.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<g class="ours"><rect x="326" y="202" width="70" height="36" rx="4"/><text x="361.0" y="220.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<g class="ours"><rect x="404" y="202" width="70" height="36" rx="4"/><text x="439.0" y="220.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<g class="gone"><rect x="482" y="202" width="70" height="36" rx="4"/><text x="517.0" y="220.0" text-anchor="middle" dominant-baseline="central">missing</text></g>
+<g class="ours"><rect x="560" y="202" width="70" height="36" rx="4"/><text x="595.0" y="220.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<text class="h" x="40" y="264" dominant-baseline="central">M4 display</text>
+<g class="bc"><rect x="170" y="246" width="70" height="36" rx="4"/><text x="205.0" y="264.0" text-anchor="middle" dominant-baseline="central">in chip</text></g>
+<g class="ours"><rect x="248" y="246" width="70" height="36" rx="4"/><text x="283.0" y="264.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<g class="ours"><rect x="326" y="246" width="70" height="36" rx="4"/><text x="361.0" y="264.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<g class="ours"><rect x="404" y="246" width="70" height="36" rx="4"/><text x="439.0" y="264.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<g class="ours"><rect x="482" y="246" width="70" height="36" rx="4"/><text x="517.0" y="264.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<g class="ours"><rect x="560" y="246" width="70" height="36" rx="4"/><text x="595.0" y="264.0" text-anchor="middle" dominant-baseline="central">ours</text></g>
+<g class="bc"><rect x="150" y="306" width="14" height="14" rx="3"/></g><text x="172" y="317">Broadcom</text><g class="ours"><rect x="270" y="306" width="14" height="14" rx="3"/></g><text x="292" y="317">our code</text><g class="gone"><rect x="390" y="306" width="14" height="14" rx="3"/></g><text x="412" y="317">missing (no replacement yet)</text>
+</svg>
