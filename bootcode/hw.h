@@ -91,13 +91,29 @@ extern bool g_mbox_on;
 void mbox_start(void);
 void mbox_poll(void);
 void mbox_serve(void) __attribute__((noreturn));
+/* monitor: ask for a framebuffer through the real tag path, as U-Boot does */
+bool mbox_fb_test(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t *base, uint32_t *pitch);
 
 /* power.c (monitor builds): image and USB power domains, USB PHY */
 bool usb_power_on(void);
 bool image_domain_on(void);
 
-/* hdmi.c (monitor builds): 1080p60 DVI with one colour (#442 step 1) */
+/* the ARM's framebuffer as the mailbox describes it (mbox.c g_fb) */
+struct fb_view {
+	uint32_t base; /* bus address */
+	uint32_t w, h, vw, vh, depth, order, xoff, yoff; /* order: 0 BGR, 1 RGB */
+};
+
+/* hvs.c */
+#define HVS_PLANE_WORDS 7u
+uint32_t hvs_plane(uint32_t *dl, const struct fb_view *v, uint32_t scr_w, uint32_t scr_h);
+uint32_t fb_pixel(uint32_t rgb, uint32_t depth, uint32_t order);
+uint32_t fb_pattern(volatile uint8_t *fb, uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t pitch);
+
+/* hdmi.c (monitor builds): 1080p60 DVI, one colour (#442 step 1) or the
+ * ARM's framebuffer (step 2) */
 bool hdmi_on(uint32_t rgb);
+void hdmi_fb(const struct fb_view *v); /* show it (v == NULL: background only) */
 void hdmi_status(void);
 
 /* i2c.c (monitor builds): bit-banged I2C on GPIO 46/47, reads only */

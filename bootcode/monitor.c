@@ -45,7 +45,12 @@
  *   hdmi [RGB]     1920x1080 60 Hz DVI on HDMI, one colour 0xRRGGBB from the
  *                  HVS background (default ff8000, orange) (hdmi.c, #442)
  *                  -> step lines, then ok hdmi or err hdmi
- *   hdmistat       frame counter, pixel valve, scheduler, hotplug -> ok hdmistat
+ *   fb W H D [O]   ask the mailbox for a W x H framebuffer of depth D (10 or
+ *                  20 for 16 or 32 bit), pixel order O (1 RGB, default; 0
+ *                  BGR), as U-Boot does; HDMI shows it; fill it with colour
+ *                  bars (#442 step 2) -> ok fb ... crc32 C, or err fb
+ *   hdmistat       frame counter, pixel valve, scheduler, plane, hotplug
+ *                  -> ok hdmistat
  *   regs           clock/PLL/GPIO registers next to start.elf's -> ok regs N
  *   vpuclk D       VPU clock PLLC CORE0 / D (3..8; 4 = 250 MHz) -> ok vpuclk
  *   armmax M       top ARM clock for the mailbox in MHz, hex (258..578;
@@ -337,6 +342,24 @@ static void cmd_fl(const char *name, const char *addr_s) {
 		printf("ok %s %u bytes crc32 %08X\n", name, (uint32_t)n, crc32((const volatile uint8_t *)addr, (uint32_t)n));
 }
 
+/* fb W H D [O]: the framebuffer path of #442 step 2, without the ARM */
+static void cmd_fb(uint32_t w, uint32_t h, uint32_t depth, uint32_t order) {
+	uint32_t base, pitch;
+	if (!mbox_fb_test(w, h, depth, order, &base, &pitch)) {
+		printf("err fb: the mailbox did not take %ux%u at %u bit\n", w, h, depth);
+		return;
+	}
+	if (depth != 16 && depth != 32) {
+		printf("err fb: %ux%u at %u bit allocated at %08X, but the pattern needs 16 or 32 bit\n", w, h, depth,
+		       base);
+		return;
+	}
+	volatile uint8_t *fb = (volatile uint8_t *)(ALIAS_UNCACHED | (base & 0x3fffffffu));
+	uint32_t bad = fb_pattern(fb, w, h, depth, order & 1, pitch);
+	printf("ok fb %ux%u %u bit %s at %08X pitch %u, pattern readback %s, crc32 %08X\n", w, h, depth,
+	       order & 1 ? "RGB" : "BGR", base, pitch, bad ? "BAD" : "ok", crc32(fb, pitch * h));
+}
+
 /* boot64 [KERNEL [DTB]]: see boot64.c; DTB "@N" (hex size) uses the N
  * bytes already at ARM 0x2000000, sent with "l c2000000 N C" */
 static void cmd_boot64(const char *kernel, const char *dtb) {
@@ -444,6 +467,8 @@ static bool run(int argc, char **argv) {
 			printf("ok hdmi\n");
 		else
 			printf("err hdmi: see the lines above\n");
+	} else if (!strcmp_s(c, "fb") && n >= 3 && n <= 4) {
+		cmd_fb(a[0], a[1], a[2], n == 4 ? a[3] : 1);
 	} else if (!strcmp_s(c, "hdmistat") && n == 0) {
 		hdmi_status();
 		printf("ok hdmistat\n");

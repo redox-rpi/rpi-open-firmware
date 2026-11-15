@@ -213,8 +213,9 @@ static uint32_t g_power[POWER_DEVICES];
 /* ---- framebuffer ---- */
 
 /*
- * A framebuffer in memory only: the tags answer as start.elf does, but
- * nothing scans it out (no HVS, pixel valve or HDMI set up yet). U-Boot
+ * The tags answer as start.elf does. In builds with HDMI (the monitor
+ * build, hdmi.c) the HVS scans the buffer out once it is allocated; in the
+ * release build it is still in memory only (#442 step 2). U-Boot
  * sets up no video without tag 0x40003 (Pi test 391: "Could not query
  * display resolution"), so the Redox bootloader gets no GOP output: no
  * menu, no env editor, no FRAMEBUFFER_* for vesad. It sits in the
@@ -223,10 +224,41 @@ static uint32_t g_power[POWER_DEVICES];
 #define FB_BASE (MBOX_ARM_MEM_SIZE + 0x400000u)
 #define FB_MAX 0xc00000u /* to 0x3f000000, the peripherals */
 
+/* with HDMI (#442) the physical size is the screen's: 1920x1080 */
+#if HDMI
+#define FB_W0 1920u
+#define FB_H0 1080u
+#else
+#define FB_W0 1024u
+#define FB_H0 768u
+#endif
+
 static struct {
 	uint32_t w, h, vw, vh, depth, order, alpha, xoff, yoff;
 	bool allocated;
-} g_fb = {1024, 768, 1024, 768, 32, 1, 2, 0, 0, false};
+} g_fb = {FB_W0, FB_H0, FB_W0, FB_H0, 32, 1, 2, 0, 0, false};
+
+/*
+ * HDMI step 2 (#442): once the ARM has allocated the framebuffer, hdmi.c
+ * shows it. A tag that changes it marks it; property() hands the result to
+ * hdmi_fb() once per request, after all its tags.
+ */
+#if HDMI
+static bool g_fb_dirty, g_fb_shown;
+#define FB_CHANGED() (g_fb_dirty = true)
+
+static void fb_show(void) {
+	g_fb_dirty = false;
+	if (!g_fb.allocated && !g_fb_shown)
+		return;
+	struct fb_view v = {0xc0000000u | FB_BASE, g_fb.w, g_fb.h, g_fb.vw, g_fb.vh,
+			    g_fb.depth, g_fb.order, g_fb.xoff, g_fb.yoff};
+	hdmi_fb(g_fb.allocated ? &v : 0);
+	g_fb_shown = g_fb.allocated;
+}
+#else
+#define FB_CHANGED() ((void)0)
+#endif
 
 static uint32_t fb_pitch(void) { return g_fb.vw * ((g_fb.depth + 7) / 8); }
 
@@ -363,12 +395,14 @@ static bool handle(volatile struct tag *t) {
 	/* framebuffer (see g_fb) */
 	case 0x00040001: /* allocate: alignment -> bus base, size */
 		g_fb.allocated = true;
+		FB_CHANGED();
 		r[0] = 0xc0000000u | FB_BASE;
 		r[1] = fb_pitch() * g_fb.vh;
 		reply(t, r, 8);
 		return true;
 	case 0x00048001: /* release */
 		g_fb.allocated = false;
+		FB_CHANGED();
 		reply(t, r, 0);
 		return true;
 	case 0x00040002: /* blank screen */
@@ -379,6 +413,7 @@ static bool handle(volatile struct tag *t) {
 		if (fb_fits(a, b, g_fb.depth)) {
 			g_fb.w = a;
 			g_fb.h = b;
+			FB_CHANGED();
 		}
 		/* fall through */
 	case 0x00040003: /* get physical size */
@@ -391,6 +426,7 @@ static bool handle(volatile struct tag *t) {
 		if (fb_fits(a, b, g_fb.depth)) {
 			g_fb.vw = a;
 			g_fb.vh = b;
+			FB_CHANGED();
 		}
 		/* fall through */
 	case 0x00040004:
@@ -400,8 +436,10 @@ static bool handle(volatile struct tag *t) {
 		reply(t, r, 8);
 		return true;
 	case 0x00048005: /* set depth */
-		if (fb_fits(g_fb.vw, g_fb.vh, a))
+		if (fb_fits(g_fb.vw, g_fb.vh, a)) {
 			g_fb.depth = a;
+			FB_CHANGED();
+		}
 		/* fall through */
 	case 0x00040005:
 	case 0x00044005:
@@ -410,6 +448,7 @@ static bool handle(volatile struct tag *t) {
 		return true;
 	case 0x00048006: /* set pixel order, 0 BGR 1 RGB */
 		g_fb.order = a & 1;
+		FB_CHANGED();
 		/* fall through */
 	case 0x00040006:
 	case 0x00044006:
@@ -432,6 +471,7 @@ static bool handle(volatile struct tag *t) {
 	case 0x00048009: /* set virtual offset */
 		g_fb.xoff = a;
 		g_fb.yoff = b;
+		FB_CHANGED();
 		/* fall through */
 	case 0x00040009:
 	case 0x00044009:
@@ -490,6 +530,10 @@ static void property(uint32_t bus) {
 	if (log)
 		printf("\n");
 	buf[1] = CODE_DONE;
+#if HDMI
+	if (g_fb_dirty)
+		fb_show();
+#endif
 }
 
 /* answer one waiting request, if there is one */
@@ -548,3 +592,34 @@ void mbox_start(void) {
 	       g_revision, g_serial, clock_hz(CLK_ARM), clock_hz(CLK_CORE), clock_hz(CLK_EMMC), clock_hz(CLK_UART),
 	       PM_USB, PM_IMAGE);
 }
+
+#if HDMI
+/*
+ * Monitor: ask for a framebuffer the way U-Boot's bcm2835_set_video_params
+ * does, through property() and so through the same tags and hdmi_fb() as
+ * a real request from the ARM. The buffer lies in the ARM's memory.
+ */
+#define FB_TEST_REQ 0x00700000u
+bool mbox_fb_test(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t *base, uint32_t *pitch) {
+	volatile uint32_t *b = (volatile uint32_t *)(ALIAS_UNCACHED | FB_TEST_REQ);
+	const uint32_t req[] = {
+		0, 0,
+		0x00048003, 8, 8, w, h,     /* physical size */
+		0x00048004, 8, 8, w, h,     /* virtual size */
+		0x00048005, 4, 4, depth,    /* depth */
+		0x00048006, 4, 4, order,    /* pixel order */
+		0x00040001, 8, 4, 16, 0,    /* allocate */
+		0x00040008, 4, 0, 0,        /* pitch */
+		0,
+	};
+	for (uint32_t i = 0; i < sizeof req / sizeof req[0]; i++)
+		b[i] = req[i];
+	b[0] = sizeof req;
+	property(FB_TEST_REQ);
+	*base = b[23];
+	*pitch = b[28];
+	/* every tag answered, and the sizes taken as asked */
+	return b[1] == CODE_DONE && (b[4] & TAG_RESPONSE) && (b[22] & TAG_RESPONSE) && (b[27] & TAG_RESPONSE) &&
+	       b[5] == w && b[6] == h && b[15] == depth;
+}
+#endif
