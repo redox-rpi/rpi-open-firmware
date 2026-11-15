@@ -1,20 +1,16 @@
 # Documentation
 
+The documentation for reading is in the [rpi-open-firmware wiki](https://github.com/redox-rpi/rpi-open-firmware/wiki):
+Broadcom's files, the boot chain, our own firmware, models, sources and
+the other firmware projects. Hardware, one page per board, is in the
+[redox-rpi wiki](https://github.com/redox-rpi/redox-rpi/wiki). Pi test
+results are in [redox-rpi/pi-tests](https://github.com/redox-rpi/pi-tests/blob/main/queue.md#done).
+
+What stays in the repository, because it changes with the code:
+
 | Page | What |
 |---|---|
-| [models.md](models.md) | The Pi models and their hardware: chip, cores, memory, USB, network, Wi-Fi, our test boards |
-| [Pi 3B+ (wiki)](https://github.com/redox-rpi/redox-rpi/wiki/Pi-3B-plus) | Pi 3B+ hardware: chip block diagram, address maps, boot, clocks, power chip, peripherals, GPIO, USB |
-| [Pi 400 (wiki)](https://github.com/redox-rpi/redox-rpi/wiki/Pi-400) | Pi 400 hardware (BCM2711): address maps, EEPROM boot, GIC, PCIe and VL805, GENET |
-| [Pi 5 and CM5 (wiki)](https://github.com/redox-rpi/redox-rpi/wiki/Pi-5) | Pi 5 and CM5 hardware (BCM2712 + RP1): boot, PSCI, debug UART, from public documents |
-| [broadcom/](broadcom/README.md) | Broadcom's firmware per model, every closed piece, and one page per file (`bootcode.bin`, `start*.elf`, `fixup*.dat`, `armstub8`, devicetree, overlays, licence): what is inside |
-| [boot-chain.md](boot-chain.md) | Broadcom's boot pieces, how each redox-rpi release starts, the steps to the end goal, with pictures |
-| [own-firmware.md](own-firmware.md) | Our firmware ([redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230)): milestones, monitor, boot selector, ARM start, findings |
-| [test-results.md](test-results.md) | Every Pi test of this repository |
-| [rpi-open-firmware-2019.md](rpi-open-firmware-2019.md) | Upstream's firmware on our Pi 3B+, and the 3B+ risks |
-| [lk-overlay.md](lk-overlay.md) | librerpi/lk-overlay on our Pi 3B+, with our three patches |
-| [sources.md](sources.md) | Every outside source (Raspberry Pi, librerpi, glennra, VPU toolchain and simulator) with its last change and whether we watch it |
-| [vpu-compiler.md](vpu-compiler.md) | Discussion: fewer toolchain dependencies (TinyCC fork with a VC4 backend, the existing LLVM VideoCore4 backend, alternatives, sources for the instruction encoding). The TinyCC VC4 backend itself is documented in redox-rpi/tinycc `docs/` ([vc4-decisions.md](https://github.com/redox-rpi/tinycc/blob/main/docs/vc4-decisions.md), [vc4-components.md](https://github.com/redox-rpi/tinycc/blob/main/docs/vc4-components.md)) |
-| [socdump.md](socdump.md) | Register dumps as reference values for the firmware |
-| [upstream-README.md](upstream-README.md) | Kristina Brooks's original README, with its credits |
-
-Command reference for our firmware: [bootcode/README.md](https://github.com/redox-rpi/rpi-open-firmware/blob/bootcode/bootcode/README.md) on branch `bootcode`.
+| [bootcode/README.md](https://github.com/redox-rpi/rpi-open-firmware/blob/bootcode/bootcode/README.md) | Our VPU firmware: build, monitor commands, boot selector, files (branch `bootcode` until [PR #10](https://github.com/redox-rpi/rpi-open-firmware/pull/10) is merged) |
+| [armstub/README.md](https://github.com/redox-rpi/rpi-open-firmware/blob/bootcode/armstub/README.md) | Our 64-bit ARM stub: build and test (branch `bootcode` too) |
+| [redox-rpi/README.md](../redox-rpi/README.md) | Build scripts for the toolchains, lk-overlay and card images |
+| [upstream-README.md](upstream-README.md) | Kristina Brooks's original README, with its credits and licence notes |
