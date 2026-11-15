@@ -18,6 +18,8 @@
 #define VARIANT "M1, monitor, test build, boot selector"
 #elif MONITOR
 #define VARIANT "M1, monitor, test build"
+#elif BOOT && HDMI
+#define VARIANT "release, boots from the SD card, boot screen on HDMI"
 #elif BOOT
 #define VARIANT "release, boots from the SD card"
 #else
@@ -125,9 +127,15 @@ void bootcode_main(uint32_t cpuid) {
 #elif MONITOR
 	monitor(5);
 #elif BOOT
-	if (sd_init())
+	bs_start("bootcode " BUILD_ID, ", SDRAM ready", 10);
+	if (sd_init()) {
+		bs_step(20, "SD card ", g_sd.name);
 		boot64("kernel8.img", NULL, 0);
+	} else {
+		bs_fail("no SD card", 0);
+	}
 	printf("boot failed: see the line above; nothing else to try\n");
+	bs_fail("boot failed, see the serial line", 0);
 #endif
 #if !BOOT
 	printf("M1 done: stage 1 runs, SDRAM works. Nothing to load yet.\n");

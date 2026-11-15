@@ -110,11 +110,36 @@ uint32_t hvs_plane(uint32_t *dl, const struct fb_view *v, uint32_t scr_w, uint32
 uint32_t fb_pixel(uint32_t rgb, uint32_t depth, uint32_t order);
 uint32_t fb_pattern(volatile uint8_t *fb, uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t pitch);
 
-/* hdmi.c (monitor builds): 1080p60 DVI, one colour (#442 step 1) or the
- * ARM's framebuffer (step 2) */
+/* hdmi.c (HDMI=1 builds): 1080p60 DVI, one colour (#442 step 1) or the
+ * ARM's framebuffer (step 2); g_hdmi_log: the step lines on the UART
+ * (on in test builds, off in a release, where every line costs time) */
+#ifndef HDMI
+#define HDMI 0
+#endif
+extern bool g_hdmi_log;
 bool hdmi_on(uint32_t rgb);
 void hdmi_fb(const struct fb_view *v); /* show it (v == NULL: background only) */
 void hdmi_status(void);
+
+/* bootscreen.c (HDMI=1 builds): title, progress bar and boot steps on HDMI
+ * until the ARM shows its own framebuffer (#430). The panel lies at the
+ * start of the VideoCore's memory, below the ARM's framebuffer (mbox.c). */
+#define BS_BASE MBOX_ARM_MEM_SIZE
+#define BS_W 640u
+#define BS_H 160u
+#if HDMI
+bool bs_start(const char *a, const char *b, uint32_t pct);
+void bs_step(uint32_t pct, const char *a, const char *b);
+void bs_fail(const char *a, const char *b);
+void bs_handover(void);
+bool bs_demo(void);
+void bs_report(void);
+#else
+#define bs_start(a, b, pct) ((void)(a), (void)(b), (void)(pct))
+#define bs_step(pct, a, b) ((void)(pct), (void)(a), (void)(b))
+#define bs_fail(a, b) ((void)(a), (void)(b))
+#define bs_handover() ((void)0)
+#endif
 
 /* i2c.c (monitor builds): bit-banged I2C on GPIO 46/47, reads only */
 void i2c_scan(void);

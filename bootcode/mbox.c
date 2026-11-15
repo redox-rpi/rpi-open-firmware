@@ -253,6 +253,8 @@ static void fb_show(void) {
 		return;
 	struct fb_view v = {0xc0000000u | FB_BASE, g_fb.w, g_fb.h, g_fb.vw, g_fb.vh,
 			    g_fb.depth, g_fb.order, g_fb.xoff, g_fb.yoff};
+	if (g_fb.allocated)
+		bs_handover(); /* the boot screen (#430) gives way */
 	hdmi_fb(g_fb.allocated ? &v : 0);
 	g_fb_shown = g_fb.allocated;
 }
@@ -507,7 +509,8 @@ static void property(uint32_t bus) {
 		printf("mbox: bad buffer %08X size %u, dropped\n", bus, size);
 		return;
 	}
-	g_requests++;
+	if (++g_requests == 1)
+		bs_step(90, "ARM running", 0);
 	bool log = g_logged < MBOX_LOG_MAX;
 	if (log && ++g_logged == MBOX_LOG_MAX)
 		printf("mbox: requests after this one are not logged\n");

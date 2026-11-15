@@ -37,6 +37,16 @@ make                          # build/bootcode.bin, build/bootcode.dis
 
 Serial console on GPIO 14/15, 115200 8N1.
 
+`make BOOT=1` is the release build: it boots from the SD card at once.
+`make BOOT=1 HDMI=1` adds 1080p on HDMI with a boot screen (#430): from
+the SDRAM onwards a 640x160 panel in the middle of the screen shows a
+title, a progress bar and the last four boot steps (SD card, armstub,
+kernel, devicetree, ARM start, first mailbox request); a failed step is
+red. When U-Boot or Redox allocates a framebuffer, that one is shown
+instead, and the serial line gets one line with the time HDMI and
+drawing took. Test builds (`MONITOR=1`) always have HDMI; the monitor's
+`bs` command shows the panel with fixed texts.
+
 ## Serial monitor (test builds only)
 
 `make MONITOR=1` adds `monitor.c`. After the SDRAM test it prints
@@ -136,6 +146,9 @@ our own VPU loader (M2) replaces the built-in Broadcom image.
 | `chain-image.S` | places a `bootcode.bin` image in the boot selector build | new; the image is Broadcom's, unchanged |
 | `monitor.c`, `go-test.S`, `rbc-load.sh`, `libc.c` | serial monitor (test builds), its test payload and host script, `memset`/`memcpy` | new; cache flush registers from Broadcom's `vpu_l1_cache_ctrl.h` |
 | `sdram.c` | LPDDR2 set-up and self test | rpi-open-firmware `firmware/sdram.c` (Julian Brown and the rpi-open-firmware authors); sequence, timings and magic values unchanged; self test extended |
+| `hdmi.c`, `hvs.c` | 1080p60 DVI on HDMI and the HVS plane for a framebuffer (#442); `tests/hvs-sim.sh` in resim | new; order and register names from Linux `drivers/gpu/drm/vc4` and `clk-bcm2835.c`, analog values from lk-overlay; target values from start.elf (Pi test row 337) |
+| `bootscreen.c` | boot screen on HDMI: title, progress bar, boot steps (#430); `tests/bootscreen-sim.sh` in resim against `tests/bootscreen-model.py` | new |
+| `font8x16.h` | 8x16 bitmap font, printable ASCII | U-Boot `include/video_font_8x16.h` (GPL-2.0+), cut to characters 32..126 |
 | `hw.h` | common header | new; register names from Broadcom's headers |
 | `../broadcom/` | VideoCore IV register definitions | released by Broadcom (BSD), used as they are |
 

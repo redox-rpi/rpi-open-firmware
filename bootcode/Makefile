@@ -12,6 +12,9 @@ BUILD_ID ?= $(shell git describe --always --dirty 2>/dev/null || echo unknown)
 MONITOR ?= 0
 # BOOT=1 (release, no monitor): boot from the SD card at once, as boot64 does
 BOOT ?= 0
+# HDMI=1: 1080p on HDMI (#442) and the boot screen (#430); on in test
+# builds, off in the release build unless asked for (BOOT=1 HDMI=1)
+HDMI ?= $(MONITOR)
 # CHAIN_IMAGE=path (with MONITOR=1): build that bootcode.bin image in and
 # chain it when nobody opens the monitor (boot selector, chain-image.S)
 CHAIN_IMAGE ?=
@@ -29,8 +32,7 @@ LDFLAGS := -nostdlib -nostartfiles -Wl,--build-id=none -T linker.ld
 
 SRCS := start.S main.c clock.c timer.c uart.c printf.c sdram.c libc.c
 ifeq ($(MONITOR),1)
-SRCS += monitor.c arm.c sd.c fat.c fdt.c mbox.c power.c i2c.c boot64.c hdmi.c hvs.c
-CFLAGS += -DHDMI=1
+SRCS += monitor.c arm.c sd.c fat.c fdt.c mbox.c power.c i2c.c boot64.c
 ifneq ($(CHAIN_IMAGE),)
 SRCS += chain-image.S
 CFLAGS += -DCHAIN_IMAGE=1
@@ -43,6 +45,13 @@ endif
 SRCS += arm.c sd.c fat.c fdt.c mbox.c power.c i2c.c boot64.c
 CFLAGS += -DBOOT=1
 endif
+ifeq ($(HDMI),1)
+ifeq ($(MONITOR)$(BOOT),00)
+$(error HDMI=1 needs MONITOR=1 or BOOT=1)
+endif
+SRCS += hdmi.c hvs.c bootscreen.c
+CFLAGS += -DHDMI=1
+endif
 OBJS := $(patsubst %,build/%.o,$(SRCS))
 
 all: build/bootcode.bin
@@ -50,6 +59,8 @@ all: build/bootcode.bin
 build/%.c.o: %.c hw.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) -c $< -o $@
+
+build/bootscreen.c.o: font8x16.h
 
 build/%.S.o: %.S
 	@mkdir -p build
