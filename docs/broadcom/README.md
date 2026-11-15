@@ -9,7 +9,7 @@ All numbers are from release `1.20260915` of
 redox-rpi uses (`scripts/rpi-firmware.sh` in redox-rpi). They were read
 with `readelf`, `strings`, `xxd` and `dtc` on 2026-11-14. Which models use
 which pieces is further down. The chip they run on:
-[hardware/pi3b-plus.md](../hardware/pi3b-plus.md).
+[Pi 3B+ in the wiki](https://github.com/redox-rpi/redox-rpi/wiki/Pi-3B-plus).
 
 | File | Size | Runs on | Page |
 |---|---|---|---|

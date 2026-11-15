@@ -3,9 +3,9 @@
 | Page | What |
 |---|---|
 | [models.md](models.md) | The Pi models and their hardware: chip, cores, memory, USB, network, Wi-Fi, our test boards |
-| [hardware/pi3b-plus.md](hardware/pi3b-plus.md) | Pi 3B+ hardware: chip block diagram, address maps, boot, clocks, power chip, peripherals, GPIO, USB |
-| [hardware/pi400.md](hardware/pi400.md) | Pi 400 hardware (BCM2711): address maps, EEPROM boot, GIC, PCIe and VL805, GENET |
-| [hardware/pi5.md](hardware/pi5.md) | Pi 5 and CM5 hardware (BCM2712 + RP1): boot, PSCI, debug UART, from public documents |
+| [Pi 3B+ (wiki)](https://github.com/redox-rpi/redox-rpi/wiki/Pi-3B-plus) | Pi 3B+ hardware: chip block diagram, address maps, boot, clocks, power chip, peripherals, GPIO, USB |
+| [Pi 400 (wiki)](https://github.com/redox-rpi/redox-rpi/wiki/Pi-400) | Pi 400 hardware (BCM2711): address maps, EEPROM boot, GIC, PCIe and VL805, GENET |
+| [Pi 5 and CM5 (wiki)](https://github.com/redox-rpi/redox-rpi/wiki/Pi-5) | Pi 5 and CM5 hardware (BCM2712 + RP1): boot, PSCI, debug UART, from public documents |
 | [broadcom/](broadcom/README.md) | Broadcom's firmware per model, every closed piece, and one page per file (`bootcode.bin`, `start*.elf`, `fixup*.dat`, `armstub8`, devicetree, overlays, licence): what is inside |
 | [boot-chain.md](boot-chain.md) | Broadcom's boot pieces, how each redox-rpi release starts, the steps to the end goal, with pictures |
 | [own-firmware.md](own-firmware.md) | Our firmware ([redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230)): milestones, monitor, boot selector, ARM start, findings |

@@ -3,8 +3,8 @@
 The Raspberry Pi models this project looks at, and what is on each board.
 Which firmware each one boots with: [broadcom/](broadcom/README.md).
 One page per model with everything we know about its hardware:
-[Pi 3B+](hardware/pi3b-plus.md), [Pi 400](hardware/pi400.md),
-[Pi 5 and CM5](hardware/pi5.md).
+[Pi 3B+](https://github.com/redox-rpi/redox-rpi/wiki/Pi-3B-plus), [Pi 400](https://github.com/redox-rpi/redox-rpi/wiki/Pi-400),
+[Pi 5 and CM5](https://github.com/redox-rpi/redox-rpi/wiki/Pi-5) (in the wiki).
 
 | | Pi Zero / Zero W | Pi Zero 2 W | Pi 3B+ | Pi 400 | Pi 5 / CM5 |
 |---|---|---|---|---|---|

@@ -85,7 +85,7 @@ All in [docs/](docs/README.md):
 - [lk-overlay.md](docs/lk-overlay.md): librerpi/lk-overlay on our Pi.
 - [sources.md](docs/sources.md): every outside source (librerpi, glennra, toolchain, simulator), its last change, and whether we watch it.
 - [vpu-compiler.md](docs/vpu-compiler.md), [socdump.md](docs/socdump.md): ideas and later work.
-- [docs/hardware/](docs/hardware/): one page per model (3B+, Pi 400, Pi 5/CM5) with what we know about its hardware.
+- [Hardware wiki](https://github.com/redox-rpi/redox-rpi/wiki): one page per model (3B+, Pi 400, Pi 5/CM5) with what we know about its hardware.
 
 ## Branches and directories
 
