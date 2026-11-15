@@ -319,14 +319,23 @@ void hdmi_status(void) {
 	uint32_t f1 = XHD_FRAME_COUNT, s1 = XHVS_DISPSTAT1;
 	if (XHVS_DLIST(g_slot) & XCTL0_VALID) {
 		/* the HVS writes its read address into the pointer context word
-		 * while it scans: it moves when the framebuffer is being read */
-		uint32_t c0 = XHVS_DLIST(g_slot + 5);
-		udelay(3000);
-		uint32_t c1 = XHVS_DLIST(g_slot + 5);
-		printf("hdmi: plane at list word %u: %08X %08X %08X %08X %08X ctx %08X -> %08X pitch %08X, "
+		 * while it scans the plane's lines; between frames it holds the
+		 * start (row 443: a 160-line plane read FE000000 three times). So
+		 * read it 256 times over 20 ms, more than one frame: min, max and
+		 * how often it changed */
+		uint32_t c0 = 0xffffffffu, c1 = 0, moves = 0, last = XHVS_DLIST(g_slot + 5);
+		for (uint32_t i = 0; i < 256; i++) {
+			uint32_t c = XHVS_DLIST(g_slot + 5);
+			c0 = c < c0 ? c : c0;
+			c1 = c > c1 ? c : c1;
+			moves += c != last;
+			last = c;
+			udelay(80);
+		}
+		printf("hdmi: plane at list word %u: %08X %08X %08X %08X %08X ctx %08X..%08X (%u changes in 20 ms) pitch %08X, "
 		       "DISPSTAT %08X (channel 1 underflow %s)\n",
 		       g_slot, XHVS_DLIST(g_slot), XHVS_DLIST(g_slot + 1), XHVS_DLIST(g_slot + 2),
-		       XHVS_DLIST(g_slot + 3), XHVS_DLIST(g_slot + 4), c0, c1, XHVS_DLIST(g_slot + 6), XHVS_DISPSTAT,
+		       XHVS_DLIST(g_slot + 3), XHVS_DLIST(g_slot + 4), c0, c1, moves, XHVS_DLIST(g_slot + 6), XHVS_DISPSTAT,
 		       XHVS_DISPSTAT & XHVS_DISPSTAT_EUFLOW1 ? "yes" : "no");
 	} else {
 		printf("hdmi: no plane, background only (list word %u)\n", g_slot);

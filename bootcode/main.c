@@ -10,6 +10,9 @@
  */
 #include "hw.h"
 
+#ifndef BOOT_KERNEL
+#define BOOT_KERNEL "kernel8.img"
+#endif
 #ifndef BUILD_ID
 #define BUILD_ID "unknown"
 #endif
@@ -134,7 +137,7 @@ void bootcode_main(uint32_t cpuid) {
 	bs_start("bootcode " BUILD_ID, ", SDRAM ready", 10);
 	if (sd_init()) {
 		bs_step(20, "SD card ", g_sd.name);
-		boot64("kernel8.img", NULL, 0);
+		boot64(BOOT_KERNEL, NULL, 0);
 	} else {
 		bs_fail("no SD card", 0);
 	}

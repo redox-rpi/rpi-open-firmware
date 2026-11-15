@@ -16,6 +16,9 @@ BOOT ?= 0
 # the serial line. On in the monitor build; the release build prints only
 # mailbox errors unless built with BOOT=1 MBOX_TRACE=1 (a debug release)
 MBOX_TRACE ?= $(MONITOR)
+# KERNEL=name: the file a release build (BOOT=1) starts, kernel8.img by
+# default; tests on the selector card, which has U-BOOT.BIN, set it
+KERNEL ?= kernel8.img
 # HDMI=1: 1080p on HDMI (#442) and the boot screen (#430); on in test
 # builds, off in the release build unless asked for (BOOT=1 HDMI=1)
 HDMI ?= $(MONITOR)
@@ -48,7 +51,7 @@ ifeq ($(MONITOR),1)
 $(error BOOT=1 is the release build, without the monitor)
 endif
 SRCS += arm.c sd.c fat.c fdt.c mbox.c power.c i2c.c boot64.c
-CFLAGS += -DBOOT=1
+CFLAGS += -DBOOT=1 -DBOOT_KERNEL='"$(KERNEL)"'
 endif
 ifeq ($(HDMI),1)
 ifeq ($(MONITOR)$(BOOT),00)

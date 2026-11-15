@@ -39,7 +39,9 @@ make BOOT=1 MBOX_TRACE=1      # the same with the mailbox trace (debug)
 
 Serial console on GPIO 14/15, 115200 8N1.
 
-`make BOOT=1` is the release build: it boots from the SD card at once.
+`make BOOT=1` is the release build: it boots from the SD card at once
+and starts `kernel8.img` (`KERNEL=U-BOOT.BIN` for a test on the selector
+card).
 `make BOOT=1 HDMI=1` adds 1080p on HDMI with a boot screen (#430): from
 the SDRAM onwards a 640x160 panel in the middle of the screen shows a
 title, a progress bar and the last four boot steps (SD card, armstub,
