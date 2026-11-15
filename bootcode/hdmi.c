@@ -78,6 +78,8 @@
 #define XFIFO_RECENTER (1u << 6)
 #define XFIFO_RECENTER_DONE (1u << 14)
 #define XFIFO_VALID_WRITE 0xefffu
+#define XFIFO_MASTER_SLAVE_N (1u << 0) /* start.elf: FIFO_CTL 0x4041; Linux pre_crtc_enable */
+#define XPHY_RNG_PWRDN (1u << 25)      /* start.elf: TX_PHY_CTL_0 0x8c000000, this bit clear */
 
 /* HD (HDMI video side) */
 #define XHD_M_CTL R(0x7e80800c)
@@ -87,6 +89,11 @@
 #define XHD_M_SW_RST (1u << 2)
 #define XHD_M_ENABLE (1u << 0)
 #define XHD_VID_CTL_ENABLE (1u << 31)
+#define XHD_VID_CTL_UNDERFLOW_ENABLE (1u << 30)
+#define XHD_VID_CTL_FRAME_COUNTER_RESET (1u << 29)
+#define XHD_VID_CTL_CLRRGB (1u << 23)
+#define XHD_VID_CTL_BLANKPIX (1u << 18)
+#define XHD_VID_CTL_BLANK_INSERT_EN (1u << 16)
 #define XHD_CSC_ORDER_BGR (1u << 5) /* no conversion: full range RGB, as for a PC monitor */
 
 /* 1080p60, CEA mode 16: h 1920 fp 88 sync 44 bp 148, v 1080 fp 4 sync 5
@@ -228,6 +235,8 @@ static void hdmi_reset_and_timing(void) {
 }
 
 static void pv2_start(void) {
+	STEP("HDMI FIFO master");
+	XHDMI_FIFO_CTL = XFIFO_MASTER_SLAVE_N; /* as Linux pre_crtc_enable, before the valve runs */
 	STEP("pixel valve 2");
 	XPV2_CONTROL = 0;
 	XPV2_CONTROL = XPV_CONTROL_FIFO_CLR | XPV_CONTROL_EN;
@@ -277,9 +286,27 @@ void hdmi_status(void) {
 	       XHDMI_TX_PHY_RESET_CTL, XHDMI_TX_PHY_CTL_0, (GP_LEV0 >> 28) & 1 ? "no monitor" : "monitor connected");
 }
 
+/*
+ * Stop a picture from an earlier hdmi command before setting up again: a
+ * second run on a live pipeline stalled it (rows 434 and 435: frame count
+ * stuck, PV2 STAT 00000100). As Linux's encoder disable: video off, valve
+ * off, PHY in reset.
+ */
+static void hdmi_off(void) {
+	if (!(PM_IMAGE & PM_IMAGE_PERIRSTN_SET) || !(CM_HSMCTL & XCM_ENAB))
+		return;
+	STEP("stop the running picture");
+	XPV2_V_CONTROL &= ~XPV_VCONTROL_VIDEN;
+	udelay(20000); /* let the current frame end */
+	XHD_VID_CTL &= ~XHD_VID_CTL_ENABLE;
+	XPV2_CONTROL = 0;
+	XHDMI_TX_PHY_RESET_CTL = 0xfu << 16;
+}
+
 /* 1080p60 DVI with one colour (0xRRGGBB); true when every step answered */
 bool hdmi_on(uint32_t rgb) {
 	printf("hdmi: 1920x1080 60 Hz DVI, colour %06X\n", rgb & 0xffffff);
+	hdmi_off();
 	hvs_channel(rgb);
 	if (!image_domain_on()) {
 		printf("hdmi: image power domain did not come up, PM_IMAGE %08X\n", PM_IMAGE);
@@ -291,9 +318,13 @@ bool hdmi_on(uint32_t rgb) {
 	hdmi_reset_and_timing();
 	pv2_start();
 	STEP("video on");
-	XHD_VID_CTL = XHD_VID_CTL_ENABLE;
+	/* as Linux post_crtc_enable; both syncs positive for 1080p */
+	XHD_VID_CTL = XHD_VID_CTL_ENABLE | XHD_VID_CTL_CLRRGB | XHD_VID_CTL_UNDERFLOW_ENABLE |
+		      XHD_VID_CTL_FRAME_COUNTER_RESET | XHD_VID_CTL_BLANK_INSERT_EN;
+	XHD_VID_CTL &= ~XHD_VID_CTL_BLANKPIX;
 	XPV2_V_CONTROL |= XPV_VCONTROL_VIDEN;
 	bool ok = dvi_mode();
+	XHDMI_TX_PHY_CTL_0 &= ~XPHY_RNG_PWRDN; /* as start.elf leaves it */
 	hdmi_status();
 	return ok;
 }
