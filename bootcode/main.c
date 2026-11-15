@@ -18,8 +18,12 @@
 #define VARIANT "M1, monitor, test build, boot selector"
 #elif MONITOR
 #define VARIANT "M1, monitor, test build"
+#elif BOOT && HDMI && MBOX_TRACE
+#define VARIANT "release, boots from the SD card, boot screen on HDMI, mailbox trace"
 #elif BOOT && HDMI
 #define VARIANT "release, boots from the SD card, boot screen on HDMI"
+#elif BOOT && MBOX_TRACE
+#define VARIANT "release, boots from the SD card, mailbox trace"
 #elif BOOT
 #define VARIANT "release, boots from the SD card"
 #else

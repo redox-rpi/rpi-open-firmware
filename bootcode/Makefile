@@ -12,6 +12,10 @@ BUILD_ID ?= $(shell git describe --always --dirty 2>/dev/null || echo unknown)
 MONITOR ?= 0
 # BOOT=1 (release, no monitor): boot from the SD card at once, as boot64 does
 BOOT ?= 0
+# MBOX_TRACE=1: log every mailbox request and an "alive" line every 10 s on
+# the serial line. On in the monitor build; the release build prints only
+# mailbox errors unless built with BOOT=1 MBOX_TRACE=1 (a debug release)
+MBOX_TRACE ?= $(MONITOR)
 # HDMI=1: 1080p on HDMI (#442) and the boot screen (#430); on in test
 # builds, off in the release build unless asked for (BOOT=1 HDMI=1)
 HDMI ?= $(MONITOR)
@@ -26,7 +30,8 @@ INCLUDES := -I. -isystem $(FW_DIR) -isystem $(FW_DIR)/vc4_include
 
 CFLAGS := -std=c11 -Os -ffreestanding -fno-builtin -nostdlib \
 	-Wall -Wextra -Werror -Wno-multichar \
-	-D__VIDEOCORE4__ -DBUILD_ID='"$(BUILD_ID)"' -DMONITOR=$(MONITOR) $(INCLUDES)
+	-D__VIDEOCORE4__ -DBUILD_ID='"$(BUILD_ID)"' -DMONITOR=$(MONITOR) \
+	-DMBOX_TRACE=$(MBOX_TRACE) $(INCLUDES)
 ASFLAGS := -x assembler-with-cpp -D__VIDEOCORE4__ $(INCLUDES)
 LDFLAGS := -nostdlib -nostartfiles -Wl,--build-id=none -T linker.ld
 
