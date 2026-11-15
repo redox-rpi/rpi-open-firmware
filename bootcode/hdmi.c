@@ -132,6 +132,24 @@ static bool hdmi_power(void) {
 	return true;
 }
 
+/*
+ * The HDMI transmitter's analog settings, as librerpi's lk-overlay writes
+ * them (platform/bcm28xx/vc4-hdmi/hdmi.c, "related to hdmi boost"). Pi test
+ * row 436: the core, valve and frame counter ran but the monitor saw no
+ * signal; these writes brought the first picture. Only CTL2 changed (reset
+ * 0x0018048e -> 0x0018008e, bit 10 cleared); the bit's meaning is not
+ * documented, it acts like a power-down of the TMDS output. Linux never
+ * writes these registers: start.elf has set them before it runs.
+ */
+static void hdmi_analog(void) {
+	A2W_HDMI_CTL3 = A2W_PASSWORD | 0x000040;
+	A2W_HDMI_CTL2 = A2W_PASSWORD | 0x18008e;
+	A2W_HDMI_CTL1 = A2W_PASSWORD | 0x011c00;
+	A2W_HDMI_CTL0 = A2W_PASSWORD | 0x470238;
+	printf("hdmi: analog CTL0..3 %08X %08X %08X %08X\n", A2W_HDMI_CTL0, A2W_HDMI_CTL1, A2W_HDMI_CTL2,
+	       A2W_HDMI_CTL3);
+}
+
 static bool pllh_on(void) {
 	A2W_XOSC_CTRL |= A2W_PASSWORD | A2W_XOSC_CTRL_HDMIEN_SET;
 
@@ -313,7 +331,10 @@ bool hdmi_on(uint32_t rgb) {
 		return false;
 	}
 	printf("hdmi: image power domain on, PM_IMAGE %08X\n", PM_IMAGE);
-	if (!hdmi_power() || !pllh_on() || !hsm_on())
+	if (!hdmi_power())
+		return false;
+	hdmi_analog();
+	if (!pllh_on() || !hsm_on())
 		return false;
 	hdmi_reset_and_timing();
 	pv2_start();
