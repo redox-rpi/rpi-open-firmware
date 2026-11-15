@@ -54,6 +54,7 @@
 #define XPV_VCONTROL_CONTINUOUS (1u << 1)
 
 /* HDMI core */
+#define XHDMI_CORE_REV R(0x7e902000)
 #define XHDMI_SW_RESET_CONTROL R(0x7e902004)
 #define XHDMI_FIFO_CTL R(0x7e90205c)
 #define XHDMI_RAM_PACKET_CONFIG R(0x7e9020a0)
@@ -185,17 +186,29 @@ static void hvs_channel(uint32_t rgb) {
 	       XHVS_DISPBKGND1);
 }
 
+/* a line before each step: if a register access hangs the bus, the last
+ * line on the UART names it (Pi test row 432 hung after the HSM clock) */
+#define STEP(what) printf("hdmi: step %s\n", what)
+
 static void hdmi_reset_and_timing(void) {
+	STEP("read HD M_CTL");
+	printf("hdmi: HD M_CTL %08X\n", XHD_M_CTL);
+	STEP("read HDMI CORE_REV");
+	printf("hdmi: HDMI CORE_REV %08X (start.elf: 00000600)\n", XHDMI_CORE_REV);
+	STEP("HD reset");
 	XHD_M_CTL = XHD_M_SW_RST;
 	udelay(1);
 	XHD_M_CTL = 0;
 	XHD_M_CTL = XHD_M_ENABLE | (1u << 9); /* 0x201, as start.elf */
+	STEP("HDMI core reset");
 	XHDMI_SW_RESET_CONTROL = 3;          /* HDMI and format detect */
 	XHDMI_SW_RESET_CONTROL = 0;
 
+	STEP("PHY reset");
 	XHDMI_TX_PHY_RESET_CTL = 0xfu << 16;
 	XHDMI_TX_PHY_RESET_CTL = 0;
 
+	STEP("timing");
 	XHDMI_SCHEDULER_CONTROL |= XSCHED_MANUAL_FORMAT | XSCHED_IGNORE_VSYNC_PREDICTS;
 	XHDMI_HORZA = 0x00006780u; /* active 1920, hsync and vsync positive */
 	XHDMI_HORZB = 0x0940b058u; /* bp 148, sync 44, fp 88 */
@@ -204,11 +217,13 @@ static void hdmi_reset_and_timing(void) {
 	XHDMI_VERTA1 = 0x00508438u;
 	XHDMI_VERTB1 = 0x00000024u;
 	XHDMI_MISC_CONTROL = 0;     /* no pixel repetition */
+	STEP("HD video and CSC");
 	XHD_VID_CTL = 0;            /* positive syncs, video off until the valve runs */
 	XHD_CSC_CTL = XHD_CSC_ORDER_BGR;
 }
 
 static void pv2_start(void) {
+	STEP("pixel valve 2");
 	XPV2_CONTROL = 0;
 	XPV2_CONTROL = XPV_CONTROL_FIFO_CLR | XPV_CONTROL_EN;
 	XPV2_CONTROL = 0;
@@ -222,6 +237,7 @@ static void pv2_start(void) {
 }
 
 static bool dvi_mode(void) {
+	STEP("DVI mode");
 	XHDMI_RAM_PACKET_CONFIG = 0; /* no InfoFrames in DVI mode */
 	XHDMI_SCHEDULER_CONTROL &= ~XSCHED_MODE_HDMI;
 	bool off = wait_set((volatile uint32_t *)&XHDMI_SCHEDULER_CONTROL, XSCHED_HDMI_ACTIVE, 0, 100000);
@@ -260,6 +276,7 @@ bool hdmi_on(uint32_t rgb) {
 		return false;
 	hdmi_reset_and_timing();
 	pv2_start();
+	STEP("video on");
 	XHD_VID_CTL = XHD_VID_CTL_ENABLE;
 	XPV2_V_CONTROL |= XPV_VCONTROL_VIDEN;
 	bool ok = dvi_mode();
