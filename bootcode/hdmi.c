@@ -8,9 +8,11 @@
  * pi3bp-firmware-1080p-display.regs). Order and bit names: Linux
  * drivers/gpu/drm/vc4 (vc4_hdmi.c, vc4_crtc.c, vc4_hvs.c),
  * drivers/clk/bcm/clk-bcm2835.c and drivers/pmdomain/bcm/bcm2835-power.c,
- * read for the sequence only; the code is new. The PLLH start copies the
- * shape of clock.c's PLLC start (DIG registers, PRSTN), which runs on our
- * Pi, with PLLH's own values.
+ * read for the sequence only; the code is new. The PLLH start follows
+ * clk-bcm2835 (ANA, FRAC, CTRL, power up, release ANARST, wait for lock,
+ * PRSTN). A first try in the shape of clock.c's PLLC start, which also
+ * writes the DIG registers, did not lock and read back CTRL 00020001
+ * (Pi test row 429).
  *
  * Every wait has a time limit, so a missing step shows up as a line on the
  * UART, not as a hang. The HDMI core is only touched after its power
@@ -120,33 +122,33 @@ static bool hdmi_power(void) {
 static bool pllh_on(void) {
 	A2W_XOSC_CTRL |= A2W_PASSWORD | A2W_XOSC_CTRL_HDMIEN_SET;
 
-	A2W_PLLH_FRAC = A2W_PASSWORD | XPLLH_FRAC;
-	A2W_PLLH_CTRL = A2W_PASSWORD | XPLLH_NDIV | (1u << 12); /* PDIV 1 */
+	/* held in reset and powered down while the dividers are set */
+	CM_PLLH = CM_PASSWORD | CM_PLLH_ANARST_SET | CM_PLLH_DIGRST_SET;
+	A2W_PLLH_CTRL = A2W_PASSWORD | A2W_PLLH_CTRL_PWRDN_SET;
+
+	/* as bcm2835_pll_set_rate: ANA3 down to ANA0, FRAC, then CTRL */
 	A2W_PLLH_ANA3 = A2W_PASSWORD | 0x0;
 	A2W_PLLH_ANA2 = A2W_PASSWORD | 0x0;
 	A2W_PLLH_ANA1 = A2W_PASSWORD | 0xc;
 	A2W_PLLH_ANA0 = A2W_PASSWORD | 0x900000;
+	A2W_PLLH_FRAC = A2W_PASSWORD | XPLLH_FRAC;
+	A2W_PLLH_CTRL = A2W_PASSWORD | A2W_PLLH_CTRL_PWRDN_SET | XPLLH_NDIV | (1u << 12); /* PDIV 1 */
+	printf("hdmi: PLLH set, CTRL %08X FRAC %08X ANA0 %08X ANA1 %08X XOSC %08X CM_PLLH %08X\n",
+	       A2W_PLLH_CTRL, A2W_PLLH_FRAC, A2W_PLLH_ANA0, A2W_PLLH_ANA1, A2W_XOSC_CTRL, CM_PLLH);
 
-	CM_PLLH = CM_PASSWORD | CM_PLLH_DIGRST_SET;
-	A2W_PLLH_DIG3 = A2W_PASSWORD | 0x0;
-	A2W_PLLH_DIG2 = A2W_PASSWORD | 0x400000;
-	A2W_PLLH_DIG1 = A2W_PASSWORD | 0x5;
-	A2W_PLLH_DIG0 = A2W_PASSWORD | XPLLH_NDIV | 0x555000;
-
-	A2W_PLLH_CTRL = A2W_PASSWORD | XPLLH_NDIV | (1u << 12) | A2W_PLLH_CTRL_PRSTN_SET;
-
-	A2W_PLLH_DIG3 = A2W_PASSWORD | 0x42;
-	A2W_PLLH_DIG2 = A2W_PASSWORD | 0x500401;
-	A2W_PLLH_DIG1 = A2W_PASSWORD | 0x4005;
-	A2W_PLLH_DIG0 = A2W_PASSWORD | XPLLH_NDIV | 0x555000;
-
-	/* the pixel channel; AUX and RCAL stay off as under start.elf */
-	A2W_PLLH_PIX = A2W_PASSWORD | XPLLH_PIX_DIV;
-	CM_PLLH = CM_PASSWORD | CM_PLLH_DIGRST_SET | CM_PLLH_LOADPIX_SET;
+	/* as bcm2835_pll_on: power up, out of reset, wait for lock, PRSTN */
+	A2W_PLLH_CTRL = A2W_PASSWORD | XPLLH_NDIV | (1u << 12);
 	CM_PLLH = CM_PASSWORD | CM_PLLH_DIGRST_SET;
 	CM_PLLH = CM_PASSWORD;
-
 	bool lock = wait_set((volatile uint32_t *)&CM_LOCK, XCM_LOCK_H, XCM_LOCK_H, 10000);
+	A2W_PLLH_CTRL = A2W_PASSWORD | XPLLH_NDIV | (1u << 12) | A2W_PLLH_CTRL_PRSTN_SET;
+
+	/* the pixel channel (as bcm2835_pll_divider_set_rate and _on); AUX
+	 * and RCAL stay off as under start.elf */
+	A2W_PLLH_PIX = A2W_PASSWORD | XPLLH_PIX_DIV;
+	CM_PLLH = CM_PASSWORD | CM_PLLH_LOADPIX_SET;
+	CM_PLLH = CM_PASSWORD;
+
 	printf("hdmi: PLLH %s, CTRL %08X FRAC %08X PIX %08X CM_PLLH %08X CM_LOCK %08X\n",
 	       lock ? "locked" : "NOT locked", A2W_PLLH_CTRL, A2W_PLLH_FRAC, A2W_PLLH_PIX, CM_PLLH, CM_LOCK);
 	return lock;
