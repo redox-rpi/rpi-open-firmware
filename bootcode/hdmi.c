@@ -136,10 +136,14 @@ static bool hdmi_power(void) {
  * The HDMI transmitter's analog settings, as librerpi's lk-overlay writes
  * them (platform/bcm28xx/vc4-hdmi/hdmi.c, "related to hdmi boost"). Pi test
  * row 436: the core, valve and frame counter ran but the monitor saw no
- * signal; these writes brought the first picture. Only CTL2 changed (reset
- * 0x0018048e -> 0x0018008e, bit 10 cleared); the bit's meaning is not
- * documented, it acts like a power-down of the TMDS output. Linux never
- * writes these registers: start.elf has set them before it runs.
+ * signal; these writes brought the first picture, and row 437 got it
+ * straight from hdmi. Only CTL2 differs from the reset values (0x0018048e
+ * -> 0x0018008e, bit 10; undocumented, it acts like a power-down of the
+ * TMDS output), but CTL2 written alone does not take: row 437 part B read
+ * it back unchanged, and 00000000 after CTL1 and CTL0. Like the PLL ANA
+ * registers, the bank seems to latch only when written from CTL3 down to
+ * CTL0, so keep this order. Linux never writes these registers: start.elf
+ * has set them before it runs.
  */
 static void hdmi_analog(void) {
 	A2W_HDMI_CTL3 = A2W_PASSWORD | 0x000040;
