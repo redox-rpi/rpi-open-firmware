@@ -98,6 +98,8 @@
 #define XPLLH_PIX_DIV 1u      /* PLLH channels have a fixed / 10: 148.5 MHz */
 #define XHSM_DIV 0x30e0u      /* PLLC PER 500 MHz / 3.055 = 163.7 MHz, as start.elf from PLLD PER */
 #define XCM_ENAB (1u << 4)
+#define XCM_GATE (1u << 6)  /* clock output to the block: start.elf's HSMCTL 0x2d6 has it,
+                             * and clk-bcm2835 sets it with ENAB (row 434: core reads "dbus" without) */
 #define XCM_BUSY (1u << 7)
 #define XCM_MASH1 (1u << 9)
 #define XCM_LOCK_H 0x1000u    /* CM_LOCK FLOCKH on the BCM2835/7 */
@@ -167,7 +169,7 @@ static bool hsm_on(void) {
 	}
 	CM_HSMDIV = CM_PASSWORD | XHSM_DIV;
 	CM_HSMCTL = CM_PASSWORD | XCM_MASH1 | CM_SRC_PLLC_PER;
-	CM_HSMCTL = CM_PASSWORD | XCM_MASH1 | XCM_ENAB | CM_SRC_PLLC_PER;
+	CM_HSMCTL = CM_PASSWORD | XCM_MASH1 | XCM_ENAB | XCM_GATE | CM_SRC_PLLC_PER;
 	bool on = wait_set((volatile uint32_t *)&CM_HSMCTL, XCM_BUSY, XCM_BUSY, 10000);
 	printf("hdmi: HSM clock %s, CM_HSMCTL %08X DIV %08X\n", on ? "on" : "NOT running", CM_HSMCTL,
 	       CM_HSMDIV);
