@@ -10,6 +10,8 @@ OBJDUMP := $(CROSS_COMPILE)objdump
 BUILD_ID ?= $(shell git describe --always --dirty 2>/dev/null || echo unknown)
 # MONITOR=1: serial monitor for test builds (monitor.c), never in a release
 MONITOR ?= 0
+# BOOT=1 (release, no monitor): boot from the SD card at once, as boot64 does
+BOOT ?= 0
 # CHAIN_IMAGE=path (with MONITOR=1): build that bootcode.bin image in and
 # chain it when nobody opens the monitor (boot selector, chain-image.S)
 CHAIN_IMAGE ?=
@@ -26,11 +28,18 @@ LDFLAGS := -nostdlib -nostartfiles -Wl,--build-id=none -T linker.ld
 
 SRCS := start.S main.c clock.c timer.c uart.c printf.c sdram.c libc.c
 ifeq ($(MONITOR),1)
-SRCS += monitor.c arm.c sd.c fat.c fdt.c mbox.c power.c i2c.c
+SRCS += monitor.c arm.c sd.c fat.c fdt.c mbox.c power.c i2c.c boot64.c
 ifneq ($(CHAIN_IMAGE),)
 SRCS += chain-image.S
 CFLAGS += -DCHAIN_IMAGE=1
 endif
+endif
+ifeq ($(BOOT),1)
+ifeq ($(MONITOR),1)
+$(error BOOT=1 is the release build, without the monitor)
+endif
+SRCS += arm.c sd.c fat.c fdt.c mbox.c power.c i2c.c boot64.c
+CFLAGS += -DBOOT=1
 endif
 OBJS := $(patsubst %,build/%.o,$(SRCS))
 

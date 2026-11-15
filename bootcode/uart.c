@@ -58,7 +58,7 @@ void uart_putc(char c) {
 int uart_getc_timeout(uint32_t timeout_us) {
 	uint32_t t0 = timer_us();
 	while (UART_FR & UART_FR_RXFE) {
-#if MONITOR
+#if MONITOR || BOOT
 		mbox_poll();
 #endif
 		if (timer_us() - t0 >= timeout_us)

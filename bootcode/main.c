@@ -1,9 +1,10 @@
 /*
- * redox-rpi bootcode: stage 1 main, milestone M1.
+ * redox-rpi bootcode: stage 1 main.
  *
- * M1: clocks, UART, SDRAM and a memory test, then a heartbeat. No loading
- * yet. Test builds (MONITOR=1) open the serial monitor before the
- * heartbeat. Plan: https://github.com/redox-rpi/redox-rpi/issues/230
+ * Clocks, UART and SDRAM. The release build (BOOT=1) then loads armstub8,
+ * kernel8.img and the devicetree from the SD card and starts the ARM, as
+ * the monitor's boot64 does. Test builds (MONITOR=1) open the serial
+ * monitor instead. The plain build (M1) only shows a heartbeat. Plan: https://github.com/redox-rpi/redox-rpi/issues/230
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -17,6 +18,8 @@
 #define VARIANT "M1, monitor, test build, boot selector"
 #elif MONITOR
 #define VARIANT "M1, monitor, test build"
+#elif BOOT
+#define VARIANT "release, boots from the SD card"
 #else
 #define VARIANT "M1"
 #endif
@@ -121,8 +124,14 @@ void bootcode_main(uint32_t cpuid) {
 	watchdog_reset();
 #elif MONITOR
 	monitor(5);
+#elif BOOT
+	if (sd_init())
+		boot64("kernel8.img", NULL, 0);
+	printf("boot failed: see the line above; nothing else to try\n");
 #endif
+#if !BOOT
 	printf("M1 done: stage 1 runs, SDRAM works. Nothing to load yet.\n");
+#endif
 
 	for (uint32_t n = 1;; n++) {
 		udelay(10 * 1000 * 1000);
