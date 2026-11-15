@@ -33,9 +33,22 @@ from itszor/vc4-toolchain, built once, about 40 minutes).
 cd bootcode
 make                          # build/bootcode.bin, build/bootcode.dis
 ./make-card.sh m1.img         # FAT16 card image with only bootcode.bin
+make BOOT=1                   # release: boots from the SD card, no monitor
+make BOOT=1 MBOX_TRACE=1      # the same with the mailbox trace (debug)
 ```
 
 Serial console on GPIO 14/15, 115200 8N1.
+
+**Mailbox trace (`MBOX_TRACE`).** After the ARM starts, `mbox.c` can print
+one line per mailbox request, with its tags and `?` after a tag it does not
+answer, plus an "alive" line every 10 s. This shows which tags U-Boot and
+Redox ask for. The monitor build has the trace on. The release build
+prints only mailbox errors, because Redox uses the same UART as its
+console (redox-rpi #443). `make BOOT=1 MBOX_TRACE=1` is a release build
+with the trace, and its banner says "mailbox trace". Always run
+`make clean` before switching. `tests/mbox-sim.sh` checks all three
+images and runs `mbox.c` with and without the trace in the resim
+simulator (needs a vc4emul from redox-rpi/resim).
 
 ## Serial monitor (test builds only)
 

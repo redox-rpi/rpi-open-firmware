@@ -490,6 +490,18 @@ static bool handle(volatile struct tag *t) {
 	return false;
 }
 
+/*
+ * MBOX_TRACE=1 (the monitor build's default, or make BOOT=1 MBOX_TRACE=1):
+ * one line per request on the serial line, with its tags and "?" after an
+ * unanswered one, and an "alive" line every 10 s. Without it (the release
+ * build) only errors are printed: Redox uses the same UART as its console,
+ * and the trace lines landed in the middle of typed commands (Pi test 426,
+ * redox-rpi #443).
+ */
+#ifndef MBOX_TRACE
+#define MBOX_TRACE 0
+#endif
+
 /* the first requests are logged on the serial line, the rest not */
 #define MBOX_LOG_MAX 400 /* U-Boot alone used 40 (Pi test 391) */
 static uint32_t g_logged;
@@ -508,7 +520,7 @@ static void property(uint32_t bus) {
 		return;
 	}
 	g_requests++;
-	bool log = g_logged < MBOX_LOG_MAX;
+	bool log = MBOX_TRACE && g_logged < MBOX_LOG_MAX;
 	if (log && ++g_logged == MBOX_LOG_MAX)
 		printf("mbox: requests after this one are not logged\n");
 	if (log)
@@ -552,25 +564,31 @@ void mbox_poll(void) {
 }
 
 /*
+ * A line every 10 s for 10 minutes (trace builds only): the VPU is alive,
+ * and what the mailboxes hold. In Pi tests 391-393 Redox's rpi-firmwared
+ * went silent before any request reached us; this tells a dead VPU from a
+ * request that never comes.
+ */
+static uint32_t g_next_beat, g_beats;
+
+static void beat(uint32_t now) {
+	if (!MBOX_TRACE || g_beats >= 60 || (int32_t)(now - g_next_beat) < 0)
+		return;
+	g_beats++;
+	g_next_beat += 10000000u;
+	printf("mbox: alive %u s, %u requests, ARM->VPU %08X VPU->ARM %08X\n", g_beats * 10, g_requests,
+	       ARM_1_MAIL1_STA, ARM_1_MAIL0_STA);
+}
+
+/*
  * After boot64 the ARM owns the serial line: serve the mailbox and read no
  * input, so keys typed for U-Boot or Redox reach them. Never returns.
  */
 void mbox_serve(void) {
-	/*
-	 * A line every 10 s for 10 minutes: the VPU is alive, and what the
-	 * mailboxes hold. In Pi tests 391-393 Redox's rpi-firmwared went silent
-	 * before any request reached us; this tells a dead VPU from a request
-	 * that never comes.
-	 */
-	uint32_t start = timer_us(), next = start + 10000000u, beats = 0;
+	g_next_beat = timer_us() + 10000000u;
 	for (;;) {
 		mbox_poll();
-		if (beats < 60 && (int32_t)(timer_us() - next) >= 0) {
-			beats++;
-			next += 10000000u;
-			printf("mbox: alive %u s, %u requests, ARM->VPU %08X VPU->ARM %08X\n", beats * 10,
-			       g_requests, ARM_1_MAIL1_STA, ARM_1_MAIL0_STA);
-		}
+		beat(timer_us());
 	}
 }
 
