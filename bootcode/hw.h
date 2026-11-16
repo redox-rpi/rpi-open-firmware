@@ -48,7 +48,14 @@ int vprintf(const char *fmt, va_list ap);
 /* sdram.c */
 enum ram_size { RAM_1GB, RAM_512MB, RAM_256MB, RAM_128MB, RAM_UNKNOWN };
 extern enum ram_size g_ram_size;
+/* memory split (#29): the ARM gets 0 .. g_arm_mem, the VideoCore the
+ * last VC_MEM bytes of the SDRAM (boot screen panel, the ARM's
+ * framebuffer). sdram_init() sets both from the size it detects; until
+ * then (and in the resim tests) they are the 1 GB values. */
+#define VC_MEM 0x2000000u /* 32 MB */
+extern uint32_t g_ram_bytes, g_arm_mem;
 void sdram_init(void);
+void sdram_size_kept(void); /* SDRAM already up: the size from SD_SB */
 
 /* monitor.c: test builds only (MONITOR=1), never in a release;
  * CHAIN_IMAGE=1 for the boot selector build (Makefile CHAIN_IMAGE=path) */
@@ -85,8 +92,9 @@ uint32_t crc32(const volatile uint8_t *p, uint32_t n);
 
 /* mbox.c (monitor builds): answer the ARM's mailbox property requests once
  * the ARM runs; mbox_poll() is called from uart_getc_timeout()'s wait loop.
- * The ARM gets 0 .. MBOX_ARM_MEM_SIZE (62 x 16 MB, as arm_start() maps it). */
-#define MBOX_ARM_MEM_SIZE 0x3e000000u
+ * The ARM gets 0 .. MBOX_ARM_MEM_SIZE (g_arm_mem: 62 x 16 MB on a 1 GB
+ * board, 30 x 16 MB on 512 MB, as arm_start() maps it). */
+#define MBOX_ARM_MEM_SIZE g_arm_mem
 extern bool g_mbox_on;
 void mbox_start(void);
 void mbox_poll(void);

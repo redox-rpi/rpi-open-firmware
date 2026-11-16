@@ -222,7 +222,7 @@ static uint32_t g_power[POWER_DEVICES];
  * VideoCore's part of the memory, above MBOX_ARM_MEM_SIZE.
  */
 #define FB_BASE (MBOX_ARM_MEM_SIZE + 0x400000u)
-#define FB_MAX 0xc00000u /* to 0x3f000000, the peripherals */
+#define FB_MAX 0xc00000u /* 12 MB, below the end of the SDRAM (VC_MEM is 32 MB) */
 
 /* with HDMI (#442) the physical size is the screen's: 1920x1080 */
 #if HDMI
@@ -319,9 +319,9 @@ static bool handle(volatile struct tag *t) {
 		r[1] = MBOX_ARM_MEM_SIZE;
 		reply(t, r, 8);
 		return true;
-	case 0x00010006: /* VideoCore memory: the rest of the 1 GB */
+	case 0x00010006: /* VideoCore memory: the rest of the SDRAM */
 		r[0] = MBOX_ARM_MEM_SIZE;
-		r[1] = 0x40000000u - MBOX_ARM_MEM_SIZE;
+		r[1] = g_ram_bytes - MBOX_ARM_MEM_SIZE;
 		reply(t, r, 8);
 		return true;
 	case 0x00010007: /* clocks list: none given */

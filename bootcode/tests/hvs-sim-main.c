@@ -36,6 +36,9 @@ uint32_t arm_khz(void) {
 
 uint32_t arm_max_mhz = 1400;
 
+/* sdram.c is not linked: the 1 GB split, as before sdram_init() */
+uint32_t g_ram_bytes = 0x40000000u, g_arm_mem = 0x40000000u - VC_MEM;
+
 uint32_t arm_set_mhz(uint32_t mhz) {
 	return mhz;
 }

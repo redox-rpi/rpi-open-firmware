@@ -46,8 +46,10 @@ static uint32_t g_nline, g_pct;
 static bool g_on;
 static uint32_t g_t_up, g_t_hdmi, g_t_draw;
 
-/* the panel's memory; tests/bootscreen-sim.sh points it elsewhere */
-volatile uint8_t *g_bs_fb = (volatile uint8_t *)(ALIAS_UNCACHED | BS_BASE);
+/* the panel's memory, at the start of the VideoCore's part (BS_BASE, set
+ * by bs_start() once the SDRAM size is known); tests/bootscreen-sim.sh
+ * points it elsewhere first */
+volatile uint8_t *g_bs_fb;
 
 /* x and w even: two pixels per word */
 static void fill(volatile uint8_t *fb, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t c) {
@@ -132,6 +134,8 @@ static void add_line(const char *a, const char *b, bool fail) {
  */
 bool bs_start(const char *a, const char *b, uint32_t pct) {
 	uint32_t t0 = timer_us();
+	if (!g_bs_fb)
+		g_bs_fb = (volatile uint8_t *)(ALIAS_UNCACHED | BS_BASE);
 	g_on = false;
 	g_nline = 0;
 	g_pct = pct;
