@@ -205,6 +205,8 @@ int32_t fat_size(const char *name) {
 }
 
 /* load a root-directory file to addr; returns its size, or -1 */
+void (*g_fat_progress)(uint32_t done, uint32_t total);
+
 int32_t fat_load(const char *name, uint32_t addr, uint32_t max) {
 	if ((!v.ok || !g_sd.ready) && !fat_mount())
 		return -1;
@@ -245,6 +247,8 @@ int32_t fat_load(const char *name, uint32_t addr, uint32_t max) {
 			}
 			left -= n;
 		}
+		if (g_fat_progress)
+			g_fat_progress(f.size - left, f.size);
 		if (left)
 			clus = next_clus(clus);
 	}
