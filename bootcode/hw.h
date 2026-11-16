@@ -75,15 +75,19 @@ uint32_t arm_set_mhz(uint32_t mhz);
 uint32_t arm_khz(void);
 
 /* sd.c, fat.c (monitor builds): read the SD card and its FAT partition */
-struct sd_card { bool ready, high_capacity; uint32_t mb; char name[6]; };
+struct sd_card { bool ready, high_capacity, wide; uint32_t mb; char name[6]; };
+#define SD_RUN_MAX 2048u /* sectors per read command (1 MB) */
 extern struct sd_card g_sd;
 bool sd_init(void);
 bool sd_read(uint32_t lba, uint32_t *buf);
+bool sd_read_blocks(uint32_t lba, uint32_t n, uint32_t *buf);
 void sd_off(void);
 bool fat_mount(void);
 bool fat_list(void);
 int32_t fat_load(const char *name, uint32_t addr, uint32_t max);
 int32_t fat_size(const char *name);
+/* called by fat_load after each cluster when set (bytes done, file size) */
+extern void (*g_fat_progress)(uint32_t done, uint32_t total);
 bool fdt_set_memory(uint8_t *dtb, uint32_t len, uint32_t base, uint32_t size);
 bool fdt_set_initrd(uint8_t *dtb, uint32_t len, uint32_t start, uint32_t end);
 bool fdt_set_bootargs(uint8_t *dtb, uint32_t len, const char *txt, uint32_t n);
@@ -143,8 +147,9 @@ void hdmi_status(void);
 bool bs_start(const char *a, const char *b, uint32_t pct);
 void bs_step(uint32_t pct, const char *a, const char *b);
 void bs_fail(const char *a, const char *b);
-void bs_handover(void);
+void bs_handover(const struct fb_view *v);
 void bs_title(const char *s);
+void bs_update(uint32_t pct, const char *a, const char *b);
 bool bs_config_title(const char *txt, uint32_t len);
 bool bs_demo(void);
 void bs_report(void);
@@ -152,7 +157,8 @@ void bs_report(void);
 #define bs_start(a, b, pct) ((void)(a), (void)(b), (void)(pct))
 #define bs_step(pct, a, b) ((void)(pct), (void)(a), (void)(b))
 #define bs_fail(a, b) ((void)(a), (void)(b))
-#define bs_handover() ((void)0)
+#define bs_update(pct, a, b) ((void)(pct), (void)(a), (void)(b))
+#define bs_handover(v) ((void)(v))
 #define bs_config_title(t, n) ((void)(t), (void)(n), false)
 #endif
 

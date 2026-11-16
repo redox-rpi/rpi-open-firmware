@@ -18,6 +18,9 @@ struct sd_card { bool ready, high_capacity; uint32_t mb; char name[6]; };
 extern struct sd_card g_sd;
 bool sd_init(void);
 bool sd_read(uint32_t lba, uint32_t *buf);
+#define SD_RUN_MAX 8u /* small, so files take many runs */
+bool sd_read_blocks(uint32_t lba, uint32_t n, uint32_t *buf);
+extern void (*g_fat_progress)(uint32_t done, uint32_t total);
 bool fat_list(void);
 int32_t fat_load(const char *name, uint32_t addr, uint32_t max);
 H
