@@ -16,6 +16,7 @@ cat > "$t/inc/hw.h" <<'H'
 #include <stdio.h>
 #include <stddef.h>
 bool fdt_set_memory(uint8_t *dtb, uint32_t len, uint32_t base, uint32_t size);
+bool fdt_set_initrd(uint8_t *dtb, uint32_t len, uint32_t start, uint32_t end);
 H
 cp "$here/../fdt.c" "$t/fdt.c"
 gcc -O1 -Wall -Wextra -I"$t/inc" -o "$t/fdt-host" "$here/fdt-host.c" "$t/fdt.c"
@@ -47,6 +48,23 @@ sed 's/memory@0 {[^}]*};//' "$t/small.dts" > "$t/nomem.dts"
 dtc -q -I dts -O dtb -o "$t/nomem.dtb" "$t/nomem.dts"
 name="no memory node refused"
 check bash -c "! '$t/fdt-host' '$t/nomem.dtb' '$t/x' 1 >/dev/null"
+# /chosen initrd placeholders (#31): one cell as make-dtb.sh writes them,
+# and two cells; a devicetree without them is refused
+cat > "$t/initrd.dts" <<'D'
+/dts-v1/;
+/ { #address-cells = <1>; #size-cells = <1>;
+    chosen { bootargs = "x"; linux,initrd-start = <0>; linux,initrd-end = <0 0>; };
+    soc { chosen { linux,initrd-start = <7>; }; };
+    memory@0 { device_type = "memory"; reg = <0 0>; }; };
+D
+dtc -q -I dts -O dtb -o "$t/initrd.dtb" "$t/initrd.dts"
+"$t/fdt-host" "$t/initrd.dtb" "$t/out.dtb" 1e000000 2100000 12500000 >/dev/null
+name="initrd: /chosen start and end set"
+check [ "$(fdtget -t x "$t/out.dtb" /chosen linux,initrd-start) $(fdtget -t x "$t/out.dtb" /chosen linux,initrd-end)" = "2100000 0 12500000" ]
+name="initrd: nested chosen untouched"
+check [ "$(fdtget -t x "$t/out.dtb" /soc/chosen linux,initrd-start)" = "7" ]
+name="initrd: no placeholders refused"
+check bash -c "! '$t/fdt-host' '$t/small.dtb' '$t/x' 1 2 3 >/dev/null"
 head -c 4096 /dev/urandom > "$t/junk"
 name="non-devicetree refused"
 check bash -c "! '$t/fdt-host' '$t/junk' '$t/x' 1 >/dev/null"

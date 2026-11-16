@@ -195,6 +195,15 @@ static bool find_entry(const char *name, uint32_t clus, uint32_t size, void *ctx
 	return true;
 }
 
+/* the size of a root-directory file, or -1 when there is none (quiet) */
+int32_t fat_size(const char *name) {
+	if ((!v.ok || !g_sd.ready) && !fat_mount())
+		return -1;
+	struct find f = {name, 0, 0, false};
+	walk_root(find_entry, &f);
+	return f.found ? (int32_t)f.size : -1;
+}
+
 /* load a root-directory file to addr; returns its size, or -1 */
 int32_t fat_load(const char *name, uint32_t addr, uint32_t max) {
 	if ((!v.ok || !g_sd.ready) && !fat_mount())
@@ -222,9 +231,18 @@ int32_t fat_load(const char *name, uint32_t addr, uint32_t max) {
 				return -1;
 			}
 			uint32_t n = left < 512 ? left : 512;
-			const uint8_t *src = (const uint8_t *)sec;
-			for (uint32_t k = 0; k < n; k++)
-				*dst++ = src[k];
+			if (n == 512 && !((uintptr_t)dst & 3)) {
+				/* whole sectors to an aligned place: by words (the
+				 * 260 MB initramfs of a direct boot, #31) */
+				uint32_t *dw = (uint32_t *)dst;
+				for (uint32_t k = 0; k < 128; k++)
+					dw[k] = sec[k];
+				dst += 512;
+			} else {
+				const uint8_t *src = (const uint8_t *)sec;
+				for (uint32_t k = 0; k < n; k++)
+					*dst++ = src[k];
+			}
 			left -= n;
 		}
 		if (left)

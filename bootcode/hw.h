@@ -83,7 +83,9 @@ void sd_off(void);
 bool fat_mount(void);
 bool fat_list(void);
 int32_t fat_load(const char *name, uint32_t addr, uint32_t max);
+int32_t fat_size(const char *name);
 bool fdt_set_memory(uint8_t *dtb, uint32_t len, uint32_t base, uint32_t size);
+bool fdt_set_initrd(uint8_t *dtb, uint32_t len, uint32_t start, uint32_t end);
 
 /* boot64.c (monitor and release builds): load from FAT and start the ARM;
  * returns only on an error */
@@ -97,6 +99,7 @@ uint32_t crc32(const volatile uint8_t *p, uint32_t n);
 #define MBOX_ARM_MEM_SIZE g_arm_mem
 extern bool g_mbox_on;
 void mbox_start(void);
+uint32_t board_revision(void); /* OTP row 30, e.g. a020d3 (3B+), 902120 (Zero 2 W) */
 void mbox_poll(void);
 void mbox_serve(void) __attribute__((noreturn));
 /* monitor: ask for a framebuffer through the real tag path, as U-Boot does */

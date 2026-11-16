@@ -50,6 +50,13 @@ static bool otp_wait(void) {
 	return false;
 }
 
+static uint32_t otp_read(uint32_t row);
+
+/* the board revision code from OTP row 30 (boot64 picks the devicetree) */
+uint32_t board_revision(void) {
+	return otp_read(30);
+}
+
 static uint32_t otp_read(uint32_t row) {
 	OTP_CONFIG_REG = 3;
 	udelay(1);
