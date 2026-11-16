@@ -24,6 +24,7 @@
 #define logf(fmt, ...) printf("[sdram] " fmt, ##__VA_ARGS__)
 
 enum ram_size g_ram_size = RAM_UNKNOWN;
+uint32_t g_ram_bytes = 0x40000000u, g_arm_mem = 0x40000000u - VC_MEM;
 
 static const char *const size_name[] = { "1 GB", "512 MB", "256 MB", "128 MB", "unknown" };
 
@@ -376,4 +377,9 @@ void sdram_init(void) {
 
 	reset_with_timing(&timings);
 	selftest();
+
+	static const uint32_t size_mb[] = { 1024, 512, 256, 128 };
+	g_ram_bytes = size_mb[g_ram_size] << 20;
+	g_arm_mem = g_ram_bytes - VC_MEM;
+	logf("memory split: ARM 0-%08X, VideoCore %08X-%08X\n", g_arm_mem, g_arm_mem, g_ram_bytes);
 }

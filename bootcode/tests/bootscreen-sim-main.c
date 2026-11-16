@@ -14,6 +14,9 @@
 
 extern volatile uint8_t *g_bs_fb;
 
+/* sdram.c is not linked: the 1 GB split, as before sdram_init() */
+uint32_t g_ram_bytes = 0x40000000u, g_arm_mem = 0x40000000u - VC_MEM;
+
 void uart_putc(char c) {
 	*(volatile uint32_t *)0x7e215040u = (uint8_t)c;
 }

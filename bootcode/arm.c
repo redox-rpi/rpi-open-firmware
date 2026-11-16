@@ -210,8 +210,9 @@ bool arm_start(bool aarch64) {
 		printf("err arm: SDRAM not set up\n");
 		return false;
 	}
-	/* 0 .. 0x3e000000 to the SDRAM, 0x3f000000 to the peripherals */
-	for (uint32_t i = 0; i < 62; i++)
+	/* 0 .. g_arm_mem to the SDRAM (0x3e000000 on 1 GB), 0x3f000000 to
+	 * the peripherals */
+	for (uint32_t i = 0; i < g_arm_mem >> 24; i++)
 		arm_map(ARM_MEMORY_BASE + i * 0x1000000u, i * 0x1000000u);
 	arm_map(ARM_PERIPH_BUS, ARM_PERIPH_ARM);
 
