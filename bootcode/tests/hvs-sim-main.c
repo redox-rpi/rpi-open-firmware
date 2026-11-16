@@ -40,6 +40,14 @@ uint32_t arm_set_mhz(uint32_t mhz) {
 	return mhz;
 }
 
+/* the boot screen (#430) has its own test, bootscreen-sim.sh */
+void bs_step(uint32_t pct, const char *a, const char *b) {
+	(void)pct, (void)a, (void)b;
+}
+
+void bs_handover(void) {
+}
+
 static void dump(const char *what, uint32_t bad, const volatile uint8_t *p, uint32_t n) {
 	printf("RESULT pattern %s bad %u bytes ", what, bad);
 	for (uint32_t i = 0; i < n; i++)

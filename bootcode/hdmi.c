@@ -115,6 +115,13 @@
 #define XCM_MASH1 (1u << 9)
 #define XCM_LOCK_H 0x1000u    /* CM_LOCK FLOCKH on the BCM2835/7 */
 
+bool g_hdmi_log = MONITOR;
+#define HLOG(...)                       \
+	do {                            \
+		if (g_hdmi_log)         \
+			printf(__VA_ARGS__); \
+	} while (0)
+
 static bool wait_set(volatile uint32_t *reg, uint32_t mask, uint32_t want, uint32_t us) {
 	uint32_t t0 = timer_us();
 	while ((*reg & mask) != want) {
@@ -132,7 +139,7 @@ static bool hdmi_power(void) {
 	*pm = v &= ~PM_HDMI_LDOPD_SET;
 	udelay(150);
 	*pm = v &= ~PM_HDMI_RSTDR_SET;
-	printf("hdmi: power domain on, PM_HDMI %08X\n", PM_HDMI);
+	HLOG("hdmi: power domain on, PM_HDMI %08X\n", PM_HDMI);
 	return true;
 }
 
@@ -154,7 +161,7 @@ static void hdmi_analog(void) {
 	A2W_HDMI_CTL2 = A2W_PASSWORD | 0x18008e;
 	A2W_HDMI_CTL1 = A2W_PASSWORD | 0x011c00;
 	A2W_HDMI_CTL0 = A2W_PASSWORD | 0x470238;
-	printf("hdmi: analog CTL0..3 %08X %08X %08X %08X\n", A2W_HDMI_CTL0, A2W_HDMI_CTL1, A2W_HDMI_CTL2,
+	HLOG("hdmi: analog CTL0..3 %08X %08X %08X %08X\n", A2W_HDMI_CTL0, A2W_HDMI_CTL1, A2W_HDMI_CTL2,
 	       A2W_HDMI_CTL3);
 }
 
@@ -172,7 +179,7 @@ static bool pllh_on(void) {
 	A2W_PLLH_ANA0 = A2W_PASSWORD | 0x900000;
 	A2W_PLLH_FRAC = A2W_PASSWORD | XPLLH_FRAC;
 	A2W_PLLH_CTRL = A2W_PASSWORD | A2W_PLLH_CTRL_PWRDN_SET | XPLLH_NDIV | (1u << 12); /* PDIV 1 */
-	printf("hdmi: PLLH set, CTRL %08X FRAC %08X ANA0 %08X ANA1 %08X XOSC %08X CM_PLLH %08X\n",
+	HLOG("hdmi: PLLH set, CTRL %08X FRAC %08X ANA0 %08X ANA1 %08X XOSC %08X CM_PLLH %08X\n",
 	       A2W_PLLH_CTRL, A2W_PLLH_FRAC, A2W_PLLH_ANA0, A2W_PLLH_ANA1, A2W_XOSC_CTRL, CM_PLLH);
 
 	/* as bcm2835_pll_on: power up, out of reset, wait for lock, PRSTN */
@@ -188,7 +195,7 @@ static bool pllh_on(void) {
 	CM_PLLH = CM_PASSWORD | CM_PLLH_LOADPIX_SET;
 	CM_PLLH = CM_PASSWORD;
 
-	printf("hdmi: PLLH %s, CTRL %08X FRAC %08X PIX %08X CM_PLLH %08X CM_LOCK %08X\n",
+	HLOG("hdmi: PLLH %s, CTRL %08X FRAC %08X PIX %08X CM_PLLH %08X CM_LOCK %08X\n",
 	       lock ? "locked" : "NOT locked", A2W_PLLH_CTRL, A2W_PLLH_FRAC, A2W_PLLH_PIX, CM_PLLH, CM_LOCK);
 	return lock;
 }
@@ -204,7 +211,7 @@ static bool hsm_on(void) {
 	CM_HSMCTL = CM_PASSWORD | XCM_MASH1 | CM_SRC_PLLC_PER;
 	CM_HSMCTL = CM_PASSWORD | XCM_MASH1 | XCM_ENAB | XCM_GATE | CM_SRC_PLLC_PER;
 	bool on = wait_set((volatile uint32_t *)&CM_HSMCTL, XCM_BUSY, XCM_BUSY, 10000);
-	printf("hdmi: HSM clock %s, CM_HSMCTL %08X DIV %08X\n", on ? "on" : "NOT running", CM_HSMCTL,
+	HLOG("hdmi: HSM clock %s, CM_HSMCTL %08X DIV %08X\n", on ? "on" : "NOT running", CM_HSMCTL,
 	       CM_HSMDIV);
 	return on;
 }
@@ -224,19 +231,19 @@ static void hvs_channel(uint32_t rgb) {
 	XHVS_DISPCTRL1 = 0;
 	XHVS_DISPBKGND1 = XHVS_BKGND_FILL | (rgb & 0xffffff);
 	XHVS_DISPCTRL1 = XHVS_CHAN_EN | (XMODE_W << 12) | XMODE_H;
-	printf("hdmi: HVS DISPCTRL %08X, channel 1 %08X background %08X\n", XHVS_DISPCTRL, XHVS_DISPCTRL1,
+	HLOG("hdmi: HVS DISPCTRL %08X, channel 1 %08X background %08X\n", XHVS_DISPCTRL, XHVS_DISPCTRL1,
 	       XHVS_DISPBKGND1);
 }
 
 /* a line before each step: if a register access hangs the bus, the last
  * line on the UART names it (Pi test row 432 hung after the HSM clock) */
-#define STEP(what) printf("hdmi: step %s\n", what)
+#define STEP(what) HLOG("hdmi: step %s\n", what)
 
 static void hdmi_reset_and_timing(void) {
 	STEP("read HD M_CTL");
-	printf("hdmi: HD M_CTL %08X\n", XHD_M_CTL);
+	HLOG("hdmi: HD M_CTL %08X\n", XHD_M_CTL);
 	STEP("read HDMI CORE_REV");
-	printf("hdmi: HDMI CORE_REV %08X (start.elf: 00000600)\n", XHDMI_CORE_REV);
+	HLOG("hdmi: HDMI CORE_REV %08X (start.elf: 00000600)\n", XHDMI_CORE_REV);
 	STEP("HD reset");
 	XHD_M_CTL = XHD_M_SW_RST;
 	udelay(1);
@@ -293,7 +300,7 @@ static bool dvi_mode(void) {
 	XHDMI_FIFO_CTL = drift & ~XFIFO_RECENTER;
 	XHDMI_FIFO_CTL = drift | XFIFO_RECENTER;
 	bool fifo = wait_set((volatile uint32_t *)&XHDMI_FIFO_CTL, XFIFO_RECENTER_DONE, XFIFO_RECENTER_DONE, 100000);
-	printf("hdmi: DVI mode %s, scheduler %08X, FIFO recenter %s (%08X)\n", off ? "set" : "NOT set",
+	HLOG("hdmi: DVI mode %s, scheduler %08X, FIFO recenter %s (%08X)\n", off ? "set" : "NOT set",
 	       XHDMI_SCHEDULER_CONTROL, fifo ? "done" : "NOT done", XHDMI_FIFO_CTL);
 	return off && fifo;
 }
@@ -312,14 +319,23 @@ void hdmi_status(void) {
 	uint32_t f1 = XHD_FRAME_COUNT, s1 = XHVS_DISPSTAT1;
 	if (XHVS_DLIST(g_slot) & XCTL0_VALID) {
 		/* the HVS writes its read address into the pointer context word
-		 * while it scans: it moves when the framebuffer is being read */
-		uint32_t c0 = XHVS_DLIST(g_slot + 5);
-		udelay(3000);
-		uint32_t c1 = XHVS_DLIST(g_slot + 5);
-		printf("hdmi: plane at list word %u: %08X %08X %08X %08X %08X ctx %08X -> %08X pitch %08X, "
+		 * while it scans the plane's lines; between frames it holds the
+		 * start (row 443: a 160-line plane read FE000000 three times). So
+		 * read it 256 times over 20 ms, more than one frame: min, max and
+		 * how often it changed */
+		uint32_t c0 = 0xffffffffu, c1 = 0, moves = 0, last = XHVS_DLIST(g_slot + 5);
+		for (uint32_t i = 0; i < 256; i++) {
+			uint32_t c = XHVS_DLIST(g_slot + 5);
+			c0 = c < c0 ? c : c0;
+			c1 = c > c1 ? c : c1;
+			moves += c != last;
+			last = c;
+			udelay(80);
+		}
+		printf("hdmi: plane at list word %u: %08X %08X %08X %08X %08X ctx %08X..%08X (%u changes in 20 ms) pitch %08X, "
 		       "DISPSTAT %08X (channel 1 underflow %s)\n",
 		       g_slot, XHVS_DLIST(g_slot), XHVS_DLIST(g_slot + 1), XHVS_DLIST(g_slot + 2),
-		       XHVS_DLIST(g_slot + 3), XHVS_DLIST(g_slot + 4), c0, c1, XHVS_DLIST(g_slot + 6), XHVS_DISPSTAT,
+		       XHVS_DLIST(g_slot + 3), XHVS_DLIST(g_slot + 4), c0, c1, moves, XHVS_DLIST(g_slot + 6), XHVS_DISPSTAT,
 		       XHVS_DISPSTAT & XHVS_DISPSTAT_EUFLOW1 ? "yes" : "no");
 	} else {
 		printf("hdmi: no plane, background only (list word %u)\n", g_slot);
@@ -350,14 +366,14 @@ static void hdmi_off(void) {
 
 /* 1080p60 DVI with one colour (0xRRGGBB); true when every step answered */
 bool hdmi_on(uint32_t rgb) {
-	printf("hdmi: 1920x1080 60 Hz DVI, colour %06X\n", rgb & 0xffffff);
+	HLOG("hdmi: 1920x1080 60 Hz DVI, colour %06X\n", rgb & 0xffffff);
 	hdmi_off();
 	hvs_channel(rgb);
 	if (!image_domain_on()) {
 		printf("hdmi: image power domain did not come up, PM_IMAGE %08X\n", PM_IMAGE);
 		return false;
 	}
-	printf("hdmi: image power domain on, PM_IMAGE %08X\n", PM_IMAGE);
+	HLOG("hdmi: image power domain on, PM_IMAGE %08X\n", PM_IMAGE);
 	if (!hdmi_power())
 		return false;
 	hdmi_analog();
@@ -373,7 +389,8 @@ bool hdmi_on(uint32_t rgb) {
 	XPV2_V_CONTROL |= XPV_VCONTROL_VIDEN;
 	bool ok = dvi_mode();
 	XHDMI_TX_PHY_CTL_0 &= ~XPHY_RNG_PWRDN; /* as start.elf leaves it */
-	hdmi_status();
+	if (g_hdmi_log)
+		hdmi_status();
 	g_running = ok;
 	return ok;
 }
@@ -396,9 +413,9 @@ void hdmi_fb(const struct fb_view *v) {
 	XHVS_DISPLIST1 = slot;
 	g_slot = slot;
 	if (v)
-		printf("hdmi: framebuffer %ux%u (virtual %ux%u at %u,%u), %u bit %s, at %08X: %s\n", v->w, v->h,
+		HLOG("hdmi: framebuffer %ux%u (virtual %ux%u at %u,%u), %u bit %s, at %08X: %s\n", v->w, v->h,
 		       v->vw, v->vh, v->xoff, v->yoff, v->depth, v->order ? "RGB" : "BGR", v->base,
 		       n ? "plane on" : "no plane for this format, background only");
 	else
-		printf("hdmi: framebuffer released, background only\n");
+		HLOG("hdmi: framebuffer released, background only\n");
 }

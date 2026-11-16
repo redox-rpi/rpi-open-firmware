@@ -49,6 +49,10 @@
  *                  20 for 16 or 32 bit), pixel order O (1 RGB, default; 0
  *                  BGR), as U-Boot does; HDMI shows it; fill it with colour
  *                  bars (#442 step 2) -> ok fb ... crc32 C, or err fb
+ *   bs             the boot screen (bootscreen.c, #430) with the steps of a
+ *                  release boot and fixed texts; boot64 then adds its steps
+ *                  -> ok bs WxH 16 bit at BASE, crc32 C, HDMI start N us,
+ *                  drawing M us
  *   hdmistat       frame counter, pixel valve, scheduler, plane, hotplug
  *                  -> ok hdmistat
  *   regs           clock/PLL/GPIO registers next to start.elf's -> ok regs N
@@ -469,6 +473,11 @@ static bool run(int argc, char **argv) {
 			printf("err hdmi: see the lines above\n");
 	} else if (!strcmp_s(c, "fb") && n >= 3 && n <= 4) {
 		cmd_fb(a[0], a[1], a[2], n == 4 ? a[3] : 1);
+	} else if (!strcmp_s(c, "bs") && n == 0) {
+		if (bs_demo())
+			bs_report();
+		else
+			printf("err bs: see the lines above\n");
 	} else if (!strcmp_s(c, "hdmistat") && n == 0) {
 		hdmi_status();
 		printf("ok hdmistat\n");
@@ -487,7 +496,7 @@ static bool run(int argc, char **argv) {
 		printf("ok boot\n");
 		return true;
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | hdmi [RGB] | hdmistat | regs | vpuclk D | armmax M | boot64 [K [DTB]] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | hdmi [RGB] | hdmistat | bs | regs | vpuclk D | armmax M | boot64 [K [DTB]] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();

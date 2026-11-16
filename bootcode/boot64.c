@@ -37,7 +37,9 @@ uint32_t crc32(const volatile uint8_t *p, uint32_t n) {
 #define B64_ARM(bus) ((bus) - 0xc0000000u)
 #define B64_MEM_SIZE MBOX_ARM_MEM_SIZE
 
-static bool load_one(const char *name, uint32_t addr, uint32_t max) {
+/* the boot screen (#430): "loading NAME", the bar to pct */
+static bool load_one(const char *name, uint32_t addr, uint32_t max, uint32_t pct) {
+	bs_step(pct, "loading ", name);
 	int32_t n = fat_load(name, addr, max);
 	if (n < 0)
 		return false;
@@ -51,11 +53,15 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 		printf("err boot64: SDRAM not set up\n");
 		return false;
 	}
-	if (!load_one("armstub8-redox.bin", B64_STUB, B64_KERNEL - B64_STUB) &&
-	    !load_one("armstub8.bin", B64_STUB, B64_KERNEL - B64_STUB))
+	if (!load_one("armstub8-redox.bin", B64_STUB, B64_KERNEL - B64_STUB, 30) &&
+	    !load_one("armstub8.bin", B64_STUB, B64_KERNEL - B64_STUB, 30)) {
+		bs_fail("not found: ", "armstub8.bin");
 		return false;
-	if (!load_one(kernel, B64_KERNEL, B64_DTB - B64_KERNEL))
+	}
+	if (!load_one(kernel, B64_KERNEL, B64_DTB - B64_KERNEL, 45)) {
+		bs_fail("not found: ", kernel);
 		return false;
+	}
 	volatile uint32_t *stub = (volatile uint32_t *)B64_STUB;
 	stub[0xfc / 4] = B64_ARM(B64_KERNEL); /* kernel_entry32 */
 	stub[0xf8 / 4] = 0;                   /* dtb_ptr32 */
@@ -70,26 +76,33 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 			       crc32((const volatile uint8_t *)B64_DTB, mem));
 		} else if (!dtb) {
 			dtb = "redox-3bp.dtb";
+			bs_step(60, "loading ", dtb);
 			n = fat_load(dtb, B64_DTB, 0x100000u);
 			if (n < 0) {
 				dtb = "bcm2710-rpi-3-b-plus.dtb";
 				printf("boot64: no overlays applied (disable-bt, mmc): serial0 is the mini UART\n");
 			}
 		}
-		if (n < 0)
+		if (n < 0) {
+			bs_step(60, "loading ", dtb);
 			n = fat_load(dtb, B64_DTB, 0x100000u);
-		if (n < 0)
+		}
+		if (n < 0) {
+			bs_fail("not found: ", dtb);
 			return false;
+		}
 		if (!fdt_set_memory((uint8_t *)B64_DTB, (uint32_t)n, 0, B64_MEM_SIZE))
 			return false;
 		stub[0xf8 / 4] = B64_ARM(B64_DTB);
 		printf("boot64: %s %u bytes at ARM %08X, memory 0-%08X\n", dtb, (uint32_t)n, B64_ARM(B64_DTB), B64_MEM_SIZE);
 	}
 	sd_off();
+	bs_step(75, "starting the ARM", 0);
 	if (arm_start(true)) {
 		printf("ok boot64, the serial line is the ARM's now\n");
 		mbox_serve();
 	}
+	bs_fail("the ARM did not start", 0);
 	return false;
 }
 
