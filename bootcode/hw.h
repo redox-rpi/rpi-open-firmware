@@ -84,6 +84,8 @@ bool fat_mount(void);
 bool fat_list(void);
 int32_t fat_load(const char *name, uint32_t addr, uint32_t max);
 int32_t fat_size(const char *name);
+/* called by fat_load after each cluster when set (bytes done, file size) */
+extern void (*g_fat_progress)(uint32_t done, uint32_t total);
 bool fdt_set_memory(uint8_t *dtb, uint32_t len, uint32_t base, uint32_t size);
 bool fdt_set_initrd(uint8_t *dtb, uint32_t len, uint32_t start, uint32_t end);
 
@@ -144,6 +146,7 @@ void bs_step(uint32_t pct, const char *a, const char *b);
 void bs_fail(const char *a, const char *b);
 void bs_handover(const struct fb_view *v);
 void bs_title(const char *s);
+void bs_update(uint32_t pct, const char *a, const char *b);
 bool bs_config_title(const char *txt, uint32_t len);
 bool bs_demo(void);
 void bs_report(void);
@@ -151,6 +154,7 @@ void bs_report(void);
 #define bs_start(a, b, pct) ((void)(a), (void)(b), (void)(pct))
 #define bs_step(pct, a, b) ((void)(pct), (void)(a), (void)(b))
 #define bs_fail(a, b) ((void)(a), (void)(b))
+#define bs_update(pct, a, b) ((void)(pct), (void)(a), (void)(b))
 #define bs_handover(v) ((void)(v))
 #define bs_config_title(t, n) ((void)(t), (void)(n), false)
 #endif

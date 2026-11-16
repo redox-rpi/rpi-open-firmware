@@ -54,6 +54,44 @@ static bool load_one(const char *name, uint32_t addr, uint32_t max, uint32_t pct
 	return true;
 }
 
+/* n in decimal into d (room for 11 bytes); returns the end */
+static char *put_dec(char *d, uint32_t n) {
+	char t[10];
+	uint32_t k = 0;
+	do
+		t[k++] = (char)('0' + n % 10);
+	while (n /= 10);
+	while (k)
+		*d++ = t[--k];
+	*d = 0;
+	return d;
+}
+
+/*
+ * A large initramfs takes long on the SD card (#34): the newest boot
+ * screen line counts the MB and the bar moves from 65 to 74 percent, in
+ * steps of 5 percent of the file; the serial console gets a line every
+ * 20 percent, so a slow boot does not look hung.
+ */
+static uint32_t g_load_step;
+
+static void initrd_progress(uint32_t done, uint32_t total) {
+	uint32_t part = total / 20 ? total / 20 : 1;
+	uint32_t s = done / part;
+	if (s == g_load_step || s > 20)
+		return;
+	g_load_step = s;
+	char txt[32], *e = put_dec(txt, done >> 20);
+	const char *of = " of ";
+	while (*of)
+		*e++ = *of++;
+	e = put_dec(e, total >> 20);
+	*e++ = ' ', *e++ = 'M', *e++ = 'B', *e = 0;
+	bs_update(65 + s * 9 / 20, "loading initramfs ", txt);
+	if (s % 4 == 0)
+		printf("boot64: initramfs %u%%, %s\n", s * 5, txt);
+}
+
 /*
  * The initramfs for a direct boot (#31): nothing to do when the card has
  * none (U-Boot boots); else load it after the devicetree and tell the
@@ -64,7 +102,10 @@ static bool load_initrd(uint8_t *dtb, uint32_t dtb_len) {
 		return true;
 	bs_step(65, "loading ", "initramfs");
 	uint32_t t0 = timer_us();
+	g_load_step = 0;
+	g_fat_progress = initrd_progress;
 	int32_t n = fat_load("initramfs", B64_INITRD, B64_MEM_SIZE - B64_ARM(B64_INITRD));
+	g_fat_progress = 0;
 	if (n < 0) {
 		bs_fail("could not load ", "initramfs");
 		return false;

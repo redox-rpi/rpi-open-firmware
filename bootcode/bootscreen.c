@@ -239,6 +239,13 @@ void bs_step(uint32_t pct, const char *a, const char *b) {
 	step(pct, a, b, false);
 }
 
+/* the newest line becomes a + b (a step that goes on, as a large load) */
+void bs_update(uint32_t pct, const char *a, const char *b) {
+	if (g_on && g_nline && !g_fail[g_nline - 1])
+		g_nline--;
+	step(pct, a, b, false);
+}
+
 /* a step that failed, in red; the bar stays */
 void bs_fail(const char *a, const char *b) {
 	step(0, a, b, true);
