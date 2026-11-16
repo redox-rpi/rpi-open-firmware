@@ -84,6 +84,13 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 		printf("err boot64: SDRAM not set up\n");
 		return false;
 	}
+	/* the Zero 2 W's BCM2710A1 is rated for 1000 MHz; at 1200 MHz, with no
+	 * core voltage control, Redox crashed under load (an instruction
+	 * abort at PC 0 while logging in, right after the governor's switch) */
+	if (((board_revision() >> 4) & 0xffu) == BOARD_ZERO2W && arm_max_mhz > 1000u) {
+		arm_max_mhz = 1000u;
+		printf("boot64: Zero 2 W, ARM clock at most 1000 MHz\n");
+	}
 #if HDMI
 	/* the boot screen's title from the card (boot_title= in config.txt);
 	 * read into the devicetree's place, which is loaded later */
