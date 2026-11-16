@@ -54,6 +54,51 @@ static void sums(const char *what) {
 	printf(" all %08X %08X\n", a1, a2);
 }
 
+#define ARMFB 0x02100000u /* the ARM's framebuffer in the simulator's memory */
+
+/* what the panel pixel p must become, written out apart from bootscreen.c */
+static uint32_t want_pixel(uint32_t p, uint32_t depth, uint32_t order) {
+	/* bit replication, as the HVS widens RGB565 */
+	uint32_t r = (p >> 11) * 33 >> 2, g = (p >> 5 & 63) * 65 >> 4, b = (p & 31) * 33 >> 2;
+	if (!order) {
+		uint32_t t = r;
+		r = b, b = t;
+	}
+	if (depth == 16)
+		return (r >> 3) << 11 | (g >> 2) << 5 | b >> 3;
+	return r << 16 | g << 8 | b;
+}
+
+/* hand over to a w x h framebuffer (rows of vw, shown from row yoff) */
+static void keep(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t yoff) {
+	uint32_t vw = w + 16, vh = h + yoff, bpp = depth / 8, pitch = vw * bpp;
+	volatile uint8_t *fb = (volatile uint8_t *)ARMFB;
+	for (uint32_t i = 0; i < pitch * vh / 4; i++)
+		((volatile uint32_t *)fb)[i] = 0x5a5a5a5au;
+	struct fb_view v = {ARMFB, w, h, vw, vh, depth, order, 0, yoff};
+	bs_handover(&v);
+	uint32_t bad = 0, panel = 0, pad = 0;
+	bool fits = w >= BS_W && h >= BS_H;
+	uint32_t x0 = (w - BS_W) / 2, y0 = (h - BS_H) / 2;
+	for (uint32_t y = 0; y < vh; y++)
+		for (uint32_t x = 0; x < vw; x++) {
+			volatile uint8_t *q = fb + y * pitch + x * bpp;
+			uint32_t got = depth == 16 ? *(volatile uint16_t *)q : *(volatile uint32_t *)q;
+			uint32_t want = 0;
+			if (y < yoff || x >= w) {
+				want = depth == 16 ? 0x5a5au : 0x5a5a5a5au; /* not shown: untouched */
+				pad += got == want;
+			} else if (fits && x >= x0 && x < x0 + BS_W && y - yoff >= y0 && y - yoff < y0 + BS_H) {
+				uint32_t p = ((const volatile uint16_t *)g_bs_fb)[(y - yoff - y0) * BS_W + x - x0];
+				want = want_pixel(p, depth, order);
+				panel += p != 0;
+			}
+			bad += got != want;
+		}
+	printf("RESULT keep %ux%u %u bit order %u: bad %u, panel pixels %u, untouched %u\n", w, h, depth, order, bad,
+	       panel, pad);
+}
+
 int main(void) {
 	*(volatile uint32_t *)0x7e200004u = 2u << 12; /* GPFSEL1: GPIO 14 alt 5 */
 	*(volatile uint32_t *)0x7e215004u = 1;        /* AUX_ENABLES: mini UART */
@@ -68,7 +113,7 @@ int main(void) {
 	sums("demo");
 
 	/* after the handover nothing is drawn */
-	bs_handover();
+	bs_handover(0);
 	bs_step(100, "drawn after the handover", 0);
 	sums("handover");
 
@@ -83,6 +128,15 @@ int main(void) {
 	if (!bs_config_title(cfg, sizeof cfg - 1))
 		printf("RESULT title not found\n");
 	sums("title");
+
+	/* the handover keeps the panel (I4A): into a 32-bit RGB and a 16-bit
+	 * BGR framebuffer with an offset, checked pixel by pixel */
+	printf("KEEP-START\n");
+	keep(800, 200, 32, 1, 0);
+	bs_start("again", 0, 50);
+	keep(700, 180, 16, 0, 2);
+	bs_start("again", 0, 50);
+	keep(600, 100, 32, 1, 0); /* smaller than the panel: only cleared */
 
 	printf("bootscreen-sim: end\n");
 	return 0;

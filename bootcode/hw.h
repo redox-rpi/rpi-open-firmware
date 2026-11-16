@@ -142,7 +142,7 @@ void hdmi_status(void);
 bool bs_start(const char *a, const char *b, uint32_t pct);
 void bs_step(uint32_t pct, const char *a, const char *b);
 void bs_fail(const char *a, const char *b);
-void bs_handover(void);
+void bs_handover(const struct fb_view *v);
 void bs_title(const char *s);
 bool bs_config_title(const char *txt, uint32_t len);
 bool bs_demo(void);
@@ -151,7 +151,7 @@ void bs_report(void);
 #define bs_start(a, b, pct) ((void)(a), (void)(b), (void)(pct))
 #define bs_step(pct, a, b) ((void)(pct), (void)(a), (void)(b))
 #define bs_fail(a, b) ((void)(a), (void)(b))
-#define bs_handover() ((void)0)
+#define bs_handover(v) ((void)(v))
 #define bs_config_title(t, n) ((void)(t), (void)(n), false)
 #endif
 

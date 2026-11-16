@@ -34,9 +34,17 @@ timeout 600 "$emul" "$t/sim.bin" 0 0 > "$t/out" 2> "$t/err" || { tail -20 "$t/ou
 	echo "PLANE 640x160 16 bit order 1: 47005814 FF1CC280 40A00280 C0C0C0C0 02000000 C0C0C0C0 00000500"
 	python3 -I "$here/bootscreen-model.py" "$bc/font8x16.h" | sed -n 3,4p
 } > "$t/want"
-fail=0
-if grep -E '^(RESULT|PLANE)' "$t/out" | diff -u "$t/want" - > "$t/diff"; then
-	echo "ok   plane, demo, handover, long line and title ($(grep -cE '^(RESULT|PLANE)' "$t/out") lines)"
+# the handover's copies (I4A): no bad pixel, the panel's non-black pixels
+# there, the rows and columns outside the shown part untouched
+keep=$(grep '^RESULT keep' "$t/out" || true)
+echo "$keep" | sed 's/^/     /'
+if [ "$(echo "$keep" | grep -c 'bad 0,')" != 3 ] || ! echo "$keep" | sed -n 3p | grep -q 'panel pixels 0,' ||
+	echo "$keep" | sed -n 1,2p | grep -q 'panel pixels 0,'; then
+	echo "FAIL handover copy"; fail_keep=1
+fi
+fail=${fail_keep:-0}
+if sed '/^KEEP-START/q' "$t/out" | grep -E '^(RESULT|PLANE)' | diff -u "$t/want" - > "$t/diff"; then
+	echo "ok   plane, demo, handover, long line and title ($(sed '/^KEEP-START/q' "$t/out" | grep -cE '^(RESULT|PLANE)') lines)"
 else
 	echo "FAIL"; cat "$t/diff"; fail=1
 fi
