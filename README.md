@@ -15,7 +15,7 @@ with open code. That means:
 Only the Boot ROM inside the chip stays. The models we look at (Zero W,
 Zero 2 W, 3B+, Pi 400, Pi 5) are described in [Models](https://github.com/redox-rpi/rpi-open-firmware/wiki/Models) in the wiki;
 work starts on the Pi 3B+. Plan and progress:
-[redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230). Every
+[#18](https://github.com/redox-rpi/rpi-open-firmware/issues/18). Every
 closed piece, per model, and whether it can be replaced:
 [Broadcom](https://github.com/redox-rpi/rpi-open-firmware/wiki/Broadcom#every-closed-piece-and-whether-it-can-be-replaced) in the wiki.
 
@@ -76,7 +76,7 @@ The pages for reading are in the [wiki](https://github.com/redox-rpi/rpi-open-fi
   overlays, licence) with what is inside it.
 - [Boot chain](https://github.com/redox-rpi/rpi-open-firmware/wiki/Boot-chain): Broadcom's boot pieces, how each redox-rpi
   release starts, the steps to the end goal (with pictures).
-- [Own firmware](https://github.com/redox-rpi/rpi-open-firmware/wiki/Own-firmware): our firmware (#230): design,
+- [Own firmware](https://github.com/redox-rpi/rpi-open-firmware/wiki/Own-firmware): our firmware (#18): design,
   milestones, monitor and boot selector, findings.
 - [rpi-open-firmware (2019)](https://github.com/redox-rpi/rpi-open-firmware/wiki/rpi-open-firmware-2019): the upstream
   firmware on our Pi, and the 3B+ risks.
