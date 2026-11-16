@@ -262,16 +262,16 @@ static uint32_t panel_pixel(uint32_t p, uint32_t depth, uint32_t order) {
  * answer. False when it did not finish (resim has no DMA): the caller
  * then clears with the VPU.
  */
-#define DMA0_CS (*(volatile uint32_t *)0x7e007000u)
-#define DMA0_CONBLK (*(volatile uint32_t *)0x7e007004u)
-#define DMA_ENABLE (*(volatile uint32_t *)0x7e007ff0u)
-#define DMA_CS_RESET (1u << 31)
-#define DMA_CS_END (1u << 1)
-#define DMA_CS_ACTIVE 1u
-#define DMA_TI_DEST_INC (1u << 4)
-#define DMA_TI_DEST_W128 (1u << 5)
-#define DMA_TI_SRC_W128 (1u << 9)
-#define DMA_TI_BURST(n) ((uint32_t)(n) << 12)
+#define BSDMA_CS (*(volatile uint32_t *)0x7e007000u)
+#define BSDMA_CONBLK (*(volatile uint32_t *)0x7e007004u)
+#define BSDMA_ENABLE (*(volatile uint32_t *)0x7e007ff0u)
+#define BSDMA_CS_RESET (1u << 31)
+#define BSDMA_CS_END (1u << 1)
+#define BSDMA_CS_ACTIVE 1u
+#define BSDMA_TI_DEST_INC (1u << 4)
+#define BSDMA_TI_DEST_W128 (1u << 5)
+#define BSDMA_TI_SRC_W128 (1u << 9)
+#define BSDMA_TI_BURST(n) ((uint32_t)(n) << 12)
 #define BS_DMA_OFF 0x40000u /* behind the 200 KB panel */
 
 static bool dma_clear(uint32_t dst, uint32_t n) {
@@ -281,7 +281,7 @@ static bool dma_clear(uint32_t dst, uint32_t n) {
 	volatile uint32_t *cb = (volatile uint32_t *)(ALIAS_UNCACHED | blk);
 	for (uint32_t i = 8; i < 12; i++)
 		cb[i] = 0; /* the zero source, right after the 32-byte block */
-	cb[0] = DMA_TI_DEST_INC | DMA_TI_DEST_W128 | DMA_TI_SRC_W128 | DMA_TI_BURST(8);
+	cb[0] = BSDMA_TI_DEST_INC | BSDMA_TI_DEST_W128 | BSDMA_TI_SRC_W128 | BSDMA_TI_BURST(8);
 	cb[1] = ALIAS_UNCACHED | (blk + 32);
 	cb[2] = dst;
 	cb[3] = n;
@@ -289,20 +289,20 @@ static bool dma_clear(uint32_t dst, uint32_t n) {
 	cb[5] = 0;
 	cb[6] = 0;
 	cb[7] = 0;
-	DMA_ENABLE |= 1u;
-	DMA0_CS = DMA_CS_RESET;
-	DMA0_CS = DMA_CS_END; /* clear a stale END */
-	DMA0_CONBLK = ALIAS_UNCACHED | blk;
-	DMA0_CS = DMA_CS_ACTIVE;
+	BSDMA_ENABLE |= 1u;
+	BSDMA_CS = BSDMA_CS_RESET;
+	BSDMA_CS = BSDMA_CS_END; /* clear a stale END */
+	BSDMA_CONBLK = ALIAS_UNCACHED | blk;
+	BSDMA_CS = BSDMA_CS_ACTIVE;
 	bool done = false;
 	for (uint32_t i = 0; i < 4000000u; i++) {
-		if (DMA0_CS & DMA_CS_END) {
+		if (BSDMA_CS & BSDMA_CS_END) {
 			done = true;
 			break;
 		}
 	}
-	DMA0_CS = DMA_CS_RESET;
-	DMA0_CONBLK = 0;
+	BSDMA_CS = BSDMA_CS_RESET;
+	BSDMA_CONBLK = 0;
 	if (!done)
 		return false;
 	/* first and last word: did it write? */
