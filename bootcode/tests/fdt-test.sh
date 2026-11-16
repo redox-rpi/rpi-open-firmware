@@ -17,6 +17,7 @@ cat > "$t/inc/hw.h" <<'H'
 #include <stddef.h>
 bool fdt_set_memory(uint8_t *dtb, uint32_t len, uint32_t base, uint32_t size);
 bool fdt_set_initrd(uint8_t *dtb, uint32_t len, uint32_t start, uint32_t end);
+bool fdt_set_bootargs(uint8_t *dtb, uint32_t len, const char *txt, uint32_t n);
 H
 cp "$here/../fdt.c" "$t/fdt.c"
 gcc -O1 -Wall -Wextra -I"$t/inc" -o "$t/fdt-host" "$here/fdt-host.c" "$t/fdt.c"
@@ -65,6 +66,31 @@ name="initrd: nested chosen untouched"
 check [ "$(fdtget -t x "$t/out.dtb" /soc/chosen linux,initrd-start)" = "7" ]
 name="initrd: no placeholders refused"
 check bash -c "! '$t/fdt-host' '$t/small.dtb' '$t/x' 1 2 3 >/dev/null"
+# /chosen bootargs from cmdline.txt (#31): the placeholder as make-dtb.sh
+# writes it (1023 spaces), the first line only, tabs as spaces
+sp=$(printf '%1023s' '')
+cat > "$t/args.dts" <<D
+/dts-v1/;
+/ { #address-cells = <1>; #size-cells = <1>;
+    chosen { bootargs = "$sp"; };
+    memory@0 { device_type = "memory"; reg = <0 0>; }; };
+D
+dtc -q -I dts -O dtb -o "$t/args.dtb" "$t/args.dts"
+printf 'quiet\tRPI_FB=1280x720 console=ttyAMA0\r\nsecond line\n' > "$t/cmdline.txt"
+FDT_CMDLINE="$t/cmdline.txt" "$t/fdt-host" "$t/args.dtb" "$t/out.dtb" 1e000000 >/dev/null
+got=$(fdtget -t s "$t/out.dtb" /chosen bootargs)
+name="bootargs: first line, tab as space"
+check [ "$(echo $got)" = "quiet RPI_FB=1280x720 console=ttyAMA0" ]
+name="bootargs: same length, one string"
+check [ "$(fdtget -t bx "$t/out.dtb" /chosen bootargs | wc -w)" = 1024 ]
+name="bootargs: blob size unchanged"
+check [ "$(wc -c <"$t/out.dtb")" = "$(wc -c <"$t/args.dtb")" ]
+head -c 2000 /dev/zero | tr '\0' a > "$t/long.txt"
+FDT_CMDLINE="$t/long.txt" "$t/fdt-host" "$t/args.dtb" "$t/out.dtb" 1e000000 >/dev/null
+name="bootargs: long line cut at 1023"
+check [ "$(fdtget -t s "$t/out.dtb" /chosen bootargs | wc -c)" = 1024 ]
+name="bootargs: no placeholder refused"
+check bash -c "! FDT_CMDLINE='$t/cmdline.txt' '$t/fdt-host' '$t/small.dtb' '$t/x' 1 >/dev/null"
 head -c 4096 /dev/urandom > "$t/junk"
 name="non-devicetree refused"
 check bash -c "! '$t/fdt-host' '$t/junk' '$t/x' 1 >/dev/null"

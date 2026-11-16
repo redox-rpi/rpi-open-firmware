@@ -2,8 +2,9 @@
  * redox-rpi bootcode: fill in the memory size in a flattened devicetree
  * (#230 M2). Broadcom's start.elf writes the ARM's memory into
  * /memory@0 reg; the Raspberry Pi devicetrees ship it as zero. For the
- * direct boot (#31) it also fills in /chosen linux,initrd-start and -end.
- * We only overwrite properties in place, so the blob keeps its size.
+ * direct boot (#31) it also fills in /chosen linux,initrd-start and -end,
+ * and /chosen bootargs from cmdline.txt. We only overwrite properties in
+ * place, so the blob keeps its size.
  *
  * New code, written from the Devicetree Specification v0.4, chapter 5
  * (flattened devicetree format).
@@ -145,4 +146,36 @@ static bool set_chosen(uint8_t *dtb, uint32_t len, const char *prop, uint32_t v)
  */
 bool fdt_set_initrd(uint8_t *dtb, uint32_t len, uint32_t start, uint32_t end) {
 	return set_chosen(dtb, len, "linux,initrd-start", start) && set_chosen(dtb, len, "linux,initrd-end", end);
+}
+
+/*
+ * Set /chosen bootargs to the first line of cmdline.txt (n bytes at txt),
+ * as Broadcom's start.elf does; the kernel8.img stub reads its options
+ * there (RPI_FB=, quiet). The property must be there already: make-dtb.sh
+ * puts in a placeholder of spaces (1023 and the NUL). The line goes in
+ * from the start, tabs become spaces, and the rest stays spaces up to the
+ * NUL in the last byte, so the value is still one string of the same
+ * length. A longer line is cut, with a message. False when there is no
+ * placeholder.
+ */
+bool fdt_set_bootargs(uint8_t *dtb, uint32_t len, const char *txt, uint32_t n) {
+	uint32_t plen;
+	uint8_t *val = find_prop(dtb, len, is_chosen_node, "bootargs", &plen);
+	if (!val || plen < 2) {
+		printf("err fdt: no /chosen bootargs placeholder (make-dtb.sh adds it)\n");
+		return false;
+	}
+	uint32_t i = 0;
+	for (; i < n && txt[i] && txt[i] != '\r' && txt[i] != '\n'; i++) {
+		if (i == plen - 1) {
+			printf("err fdt: cmdline.txt longer than %u bytes, cut\n", plen - 1);
+			break;
+		}
+		char c = txt[i];
+		val[i] = (uint8_t)(c == '\t' ? ' ' : c);
+	}
+	for (; i < plen - 1; i++)
+		val[i] = ' ';
+	val[plen - 1] = 0;
+	return true;
 }

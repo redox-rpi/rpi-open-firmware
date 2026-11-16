@@ -6,9 +6,10 @@
 # VPU code does not, so we merge them on the host.
 #
 # For the direct boot without U-Boot (rpi-open-firmware #31) the blob also
-# gets /chosen linux,initrd-start and linux,initrd-end as zeros; boot64
-# fills them in when the card has an initramfs (fdt.c only overwrites in
-# place). On by default for the Zero 2 W, DIRECT=1 for the 3B+.
+# gets /chosen linux,initrd-start and linux,initrd-end as zeros, and
+# /chosen bootargs as 1023 spaces; boot64 fills them in when the card has
+# an initramfs and a cmdline.txt (#31; fdt.c only overwrites in place).
+# On by default for the Zero 2 W, DIRECT=1 for the 3B+.
 #
 # Usage: redox-rpi/make-dtb.sh FIRMWARE_DIR [OUT] [3bp|zero2w]
 #   FIRMWARE_DIR holds bcm2710-rpi-3-b-plus.dtb, bcm2710-rpi-zero-2-w.dtb
@@ -32,6 +33,7 @@ if [ "$direct" = 1 ]; then
 	fdtput -c "$out" /chosen 2>/dev/null || true
 	fdtput -t x "$out" /chosen linux,initrd-start 0
 	fdtput -t x "$out" /chosen linux,initrd-end 0
-	note=", initrd placeholders in /chosen"
+	fdtput -t s "$out" /chosen bootargs "$(printf '%1023s' '')"
+	note=", initrd and bootargs placeholders in /chosen"
 fi
 echo "$out: $(wc -c <"$out") bytes ($in), serial0 = PL011, SD on mmc@7e300000$note"
