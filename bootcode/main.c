@@ -119,9 +119,10 @@ void bootcode_main(uint32_t cpuid) {
 	 * controller down, and a watchdog reset takes it down too.
 	 */
 	const uint32_t up = SD_CS_SDUP_SET | SD_CS_RESTRT_SET;
-	if ((rom.sdcs & up) == up)
+	if ((rom.sdcs & up) == up) {
 		printf("[sdram] already up (SD_CS 0x%X), kept as it is\n", rom.sdcs);
-	else
+		sdram_size_kept();
+	} else
 		sdram_init();
 	g_sdram_up = true;
 	printf("SDRAM ready after %u us\n", timer_us() - t0);

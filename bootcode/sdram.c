@@ -317,6 +317,14 @@ static void selftest(void) {
 	     mb, 2 * mb / 64, timer_us() - start);
 }
 
+/* the split from g_ram_size (#29) */
+static void set_split(void) {
+	static const uint32_t size_mb[] = { 1024, 512, 256, 128 };
+	g_ram_bytes = size_mb[g_ram_size] << 20;
+	g_arm_mem = g_ram_bytes - VC_MEM;
+	logf("memory split: ARM 0-%08X, VideoCore %08X-%08X\n", g_arm_mem, g_arm_mem, g_ram_bytes);
+}
+
 void sdram_init(void) {
 	logf("SD_CS 0x%X at start\n", SD_CS);
 
@@ -377,9 +385,24 @@ void sdram_init(void) {
 
 	reset_with_timing(&timings);
 	selftest();
+	set_split();
+}
 
-	static const uint32_t size_mb[] = { 1024, 512, 256, 128 };
-	g_ram_bytes = size_mb[g_ram_size] << 20;
-	g_arm_mem = g_ram_bytes - VC_MEM;
-	logf("memory split: ARM 0-%08X, VideoCore %08X-%08X\n", g_arm_mem, g_arm_mem, g_ram_bytes);
+/*
+ * Chained over running SDRAM (main.c keeps it as it is): no mode register
+ * read on a live controller, so take the size from the column bits the
+ * set-up wrote to SD_SB (3 for our 1 GB, 2 for 512 MB, as above). Other
+ * values keep the 1 GB split.
+ */
+void sdram_size_kept(void) {
+	uint32_t col = (SD_SB & SD_SB_COLBITS_SET) >> SD_SB_COLBITS_LSB;
+	if (col == 3)
+		g_ram_size = RAM_1GB;
+	else if (col == 2)
+		g_ram_size = RAM_512MB;
+	logf("kept: SB 0x%X, column bits %u, %s\n", SD_SB, col,
+	     g_ram_size == RAM_UNKNOWN ? "size unknown, 1 GB assumed" : size_name[g_ram_size]);
+	if (g_ram_size == RAM_UNKNOWN)
+		g_ram_size = RAM_1GB;
+	set_split();
 }

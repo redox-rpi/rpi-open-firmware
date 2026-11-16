@@ -55,6 +55,7 @@ extern enum ram_size g_ram_size;
 #define VC_MEM 0x2000000u /* 32 MB */
 extern uint32_t g_ram_bytes, g_arm_mem;
 void sdram_init(void);
+void sdram_size_kept(void); /* SDRAM already up: the size from SD_SB */
 
 /* monitor.c: test builds only (MONITOR=1), never in a release;
  * CHAIN_IMAGE=1 for the boot selector build (Makefile CHAIN_IMAGE=path) */
