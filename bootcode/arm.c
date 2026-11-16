@@ -210,8 +210,15 @@ bool arm_start(bool aarch64) {
 		printf("err arm: SDRAM not set up\n");
 		return false;
 	}
-	/* 0 .. 0x3e000000 to the SDRAM, 0x3f000000 to the peripherals */
-	for (uint32_t i = 0; i < 62; i++)
+	/*
+	 * 0 .. 0x3f000000 to the SDRAM, 0x3f000000 to the peripherals. The
+	 * ARM's own memory ends at 0x3e000000 (MBOX_ARM_MEM_SIZE, what the
+	 * mailbox and the devicetree tell it); the window above it is the
+	 * VideoCore's part with the framebuffer (mbox.c FB_BASE, ARM
+	 * 0x3e400000), which U-Boot and Redox draw into, as under start.elf.
+	 * Without it their writes went nowhere (Pi test row 447).
+	 */
+	for (uint32_t i = 0; i < 63; i++)
 		arm_map(ARM_MEMORY_BASE + i * 0x1000000u, i * 0x1000000u);
 	arm_map(ARM_PERIPH_BUS, ARM_PERIPH_ARM);
 
