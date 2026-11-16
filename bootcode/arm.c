@@ -210,9 +210,17 @@ bool arm_start(bool aarch64) {
 		printf("err arm: SDRAM not set up\n");
 		return false;
 	}
-	/* 0 .. g_arm_mem to the SDRAM (0x3e000000 on 1 GB), 0x3f000000 to
-	 * the peripherals */
-	for (uint32_t i = 0; i < g_arm_mem >> 24; i++)
+	/*
+	 * The SDRAM up to the peripherals at 0x3f000000, the peripherals
+	 * there. The ARM's own memory ends at g_arm_mem (MBOX_ARM_MEM_SIZE,
+	 * what the mailbox and the devicetree tell it); the windows above it
+	 * are the VideoCore's part with the framebuffer (mbox.c FB_BASE),
+	 * which U-Boot and Redox draw into, as under start.elf. Without them
+	 * their writes went nowhere (Pi test row 447). 63 windows on 1 GB,
+	 * 32 on 512 MB.
+	 */
+	uint32_t top = g_ram_bytes < ARM_PERIPH_ARM ? g_ram_bytes : ARM_PERIPH_ARM;
+	for (uint32_t i = 0; i < top >> 24; i++)
 		arm_map(ARM_MEMORY_BASE + i * 0x1000000u, i * 0x1000000u);
 	arm_map(ARM_PERIPH_BUS, ARM_PERIPH_ARM);
 
