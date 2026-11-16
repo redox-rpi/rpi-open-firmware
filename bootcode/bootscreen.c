@@ -259,6 +259,65 @@ static uint32_t panel_pixel(uint32_t p, uint32_t depth, uint32_t order) {
 }
 
 /*
+ * Clear n bytes at bus address dst (16-byte aligned, n a multiple of 16)
+ * with DMA channel 0: one control block, a 16-byte zero source that does
+ * not move, 128-bit writes in bursts. The VPU's own uncached stores took
+ * 79 ms for 1280x720x32 (Pi test 466); the DMA engine writes in bursts.
+ * The block and the zero source lie in the VideoCore's memory behind the
+ * panel (the bootcode itself may run from L2, which the DMA engine does
+ * not see). The channel is reset afterwards, before the ARM gets its
+ * answer. False when it did not finish (resim has no DMA): the caller
+ * then clears with the VPU.
+ */
+#define DMA0_CS (*(volatile uint32_t *)0x7e007000u)
+#define DMA0_CONBLK (*(volatile uint32_t *)0x7e007004u)
+#define DMA_ENABLE (*(volatile uint32_t *)0x7e007ff0u)
+#define DMA_CS_RESET (1u << 31)
+#define DMA_CS_END (1u << 1)
+#define DMA_CS_ACTIVE 1u
+#define DMA_TI_DEST_INC (1u << 4)
+#define DMA_TI_DEST_W128 (1u << 5)
+#define DMA_TI_SRC_W128 (1u << 9)
+#define DMA_TI_BURST(n) ((uint32_t)(n) << 12)
+#define BS_DMA_OFF 0x40000u /* behind the 200 KB panel */
+
+static bool dma_clear(uint32_t dst, uint32_t n) {
+	if ((dst | n) & 15 || !n || n >= 1u << 30)
+		return false;
+	uint32_t blk = BS_BASE + BS_DMA_OFF;
+	volatile uint32_t *cb = (volatile uint32_t *)(ALIAS_UNCACHED | blk);
+	for (uint32_t i = 8; i < 12; i++)
+		cb[i] = 0; /* the zero source, right after the 32-byte block */
+	cb[0] = DMA_TI_DEST_INC | DMA_TI_DEST_W128 | DMA_TI_SRC_W128 | DMA_TI_BURST(8);
+	cb[1] = ALIAS_UNCACHED | (blk + 32);
+	cb[2] = dst;
+	cb[3] = n;
+	cb[4] = 0;
+	cb[5] = 0;
+	cb[6] = 0;
+	cb[7] = 0;
+	DMA_ENABLE |= 1u;
+	DMA0_CS = DMA_CS_RESET;
+	DMA0_CS = DMA_CS_END; /* clear a stale END */
+	DMA0_CONBLK = ALIAS_UNCACHED | blk;
+	DMA0_CS = DMA_CS_ACTIVE;
+	bool done = false;
+	for (uint32_t i = 0; i < 4000000u; i++) {
+		if (DMA0_CS & DMA_CS_END) {
+			done = true;
+			break;
+		}
+	}
+	DMA0_CS = DMA_CS_RESET;
+	DMA0_CONBLK = 0;
+	if (!done)
+		return false;
+	/* first and last word: did it write? */
+	volatile uint32_t *d = (volatile uint32_t *)(ALIAS_UNCACHED | (dst & 0x3fffffffu));
+	return d[0] == 0 && d[n / 4 - 1] == 0;
+}
+
+/*
  * The panel into the ARM's new framebuffer v: its visible part black, the
  * panel in the middle (where the HVS showed it, as hvs.c centres a smaller
  * buffer too). 16 and 32 bit only; others, and a buffer smaller than the
@@ -270,14 +329,18 @@ static void keep_panel(const struct fb_view *v) {
 	uint32_t bpp = v->depth / 8, pitch = v->vw * bpp;
 	volatile uint8_t *base = (volatile uint8_t *)(ALIAS_UNCACHED | (v->base & 0x3fffffffu)) + v->yoff * pitch +
 				 v->xoff * bpp;
-	for (uint32_t y = 0; y < v->h; y++) {
-		volatile uint32_t *row = (volatile uint32_t *)(base + y * pitch);
-		for (uint32_t i = 0; i < v->w * bpp / 4; i++)
-			row[i] = 0;
+	uint32_t first = (v->base & 0x3fffffffu) + v->yoff * pitch + v->xoff * bpp;
+	bool whole = v->xoff == 0 && v->w == v->vw; /* the shown rows in one piece */
+	if (!whole || !dma_clear(ALIAS_UNCACHED | first, v->h * pitch)) {
+		for (uint32_t y = 0; y < v->h; y++) {
+			volatile uint32_t *row = (volatile uint32_t *)(base + y * pitch);
+			for (uint32_t i = 0; i < v->w * bpp / 4; i++)
+				row[i] = 0;
+		}
 	}
 	if (v->w < BS_W || v->h < BS_H)
 		return;
-	uint32_t x0 = (v->w - BS_W) / 2, y0 = (v->h - BS_H) / 2;
+	uint32_t x0 = (v->w - BS_W) / 2, y0 = (v->h - BS_H) / 2, last_in = 0, last_out = 0;
 	for (uint32_t y = 0; y < BS_H; y++) {
 		const volatile uint16_t *src = (const volatile uint16_t *)(g_bs_fb + y * BS_PITCH);
 		volatile uint8_t *dst = base + (y0 + y) * pitch + x0 * bpp;
@@ -285,10 +348,12 @@ static void keep_panel(const struct fb_view *v) {
 			uint32_t p = src[x];
 			if (!p)
 				continue; /* black already */
+			if (p != last_in) /* a handful of colours: convert each once per run */
+				last_in = p, last_out = panel_pixel(p, v->depth, v->order);
 			if (bpp == 2)
-				((volatile uint16_t *)dst)[x] = (uint16_t)panel_pixel(p, 16, v->order);
+				((volatile uint16_t *)dst)[x] = (uint16_t)last_out;
 			else
-				((volatile uint32_t *)dst)[x] = panel_pixel(p, 32, v->order);
+				((volatile uint32_t *)dst)[x] = last_out;
 		}
 	}
 }
