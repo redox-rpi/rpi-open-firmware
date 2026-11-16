@@ -86,6 +86,7 @@ int32_t fat_load(const char *name, uint32_t addr, uint32_t max);
 int32_t fat_size(const char *name);
 bool fdt_set_memory(uint8_t *dtb, uint32_t len, uint32_t base, uint32_t size);
 bool fdt_set_initrd(uint8_t *dtb, uint32_t len, uint32_t start, uint32_t end);
+bool fdt_set_bootargs(uint8_t *dtb, uint32_t len, const char *txt, uint32_t n);
 
 /* boot64.c (monitor and release builds): load from FAT and start the ARM;
  * returns only on an error */

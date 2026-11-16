@@ -28,7 +28,8 @@ uint32_t crc32(const volatile uint8_t *p, uint32_t n) {
  * else Broadcom's bcm2710-rpi-3-b-plus.dtb or bcm2710-rpi-zero-2-w.dtb
  * as it is. When the card has an initramfs, it goes to ARM 0x2100000 and
  * /chosen linux,initrd-start/-end get its place, as start.elf does for
- * "initramfs initramfs followkernel" (direct boot without U-Boot, #31). We don't apply
+ * "initramfs initramfs followkernel" (direct boot without U-Boot, #31), and
+ * the first line of cmdline.txt goes into /chosen bootargs. We don't apply
  * overlays on the VPU. DTB "@N" (hex size) uses the N bytes already at
  * ARM 0x2000000, sent over serial with "l c2000000 N C", so a devicetree
  * can be tried without writing the card (the monitor passes its size as
@@ -52,6 +53,30 @@ static bool load_one(const char *name, uint32_t addr, uint32_t max, uint32_t pct
 	printf("boot64: %s %u bytes at ARM %08X, crc32 %08X\n", name, (uint32_t)n, B64_ARM(addr),
 	       crc32((const volatile uint8_t *)addr, (uint32_t)n));
 	return true;
+}
+
+/*
+ * cmdline.txt into /chosen bootargs, as start.elf does: the kernel8.img
+ * stub's options (rpi-open-firmware #31). Read into the initramfs's place,
+ * which is loaded later. Nothing to do when the card has none; a
+ * devicetree without the placeholder only gets a message (U-Boot cards
+ * have their own command line).
+ */
+static void set_bootargs(uint8_t *dtb, uint32_t dtb_len) {
+	int32_t n = fat_size("cmdline.txt");
+	if (n <= 0 || n > 0x10000)
+		return;
+	if (fat_load("cmdline.txt", B64_INITRD, 0x10000u) != n)
+		return;
+	const char *txt = (const char *)B64_INITRD;
+	if (!fdt_set_bootargs(dtb, dtb_len, txt, (uint32_t)n)) {
+		printf("boot64: cmdline.txt not passed on\n");
+		return;
+	}
+	uint32_t l = 0;
+	while (l < (uint32_t)n && txt[l] && txt[l] != '\r' && txt[l] != '\n')
+		l++;
+	printf("boot64: bootargs from cmdline.txt, %u bytes\n", l);
 }
 
 /*
@@ -137,6 +162,7 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 			return false;
 		stub[0xf8 / 4] = B64_ARM(B64_DTB);
 		printf("boot64: %s %u bytes at ARM %08X, memory 0-%08X\n", dtb, (uint32_t)n, B64_ARM(B64_DTB), B64_MEM_SIZE);
+		set_bootargs((uint8_t *)B64_DTB, (uint32_t)n);
 		if (!dtb_in_mem && !load_initrd((uint8_t *)B64_DTB, (uint32_t)n))
 			return false;
 	}
