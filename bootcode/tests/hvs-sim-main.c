@@ -48,7 +48,8 @@ void bs_step(uint32_t pct, const char *a, const char *b) {
 	(void)pct, (void)a, (void)b;
 }
 
-void bs_handover(void) {
+void bs_handover(const struct fb_view *v) {
+	(void)v;
 }
 
 static void dump(const char *what, uint32_t bad, const volatile uint8_t *p, uint32_t n) {

@@ -12,7 +12,10 @@
  * is the black background fill. A step redraws only the bar and the text
  * lines. When the ARM allocates a framebuffer (U-Boot, later Redox), mbox.c
  * shows that one instead and calls bs_handover(); from then on the steps
- * draw nothing.
+ * draw nothing. The handover clears the ARM's framebuffer to black and
+ * copies the panel into its middle, so the picture stays until the system
+ * draws its own (quiet boot step I4A; until then the buffer held whatever
+ * the SDRAM had).
  *
  * Drawing touches only memory, so tests/bootscreen-sim.sh runs it in resim
  * and compares the panel with a Python model. New code.
@@ -241,13 +244,62 @@ void bs_fail(const char *a, const char *b) {
 	step(0, a, b, true);
 }
 
-/* the ARM shows its own framebuffer now (mbox.c): stop drawing */
-void bs_handover(void) {
+/* an RGB565 panel pixel in the ARM framebuffer's format (16 or 32 bit) */
+static uint32_t panel_pixel(uint32_t p, uint32_t depth, uint32_t order) {
+	uint32_t r = p >> 11 & 31, g = p >> 5 & 63, b = p & 31;
+	uint32_t rgb = (r << 3 | r >> 2) << 16 | (g << 2 | g >> 4) << 8 | (b << 3 | b >> 2);
+	return fb_pixel(rgb, depth, order);
+}
+
+/*
+ * The panel into the ARM's new framebuffer v: its visible part black, the
+ * panel in the middle (where the HVS showed it, as hvs.c centres a smaller
+ * buffer too). 16 and 32 bit only; others, and a buffer smaller than the
+ * panel, are only cleared or left alone.
+ */
+static void keep_panel(const struct fb_view *v) {
+	if (v->depth != 16 && v->depth != 32)
+		return;
+	uint32_t bpp = v->depth / 8, pitch = v->vw * bpp;
+	volatile uint8_t *base = (volatile uint8_t *)(ALIAS_UNCACHED | (v->base & 0x3fffffffu)) + v->yoff * pitch +
+				 v->xoff * bpp;
+	for (uint32_t y = 0; y < v->h; y++) {
+		volatile uint32_t *row = (volatile uint32_t *)(base + y * pitch);
+		for (uint32_t i = 0; i < v->w * bpp / 4; i++)
+			row[i] = 0;
+	}
+	if (v->w < BS_W || v->h < BS_H)
+		return;
+	uint32_t x0 = (v->w - BS_W) / 2, y0 = (v->h - BS_H) / 2;
+	for (uint32_t y = 0; y < BS_H; y++) {
+		const volatile uint16_t *src = (const volatile uint16_t *)(g_bs_fb + y * BS_PITCH);
+		volatile uint8_t *dst = base + (y0 + y) * pitch + x0 * bpp;
+		for (uint32_t x = 0; x < BS_W; x++) {
+			uint32_t p = src[x];
+			if (!p)
+				continue; /* black already */
+			if (bpp == 2)
+				((volatile uint16_t *)dst)[x] = (uint16_t)panel_pixel(p, 16, v->order);
+			else
+				((volatile uint32_t *)dst)[x] = panel_pixel(p, 32, v->order);
+		}
+	}
+}
+
+/*
+ * The ARM shows its own framebuffer v now (mbox.c): stop drawing, and keep
+ * the panel on the screen by copying it there. v NULL: only stop.
+ */
+void bs_handover(const struct fb_view *v) {
 	if (!g_on)
 		return;
 	g_on = false;
-	printf("bootscreen: handed over to the ARM's framebuffer %u ms after it came up; HDMI start %u us, drawing %u us\n",
-	       (timer_us() - g_t_up) / 1000, g_t_hdmi, g_t_draw);
+	uint32_t t0 = timer_us();
+	if (v)
+		keep_panel(v);
+	printf("bootscreen: handed over to the ARM's framebuffer %u ms after it came up; HDMI start %u us, drawing %u us, "
+	       "copy %u us\n",
+	       (timer_us() - g_t_up) / 1000, g_t_hdmi, g_t_draw, timer_us() - t0);
 }
 
 /*
