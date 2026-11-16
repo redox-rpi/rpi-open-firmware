@@ -84,6 +84,14 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 		printf("err boot64: SDRAM not set up\n");
 		return false;
 	}
+#if HDMI
+	/* the boot screen's title from the card (boot_title= in config.txt);
+	 * read into the devicetree's place, which is loaded later */
+	int32_t cn = fat_size("config.txt");
+	if (cn > 0 && cn <= 0x10000 && !dtb_in_mem && fat_load("config.txt", B64_DTB, 0x10000u) == cn &&
+	    bs_config_title((const char *)B64_DTB, (uint32_t)cn))
+		printf("boot64: boot screen title from config.txt\n");
+#endif
 	if (!load_one("armstub8-redox.bin", B64_STUB, B64_KERNEL - B64_STUB, 30) &&
 	    !load_one("armstub8.bin", B64_STUB, B64_KERNEL - B64_STUB, 30)) {
 		bs_fail("not found: ", "armstub8.bin");

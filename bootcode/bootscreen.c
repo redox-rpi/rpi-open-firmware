@@ -2,7 +2,9 @@
  * redox-rpi bootcode: the boot screen on HDMI (#430). From the moment the
  * SDRAM runs until the ARM asks for its own framebuffer, a small panel in
  * the middle of the 1080p screen shows a title, a progress bar and the
- * last few boot steps. It is compiled in, so it needs nothing from the SD
+ * last few boot steps. The title is the firmware's neutral one until
+ * boot64 finds boot_title= in the card's config.txt (bs_config_title()),
+ * so the system on the card names itself. The panel is compiled in, so it needs nothing from the SD
  * card; the font is U-Boot's 8x16 (font8x16.h).
  *
  * The panel is a 640x160 RGB565 buffer in the VideoCore's part of the
@@ -20,7 +22,8 @@
 #include "hw.h"
 #include "font8x16.h"
 
-#define BS_TITLE "Redox on Raspberry Pi"
+#define BS_TITLE "Booting Raspberry Pi ..."
+#define BS_TITLE_MAX (BS_W / (FONT_W * 2)) /* 40 characters at twice the size */
 #define BS_PITCH (BS_W * 2u)
 #define BS_TITLE_Y 0u /* twice the font size: 32 lines */
 #define BS_BAR_Y 48u
@@ -40,6 +43,7 @@
 #define C_EMPTY 0x3186u  /* 303030: the bar still to go */
 #define C_BAR 0xfc00u    /* ff8000 */
 
+static char g_title[BS_TITLE_MAX + 1] = BS_TITLE;
 static char g_line[BS_LINES][BS_LINE_MAX + 1];
 static bool g_fail[BS_LINES];
 static uint32_t g_nline, g_pct;
@@ -99,10 +103,19 @@ static void draw_lines(volatile uint8_t *fb) {
 	}
 }
 
+/* the title centred (x even); the rest of its 32 lines black */
+static void draw_title(volatile uint8_t *fb) {
+	uint32_t n = 0;
+	while (g_title[n])
+		n++;
+	uint32_t tw = n * FONT_W * 2, x = (BS_W - tw) / 2 & ~1u;
+	fill(fb, 0, BS_TITLE_Y, BS_W, FONT_H * 2, C_BLACK);
+	text(fb, x, BS_TITLE_Y, g_title, 1, C_WHITE, C_BLACK, x + tw);
+}
+
 static void draw_all(volatile uint8_t *fb) {
 	fill(fb, 0, 0, BS_W, BS_H, C_BLACK);
-	uint32_t tw = (sizeof BS_TITLE - 1) * FONT_W * 2;
-	text(fb, (BS_W - tw) / 2, BS_TITLE_Y, BS_TITLE, 1, C_WHITE, C_BLACK, (BS_W + tw) / 2);
+	draw_title(fb);
 	draw_bar(fb);
 	draw_lines(fb);
 }
@@ -165,6 +178,57 @@ static void step(uint32_t pct, const char *a, const char *b, bool fail) {
 	draw_bar(g_bs_fb);
 	draw_lines(g_bs_fb);
 	g_t_draw += timer_us() - t0;
+}
+
+/* a new title (printable ASCII, cut at BS_TITLE_MAX), drawn at once */
+void bs_title(const char *s) {
+	uint32_t n = 0;
+	for (; s[n] && n < BS_TITLE_MAX; n++)
+		g_title[n] = s[n] >= ' ' && s[n] <= '~' ? s[n] : ' ';
+	g_title[n] = 0;
+	if (g_on)
+		draw_title(g_bs_fb);
+}
+
+/*
+ * config.txt (len bytes at txt): the value of boot_title= becomes the
+ * title. Lines starting with # are comments; spaces around the key, the
+ * = and the value are dropped. Broadcom's start.elf ignores the key.
+ * True when the key was there.
+ */
+bool bs_config_title(const char *txt, uint32_t len) {
+	static const char key[] = "boot_title";
+	const char *p = txt, *end = txt + len;
+	while (p < end) {
+		while (p < end && (*p == ' ' || *p == '\t'))
+			p++;
+		const char *k = key;
+		while (p < end && *k && *p == *k)
+			p++, k++;
+		const char *q = p;
+		while (q < end && (*q == ' ' || *q == '\t'))
+			q++;
+		if (!*k && q < end && *q == '=') {
+			q++;
+			while (q < end && (*q == ' ' || *q == '\t'))
+				q++;
+			char v[BS_TITLE_MAX + 1];
+			uint32_t n = 0;
+			while (q < end && *q != '\r' && *q != '\n' && n < BS_TITLE_MAX)
+				v[n++] = *q++;
+			while (n && (v[n - 1] == ' ' || v[n - 1] == '\t'))
+				n--;
+			v[n] = 0;
+			if (n) {
+				bs_title(v);
+				return true;
+			}
+		}
+		while (p < end && *p != '\n')
+			p++;
+		p++;
+	}
+	return false;
 }
 
 /* a boot step a + b done or begun, the bar to pct percent */
