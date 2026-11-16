@@ -77,6 +77,13 @@ int main(void) {
 	bs_fail("no SD card", 0);
 	sums("long");
 
+	/* the title from config.txt: comments and a lookalike key skipped */
+	static const char cfg[] = "# boot_title=not this\r\nboot_titles=nor this\r\n[all]\r\n"
+				  "  boot_title =  Redox on Raspberry Pi  \r\narm_64bit=1\r\n";
+	if (!bs_config_title(cfg, sizeof cfg - 1))
+		printf("RESULT title not found\n");
+	sums("title");
+
 	printf("bootscreen-sim: end\n");
 	return 0;
 }

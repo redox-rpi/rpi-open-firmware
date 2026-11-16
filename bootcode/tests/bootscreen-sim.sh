@@ -32,11 +32,11 @@ timeout 600 "$emul" "$t/sim.bin" 0 0 > "$t/out" 2> "$t/err" || { tail -20 "$t/ou
 	python3 -I "$here/bootscreen-model.py" "$bc/font8x16.h" | sed -n 1p
 	python3 -I "$here/bootscreen-model.py" "$bc/font8x16.h" | sed -n 2p
 	echo "PLANE 640x160 16 bit order 1: 47005814 FF1CC280 40A00280 C0C0C0C0 02000000 C0C0C0C0 00000500"
-	python3 -I "$here/bootscreen-model.py" "$bc/font8x16.h" | sed -n 3p
+	python3 -I "$here/bootscreen-model.py" "$bc/font8x16.h" | sed -n 3,4p
 } > "$t/want"
 fail=0
 if grep -E '^(RESULT|PLANE)' "$t/out" | diff -u "$t/want" - > "$t/diff"; then
-	echo "ok   plane, demo, handover and long line ($(grep -cE '^(RESULT|PLANE)' "$t/out") lines)"
+	echo "ok   plane, demo, handover, long line and title ($(grep -cE '^(RESULT|PLANE)' "$t/out") lines)"
 else
 	echo "FAIL"; cat "$t/diff"; fail=1
 fi

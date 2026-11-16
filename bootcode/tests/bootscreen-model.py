@@ -13,7 +13,9 @@ font_h = open(sys.argv[1]).read()
 font = [int(v, 16) for v in re.findall(r'0x([0-9a-f]{2})', font_h[font_h.index('g_font['):])]
 assert len(font) == 95 * 16
 
-def render(lines, pct):
+TITLE = "Booting Raspberry Pi ..."
+
+def render(lines, pct, title=TITLE):
     """lines: [(text, fail)] as on screen (the last LINES), pct: the bar"""
     fb = [[BLACK] * W for _ in range(H)]
     def text(x, y, s, sh, fg, x_end):
@@ -28,9 +30,9 @@ def render(lines, pct):
                 for b in range(cw):
                     fb[y + row][px] = fg if bits & (0x80 >> (b >> sh)) else BLACK
                     px += 1
-    title = "Redox on Raspberry Pi"
     tw = len(title) * 16
-    text((W - tw) // 2, 0, title, 1, WHITE, (W + tw) // 2)
+    x = (W - tw) // 2 & ~1
+    text(x, 0, title, 1, WHITE, x + tw)
     inner = W - 4
     done = (inner * pct // 100) & ~1
     for y in range(48, 64):
@@ -56,7 +58,7 @@ def sums(raw):
         out.append("%08X" % s2)
     return " ".join(out) + " all %08X %08X" % (a1, a2)
 
-def steps(seq):
+def steps(seq, title=TITLE):
     """seq: [(pct or None, text, fail)] as bs_start/bs_step/bs_fail"""
     lines, pct = [], 0
     for i, (p, s, fail) in enumerate(seq):
@@ -66,7 +68,7 @@ def steps(seq):
             pct = p
         elif p is not None and p > pct:
             pct = p
-    return render(lines, pct)
+    return render(lines, pct, title)
 
 demo = steps([
     (10, "bootcode test, SDRAM ready", False),
@@ -78,10 +80,13 @@ demo = steps([
     (None, "a failed step looks like this", True),
     (90, "ARM running", False),
 ])
-long = steps([
+long_seq = [
     (0, "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789abcdefghijklmnopqrstuvwxyz", False),
     (None, "no SD card", True),
-])
+]
+long = steps(long_seq)
+# boot_title= from config.txt (bootscreen-sim-main.c's text)
+titled = steps(long_seq, "Redox on Raspberry Pi")
 
 if sys.argv[2:] == ["crc"]:
     print("%08X" % zlib.crc32(demo))
@@ -89,3 +94,4 @@ else:
     print("RESULT demo " + sums(demo))
     print("RESULT handover " + sums(demo))
     print("RESULT long " + sums(long))
+    print("RESULT title " + sums(titled))
