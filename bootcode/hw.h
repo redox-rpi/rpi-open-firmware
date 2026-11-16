@@ -75,10 +75,12 @@ uint32_t arm_set_mhz(uint32_t mhz);
 uint32_t arm_khz(void);
 
 /* sd.c, fat.c (monitor builds): read the SD card and its FAT partition */
-struct sd_card { bool ready, high_capacity; uint32_t mb; char name[6]; };
+struct sd_card { bool ready, high_capacity, wide; uint32_t mb; char name[6]; };
+#define SD_RUN_MAX 2048u /* sectors per read command (1 MB) */
 extern struct sd_card g_sd;
 bool sd_init(void);
 bool sd_read(uint32_t lba, uint32_t *buf);
+bool sd_read_blocks(uint32_t lba, uint32_t n, uint32_t *buf);
 void sd_off(void);
 bool fat_mount(void);
 bool fat_list(void);

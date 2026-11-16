@@ -113,6 +113,9 @@ static bool load_initrd(uint8_t *dtb, uint32_t dtb_len) {
 	uint32_t ms = (timer_us() - t0) / 1000;
 	printf("boot64: initramfs %u bytes at ARM %08X in %u ms (%u KB/s)\n", (uint32_t)n, B64_ARM(B64_INITRD), ms,
 	       ms ? (uint32_t)n / ms : 0);
+#if LOAD_CRC
+	printf("boot64: initramfs crc32 %08X\n", crc32((const volatile uint8_t *)B64_INITRD, (uint32_t)n));
+#endif
 	if (!fdt_set_initrd(dtb, dtb_len, B64_ARM(B64_INITRD), B64_ARM(B64_INITRD) + (uint32_t)n)) {
 		bs_fail("no initrd place in the devicetree", 0);
 		return false;

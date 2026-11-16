@@ -220,37 +220,60 @@ int32_t fat_load(const char *name, uint32_t addr, uint32_t max) {
 		printf("err fat: %s is %u bytes, more than %u\n", name, f.size, max);
 		return -1;
 	}
+	/*
+	 * Whole sectors to an aligned place go straight in, as runs over
+	 * clusters that follow each other on the card (one read command per
+	 * run, #34); the last part sector, or an unaligned place, through
+	 * sec. (clus, i): the next sector to read.
+	 */
 	uint8_t *dst = (uint8_t *)addr;
-	uint32_t left = f.size, clus = f.clus;
+	uint32_t left = f.size, clus = f.clus, i = 0;
 	while (left) {
-		if (clus < 2) {
+		if (clus < 2 || clus >= 0x0ffffff8u) {
 			printf("err fat: %s: cluster chain ends early\n", name);
 			return -1;
 		}
-		for (uint32_t i = 0; i < v.spc && left; i++) {
+		if (left >= 512 && !((uintptr_t)dst & 3)) {
+			uint32_t want = left / 512 < SD_RUN_MAX ? left / 512 : SD_RUN_MAX;
+			uint32_t start = clus_sec(clus) + i, n = 0;
+			while (n < want) {
+				uint32_t take = v.spc - i < want - n ? v.spc - i : want - n;
+				n += take;
+				i += take;
+				if (i < v.spc)
+					break; /* the run ends inside this cluster */
+				if (left - n * 512 == 0)
+					break; /* the end of the file */
+				uint32_t nx = next_clus(clus);
+				bool follows = nx == clus + 1;
+				clus = nx;
+				i = 0;
+				if (!follows)
+					break;
+			}
+			if (!sd_read_blocks(start, n, (uint32_t *)dst)) {
+				printf("err fat: read error in %s\n", name);
+				return -1;
+			}
+			dst += n * 512;
+			left -= n * 512;
+		} else {
 			if (!sd_read(clus_sec(clus) + i, sec)) {
 				printf("err fat: read error in %s\n", name);
 				return -1;
 			}
 			uint32_t n = left < 512 ? left : 512;
-			if (n == 512 && !((uintptr_t)dst & 3)) {
-				/* whole sectors to an aligned place: by words (the
-				 * 260 MB initramfs of a direct boot, #31) */
-				uint32_t *dw = (uint32_t *)dst;
-				for (uint32_t k = 0; k < 128; k++)
-					dw[k] = sec[k];
-				dst += 512;
-			} else {
-				const uint8_t *src = (const uint8_t *)sec;
-				for (uint32_t k = 0; k < n; k++)
-					*dst++ = src[k];
-			}
+			const uint8_t *src = (const uint8_t *)sec;
+			for (uint32_t k = 0; k < n; k++)
+				*dst++ = src[k];
 			left -= n;
+			if (++i == v.spc && left) {
+				clus = next_clus(clus);
+				i = 0;
+			}
 		}
 		if (g_fat_progress)
 			g_fat_progress(f.size - left, f.size);
-		if (left)
-			clus = next_clus(clus);
 	}
 	return (int32_t)f.size;
 }

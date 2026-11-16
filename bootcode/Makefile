@@ -25,6 +25,9 @@ HDMI ?= $(MONITOR)
 # CHAIN_IMAGE=path (with MONITOR=1): build that bootcode.bin image in and
 # chain it when nobody opens the monitor (boot selector, chain-image.S)
 CHAIN_IMAGE ?=
+# LOAD_CRC=1: also the CRC-32 of the initramfs on the serial line (tests of
+# the SD reads, #34; about 1 s per 10 MB on the VPU)
+LOAD_CRC ?= 0
 
 # Broadcom's register headers (BSD) through upstream's glue, as system
 # headers so their style does not trip our warnings
@@ -34,7 +37,7 @@ INCLUDES := -I. -isystem $(FW_DIR) -isystem $(FW_DIR)/vc4_include
 CFLAGS := -std=c11 -Os -ffreestanding -fno-builtin -nostdlib \
 	-Wall -Wextra -Werror -Wno-multichar \
 	-D__VIDEOCORE4__ -DBUILD_ID='"$(BUILD_ID)"' -DMONITOR=$(MONITOR) \
-	-DMBOX_TRACE=$(MBOX_TRACE) $(INCLUDES)
+	-DMBOX_TRACE=$(MBOX_TRACE) -DLOAD_CRC=$(LOAD_CRC) $(INCLUDES)
 ASFLAGS := -x assembler-with-cpp -D__VIDEOCORE4__ $(INCLUDES)
 LDFLAGS := -nostdlib -nostartfiles -Wl,--build-id=none -T linker.ld
 

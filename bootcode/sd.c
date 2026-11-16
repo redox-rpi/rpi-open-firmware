@@ -1,8 +1,11 @@
 /*
  * redox-rpi bootcode: SD card through the SDHOST controller (#230 M2).
  *
- * Read-only, 1-bit bus, one 512-byte sector at a time. The card sits on
- * GPIO 48-53, where the Boot ROM read bootcode.bin from.
+ * Read-only. The card sits on GPIO 48-53, where the Boot ROM read
+ * bootcode.bin from. A read is one READ_MULTIPLE over a run of sectors
+ * (up to SD_RUN_MAX), the FIFO read in bursts of its fill count, then one
+ * STOP; the bus is 4 bits wide once the card accepts ACMD6 (#34: one
+ * sector per command on 1 bit gave about 680 KB/s).
  *
  * Sequence and values from rpi-open-firmware (GPLv2+),
  * arm_chainloader/drivers/sdhost_impl.cc, with our fix from Pi test #249
@@ -25,6 +28,7 @@
 #define CMD_SET_BLOCKLEN 16
 #define CMD_READ_MULTIPLE 18
 #define ACMD_OP_COND 41
+#define ACMD_SET_BUS_WIDTH 6
 #define CMD_APP 55
 
 #define OCR_READY (1u << 31)
@@ -139,47 +143,71 @@ static void drain_fifo(void) {
 		(void)SH_DATA;
 }
 
-static bool read_once(uint32_t lba, uint32_t *buf) {
+/*
+ * n sectors from lba to buf (NULL: thrown away): one READ_MULTIPLE, the
+ * FIFO read as many words at a time as its fill count says, one STOP.
+ * False on a controller error or 100 ms without data.
+ */
+static bool read_once(uint32_t lba, uint32_t n, uint32_t *buf) {
 	drain_fifo();
+	SH_HBCT = 512;
+	SH_HBLC = n;
 	cmd_send(CMD_READ_MULTIPLE | SH_CMD_READ_CMD_SET, g_sd.high_capacity ? lba : lba << 9);
-	uint32_t err = 0;
-	for (int i = 0; i < 128 && !err; i++) {
-		uint32_t t = 0;
-		while (!(SH_HSTS & SH_HSTS_DATA_FLAG_SET)) {
-			if (++t > 100000) {
+	uint32_t err = 0, left = n * 128, t0 = timer_us();
+	while (left) {
+		uint32_t cnt = (SH_EDM & SH_EDM_FIFO_COUNT_SET) >> 4;
+		if (!cnt) {
+			err = SH_HSTS & HSTS_ERRORS;
+			if (err)
+				break;
+			if (timer_us() - t0 > 100000) {
 				err = 0xffffffffu;
 				break;
 			}
-			udelay(10);
+			continue;
 		}
-		if (err)
-			break;
-		err = SH_HSTS & HSTS_ERRORS;
-		if (err)
-			break;
-		uint32_t w = SH_DATA;
-		if (buf)
-			buf[i] = w;
+		if (cnt > left)
+			cnt = left;
+		left -= cnt;
+		if (buf) {
+			while (cnt--)
+				*buf++ = SH_DATA;
+		} else {
+			while (cnt--)
+				(void)SH_DATA;
+		}
+		t0 = timer_us();
 	}
+	if (!err)
+		err = SH_HSTS & HSTS_ERRORS;
 	cmd_send(CMD_STOP | SH_CMD_BUSY_CMD_SET, 0);
 	cmd_wait();
 	return err == 0;
 }
 
-/* read one sector; on an error halve the data clock and retry (Pi test #249) */
-bool sd_read(uint32_t lba, uint32_t *buf) {
-	if (!g_sd.ready)
+/*
+ * n sectors (1..SD_RUN_MAX) from lba to buf, word aligned; on an error
+ * halve the data clock and read the whole run again (Pi test #249).
+ */
+bool sd_read_blocks(uint32_t lba, uint32_t n, uint32_t *buf) {
+	if (!g_sd.ready || !n || n > SD_RUN_MAX)
 		return false;
 	for (int attempt = 0; attempt < 5; attempt++) {
-		if (read_once(lba, buf))
+		if (read_once(lba, n, buf))
 			return true;
 		uint32_t cdiv = SH_CDIV;
 		if (cdiv >= CDIV_IDENT)
 			break;
 		SH_CDIV = (cdiv + 2) * 2 - 2;
-		printf("sd: read of sector %u failed (HSTS %08X), SH_CDIV %X -> %X\n", lba, SH_HSTS, cdiv, SH_CDIV);
+		printf("sd: read of %u sectors at %u failed (HSTS %08X), SH_CDIV %X -> %X\n", n, lba, SH_HSTS, cdiv,
+		       SH_CDIV);
 	}
 	return false;
+}
+
+/* one sector */
+bool sd_read(uint32_t lba, uint32_t *buf) {
+	return sd_read_blocks(lba, 1, buf);
 }
 
 /*
@@ -261,8 +289,16 @@ bool sd_init(void) {
 	cmd(CMD_SELECT, rca << 16);
 	if (csdver != 1)
 		cmd(CMD_SET_BLOCKLEN, 512);
+	/* 4-bit bus: every SD card has it; keep 1 bit if the card says no */
+	g_sd.wide = false;
+	if (cmd(CMD_APP, rca << 16) && cmd(ACMD_SET_BUS_WIDTH, 2)) {
+		SH_HCFG |= SH_HCFG_WIDE_EXT_BUS_SET;
+		g_sd.wide = true;
+	}
 	sd_clock_update();
 	g_sd.ready = true;
+	printf("sd: %s, %u MB, %s, %u-bit bus, %u kHz\n", g_sd.name, g_sd.mb, g_sd.high_capacity ? "SDHC" : "SDSC",
+	       g_sd.wide ? 4 : 1, g_sd_khz);
 	/* upstream reads three sectors and drops them before the first real read */
 	for (int i = 0; i < 3; i++)
 		sd_read(0, NULL);
