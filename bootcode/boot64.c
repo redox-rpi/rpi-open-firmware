@@ -102,7 +102,7 @@ static bool load_initrd(uint8_t *dtb, uint32_t dtb_len) {
 		return true;
 	bs_step(65, "loading ", "initramfs");
 	uint32_t t0 = timer_us();
-	g_load_step = 0;
+	g_load_step = ~0u; /* so 0 % prints too */
 	g_fat_progress = initrd_progress;
 	int32_t n = fat_load("initramfs", B64_INITRD, B64_MEM_SIZE - B64_ARM(B64_INITRD));
 	g_fat_progress = 0;
@@ -183,10 +183,12 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 	}
 	sd_off();
 	bs_step(75, "starting the ARM", 0);
-	if (arm_start(true)) {
-		printf("ok boot64, the serial line is the ARM's now\n");
+	/* printed before the start: the ARM's first line came in the middle of
+	 * it otherwise (Pi test 466: "rpi-boot-stub: devicok boot64") */
+	printf("ok boot64, the serial line is the ARM's now\n");
+	if (arm_start(true))
 		mbox_serve();
-	}
+	printf("err boot64: the ARM did not start\n");
 	bs_fail("the ARM did not start", 0);
 	return false;
 }
