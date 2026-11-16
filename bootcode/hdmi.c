@@ -41,7 +41,11 @@
 #define XHVS_BKGND_FILL (1u << 24)
 #define XHVS_DLIST(i) R(0x7e402000 + 4 * (i))
 #define XHVS_DLIST_END 0x80000000u
-#define XHVS_LIST_WORD 16 /* our display list: just the end marker */
+#define XHVS_LIST_WORD 16 /* our display lists: two slots, the HVS reads one */
+#define XHVS_LIST_WORD2 32 /* while hdmi_fb() writes the other (step 2) */
+#define XHVS_DISPSTAT R(0x7e400004)
+#define XHVS_DISPSTAT_EUFLOW1 (1u << 17) /* channel 1 underflow (vc4_regs.h EUFLOW(1)) */
+#define XCTL0_VALID (1u << 30)
 
 /* pixel valve 2, which feeds HDMI from HVS channel 1 */
 #define XPV2_CONTROL R(0x7e807000)
@@ -205,6 +209,9 @@ static bool hsm_on(void) {
 	return on;
 }
 
+static uint32_t g_slot = XHVS_LIST_WORD; /* the list the HVS reads now */
+static bool g_running;                   /* hdmi_on() succeeded */
+
 /* HVS channel 1: an empty display list over a background fill colour */
 static void hvs_channel(uint32_t rgb) {
 	if (!(XHVS_DISPCTRL & XHVS_DISPCTRL_EN))
@@ -212,6 +219,7 @@ static void hvs_channel(uint32_t rgb) {
 	XHVS_DLIST(XHVS_LIST_WORD) = XHVS_DLIST_END;
 	XHVS_DISPBASE1 = 0x3c8f0800u; /* COB 2048..15503, as start.elf */
 	XHVS_DISPLIST1 = XHVS_LIST_WORD;
+	g_slot = XHVS_LIST_WORD;
 	XHVS_DISPCTRL1 = XHVS_CHAN_RESET;
 	XHVS_DISPCTRL1 = 0;
 	XHVS_DISPBKGND1 = XHVS_BKGND_FILL | (rgb & 0xffffff);
@@ -302,6 +310,20 @@ void hdmi_status(void) {
 	uint32_t f0 = XHD_FRAME_COUNT, s0 = XHVS_DISPSTAT1;
 	udelay(100000);
 	uint32_t f1 = XHD_FRAME_COUNT, s1 = XHVS_DISPSTAT1;
+	if (XHVS_DLIST(g_slot) & XCTL0_VALID) {
+		/* the HVS writes its read address into the pointer context word
+		 * while it scans: it moves when the framebuffer is being read */
+		uint32_t c0 = XHVS_DLIST(g_slot + 5);
+		udelay(3000);
+		uint32_t c1 = XHVS_DLIST(g_slot + 5);
+		printf("hdmi: plane at list word %u: %08X %08X %08X %08X %08X ctx %08X -> %08X pitch %08X, "
+		       "DISPSTAT %08X (channel 1 underflow %s)\n",
+		       g_slot, XHVS_DLIST(g_slot), XHVS_DLIST(g_slot + 1), XHVS_DLIST(g_slot + 2),
+		       XHVS_DLIST(g_slot + 3), XHVS_DLIST(g_slot + 4), c0, c1, XHVS_DLIST(g_slot + 6), XHVS_DISPSTAT,
+		       XHVS_DISPSTAT & XHVS_DISPSTAT_EUFLOW1 ? "yes" : "no");
+	} else {
+		printf("hdmi: no plane, background only (list word %u)\n", g_slot);
+	}
 	printf("hdmi: frames %u in 100 ms (count %08X), HVS DISPSTAT1 %08X -> %08X, PV2 CONTROL %08X "
 	       "V_CONTROL %08X STAT %08X, VID_CTL %08X, scheduler %08X, PHY %08X %08X, hotplug (GPIO 28, active low) %s\n",
 	       f1 - f0, f1, s0, s1, XPV2_CONTROL, XPV2_V_CONTROL, XPV2_STAT, XHD_VID_CTL, XHDMI_SCHEDULER_CONTROL,
@@ -315,6 +337,7 @@ void hdmi_status(void) {
  * off, PHY in reset.
  */
 static void hdmi_off(void) {
+	g_running = false;
 	if (!(PM_IMAGE & PM_IMAGE_PERIRSTN_SET) || !(CM_HSMCTL & XCM_ENAB))
 		return;
 	STEP("stop the running picture");
@@ -351,5 +374,31 @@ bool hdmi_on(uint32_t rgb) {
 	bool ok = dvi_mode();
 	XHDMI_TX_PHY_CTL_0 &= ~XPHY_RNG_PWRDN; /* as start.elf leaves it */
 	hdmi_status();
+	g_running = ok;
 	return ok;
+}
+
+/*
+ * Show the ARM's framebuffer (#442 step 2), called by mbox.c when the ARM
+ * allocates it or changes it. Starts HDMI with a black background if it
+ * is not running. The new list goes into the slot the HVS is not reading,
+ * then DISPLIST1 switches to it; the HVS takes it at the next frame.
+ */
+void hdmi_fb(const struct fb_view *v) {
+	if (!g_running && !hdmi_on(0x000000))
+		return;
+	uint32_t dl[HVS_PLANE_WORDS + 1];
+	uint32_t n = v ? hvs_plane(dl, v, XMODE_W, XMODE_H) : 0;
+	dl[n] = XHVS_DLIST_END;
+	uint32_t slot = g_slot == XHVS_LIST_WORD ? XHVS_LIST_WORD2 : XHVS_LIST_WORD;
+	for (uint32_t i = 0; i <= n; i++)
+		XHVS_DLIST(slot + i) = dl[i];
+	XHVS_DISPLIST1 = slot;
+	g_slot = slot;
+	if (v)
+		printf("hdmi: framebuffer %ux%u (virtual %ux%u at %u,%u), %u bit %s, at %08X: %s\n", v->w, v->h,
+		       v->vw, v->vh, v->xoff, v->yoff, v->depth, v->order ? "RGB" : "BGR", v->base,
+		       n ? "plane on" : "no plane for this format, background only");
+	else
+		printf("hdmi: framebuffer released, background only\n");
 }
