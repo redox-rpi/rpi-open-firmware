@@ -58,7 +58,8 @@ static void sums(const char *what) {
 
 /* what the panel pixel p must become, written out apart from bootscreen.c */
 static uint32_t want_pixel(uint32_t p, uint32_t depth, uint32_t order) {
-	uint32_t r = ((p >> 11) * 255 + 15) / 31, g = ((p >> 5 & 63) * 255 + 31) / 63, b = ((p & 31) * 255 + 15) / 31;
+	/* bit replication, as the HVS widens RGB565 */
+	uint32_t r = (p >> 11) * 33 >> 2, g = (p >> 5 & 63) * 65 >> 4, b = (p & 31) * 33 >> 2;
 	if (!order) {
 		uint32_t t = r;
 		r = b, b = t;
