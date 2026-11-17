@@ -10,8 +10,9 @@
  */
 #include "hw.h"
 
+/* KERNEL= in the build overrides config.txt (selector card tests) */
 #ifndef BOOT_KERNEL
-#define BOOT_KERNEL "kernel8.img"
+#define BOOT_KERNEL NULL
 #endif
 #ifndef BUILD_ID
 #define BUILD_ID "unknown"
