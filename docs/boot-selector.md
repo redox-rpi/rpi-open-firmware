@@ -1,0 +1,109 @@
+# Boot selector
+
+The boot selector is a `bootcode.bin` for a Raspberry Pi 3B+ (and other
+BCM2837 boards) that lets you choose the boot path from the serial line,
+with no card swap. Our test Pi has run it on its network boot card since
+2026-11-10 (pi-tests [Test 313](https://github.com/redox-rpi/pi-tests/blob/main/reports/313.md)).
+
+It is a **lab tool, not a release firmware**: its serial monitor gives
+anyone on the serial pins full control of the chip.
+
+## What it does
+
+The Pi's Boot ROM loads `bootcode.bin` from the card. With the selector in
+that place:
+
+1. It prints its banner, for example
+   `redox-rpi bootcode 56354b8 (M1, monitor, test build, boot selector)`.
+2. **Halt check:** if the OS halted the Pi (see below), it stays off here.
+3. It waits **5 seconds** for Enter on the serial line.
+   - **No Enter:** it chains the Broadcom `bootcode.bin` built into it
+     (`rbc> chain built-in bootcode.bin, 52624 bytes, crc32 53C9B136`). The
+     Pi then boots exactly as with Broadcom's firmware: `start.elf`, U-Boot
+     or a direct boot, network or card. The boot takes about 5 s longer.
+   - **Enter:** our SDRAM set-up runs and the monitor opens (`rbc>`
+     prompt). There you can read and write registers, load code over the
+     serial line and run it, or chain another `bootcode.bin`, such as a
+     new build of our firmware under test.
+4. `boot` in the monitor, or 300 s without input, resets the chip. The
+   selector then starts again and, with nobody pressing Enter, boots
+   normally.
+
+Broadcom's code is chained before our SDRAM set-up, because it does not
+start once our set-up has run (pi-tests Tests 269, 313, 320).
+
+## Halt after poweroff (new, rof #40)
+
+Redox's `poweroff` (redox-rpi #418, PR #526) halts the Pi the way Linux
+does: it writes partition 63 (`0x555`) into the `PM_RSTS` register and
+resets through the watchdog. The firmware that starts next must notice
+this and stay off.
+
+From build `56354b8` on, the selector does so:
+- It prints `halt: the OS halted the Pi (PM_RSTS …, partition 63);
+  staying off, GPIO3 (pin 5) to ground wakes it`.
+- It powers nothing up, runs the VPU from the 19.2 MHz crystal with PLLC
+  off, and waits.
+- GPIO3 (pin 5) held to ground for 50 ms clears the mark and starts the
+  Pi again. Removing power does too.
+
+The same check is in our release firmware ([PR #46](https://github.com/redox-rpi/rpi-open-firmware/pull/46)).
+
+## Versions
+
+| Build | Branch | What | Status |
+|---|---|---|---|
+| `56354b8` | `selector-halt` | 233c8c5 plus the halt check | in test: pi-tests Test 495 |
+| `233c8c5` | `bootcode` | `boot` and the 300 s timeout reset the chip | on the test Pi since 2026-11-11 (Test 320) |
+| `b081bfd` | `bootcode` | chains before our SDRAM set-up | Test 313 step 3 |
+
+The built-in Broadcom image is `bootcode.bin` from firmware 1.20260915,
+52624 bytes, CRC-32 `53C9B136`, unchanged.
+
+## Putting it on a card
+
+On the FAT boot partition:
+1. Keep Broadcom's file as `bootcode-broadcom.bin`: that is the way back.
+2. Keep the previous selector, for example as `bootcode-selector-233c8c5.bin`.
+3. Copy the selector as `bootcode.bin`.
+
+Everything else on the card stays as it is. To go back, copy one of the
+kept files to `bootcode.bin` again. If the Pi no longer starts, that
+needs someone at the card.
+
+Serial console: 115200 baud on GPIO 14/15 (pins 8 and 10). There must be
+only one reader on the host's serial port.
+
+## Using the monitor from the host
+
+`bootcode/rbc-load.sh` sends a file through the monitor and can run it:
+- `rbc-load.sh --enter FILE` opens the monitor after a reset and loads FILE.
+- `chain` starts FILE as a `bootcode.bin`.
+- `chainmon` does the same for a monitor build and opens its monitor, so
+  a newer selector can be tried without writing it to the card.
+
+The script only writes to the serial port and reads the replies from the
+log of the one serial reader. The commands (`r`, `w`, `d`, `l`, `crc`,
+`g`, `chain`, `reset`, `boot`) are listed in
+[bootcode/README.md](https://github.com/redox-rpi/rpi-open-firmware/blob/bootcode/bootcode/README.md)
+and at the top of `bootcode/monitor.c`.
+
+## Building
+
+From the `bootcode/` directory of the branch, with the VC4 toolchain:
+
+```
+make CROSS_COMPILE=…/vc4-elf- MONITOR=1 CHAIN_IMAGE=path/to/broadcom-bootcode.bin
+```
+
+On `233c8c5`/`selector-halt` the include paths are older. Add
+`INCLUDES="-I. -isystem .. -isystem ../vc4_include"` when building in a
+current checkout. The result is `build/bootcode.bin`, about 61 KB; the
+Boot ROM loads up to 128 KB.
+
+## Limits
+
+- Pi 3B+ tested. The Zero 2 W ran our firmware but not the selector.
+- The monitor is open to anyone on the serial pins. Use the selector only
+  on lab Pis.
+- Waking from the halt with GPIO3 has not been tried on hardware yet.
