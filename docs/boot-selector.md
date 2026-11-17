@@ -62,9 +62,9 @@ The built-in Broadcom image is `bootcode.bin` from firmware 1.20260915,
 
 ## Download
 
-`http://homenodellm:8080/sdcard/rpi-open-firmware-boot-selector-56354b8.bin` (lab network only), 61376 bytes,
+GitHub release [boot-selector-56354b8](https://github.com/redox-rpi/rpi-open-firmware/releases/tag/boot-selector-56354b8): `rpi-open-firmware-boot-selector-56354b8.bin`, 61376 bytes,
 sha256 `4c89edbcec591f840e7cbf13b9aa0898de3d055c432a3d05c5d36ec94db28f99`
-(also as `.sha256` next to it), CRC-32 `9de2a646`.
+(also as `.sha256` next to it), CRC-32 `9de2a646`. In the lab network the same file is under `http://homenodellm:8080/sdcard/`.
 
 Test 495 on the 3B+ checked:
 - a normal boot to Redox;
