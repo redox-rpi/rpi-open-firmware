@@ -54,6 +54,12 @@ void uart_putc(char c) {
 	UART_RBRTHRDLL = (uint8_t)c;
 }
 
+/* until the last byte has left the PL011 (FIFO empty, not busy) */
+void uart_flush(void) {
+	while (!(UART_FR & 0x80u) || (UART_FR & 0x08u)) {
+	}
+}
+
 /* -1 if nothing arrives within timeout_us */
 int uart_getc_timeout(uint32_t timeout_us) {
 	uint32_t t0 = timer_us();

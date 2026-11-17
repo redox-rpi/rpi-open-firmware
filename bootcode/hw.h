@@ -39,6 +39,7 @@ void udelay(uint32_t us);
 void uart_init(void);
 void uart_putc(char c);
 int uart_getc_timeout(uint32_t timeout_us);
+void uart_flush(void);
 
 /* printf.c: no format attribute, because uint32_t is long on VC4 while
  * int and long are both 32 bits; our printf reads every number as 32 bits */
