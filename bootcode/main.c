@@ -79,6 +79,42 @@ static void vectors_init(void) {
 }
 
 /* what the Boot ROM left behind, read before we change it */
+/*
+ * The OS halted the Pi (rof #40, redox-rpi #418): it wrote partition 63 to
+ * PM_RSTS and reset through the watchdog, as Linux's bcm2835_wdt power-off
+ * does. The partition number is spread over the even bits 0-10, so 63 is
+ * 0x555. Broadcom's firmware then stays off until GPIO3 (pin 5) goes low;
+ * we do the same: the ARM, USB, LAN and HDMI stay unpowered, the SDRAM is
+ * not set up, and the VPU only polls GPIO3 (it has the board's pull-up, as
+ * I2C SDA). A low pin clears the partition and resets, so the next start
+ * boots. A power cycle clears PM_RSTS too.
+ */
+#define PM_RSTS_PARTITION 0x555u
+#define PM_RSTC_WRCFG_MASK_ 0x30u
+#define PM_RSTC_FULL_RESET_ 0x20u
+
+static void halt_if_asked(void) {
+	uint32_t rsts = PM_RSTS;
+	if ((rsts & PM_RSTS_PARTITION) != PM_RSTS_PARTITION)
+		return;
+	printf("halt: the OS halted the Pi (PM_RSTS %08X, partition 63); staying off, GPIO3 (pin 5) to ground wakes it\n",
+	       rsts);
+	uint32_t low = 0;
+	for (;;) {
+		udelay(10000);
+		low = (GP_LEV0 & (1u << 3)) ? 0 : low + 1;
+		if (low >= 5) /* 50 ms low: not a glitch */
+			break;
+	}
+	printf("halt: GPIO3 low, starting again\n");
+	PM_RSTS = PM_PASSWORD | (PM_RSTS & ~PM_RSTS_PARTITION);
+	udelay(2000);
+	PM_WDOG = PM_PASSWORD | 10;
+	PM_RSTC = PM_PASSWORD | (PM_RSTC & ~PM_RSTC_WRCFG_MASK_) | PM_RSTC_FULL_RESET_;
+	for (;;) {
+	}
+}
+
 struct rom_state {
 	uint32_t vpuctl, vpudiv, pllc_ctrl, pllc_frac, sdcs, timer;
 };
@@ -102,6 +138,7 @@ void bootcode_main(uint32_t cpuid) {
 	printf("VPU cpuid 0x%X\n", cpuid);
 	printf("from the Boot ROM: CM_VPUCTL 0x%X CM_VPUDIV 0x%X PLLC_CTRL 0x%X PLLC_FRAC 0x%X SD_CS 0x%X timer %u us\n",
 	       rom.vpuctl, rom.vpudiv, rom.pllc_ctrl, rom.pllc_frac, rom.sdcs, rom.timer);
+	halt_if_asked();
 
 #if MONITOR && CHAIN_IMAGE
 	/* boot selector: the normal boot chains before our SDRAM set-up, so
