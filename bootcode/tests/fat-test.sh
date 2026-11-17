@@ -49,7 +49,7 @@ for fat in 16 32; do
 	mcopy -i "$t/p.img" "$t/deep.bin" ::overlays/sub/Deep.Bin
 	rm -f "$t/d.img"; truncate -s 1M "$t/d.img"; cat "$t/p.img" >> "$t/d.img"
 	printf 'label: dos\nstart=2048, type=%s\n' "$([ $fat = 16 ] && echo 6 || echo c)" | sfdisk -q "$t/d.img"
-	rm -f "$t"/out/*
+	rm -rf "$t"/out/*
 	"$t/fat-host" "$t/d.img" "$t/out" big-file.data armstub8-redox.bin U-BOOT.BIN CONFIG.TXT >/dev/null
 	for pair in Big-File.Data:big-file.data armstub8-redox.bin:armstub8-redox.bin u-boot.bin:U-BOOT.BIN config.txt:CONFIG.TXT; do
 		if cmp -s "$t/src/${pair%%:*}" "$t/out/${pair##*:}"; then echo "FAT$fat ok   ${pair%%:*}"
