@@ -53,12 +53,23 @@ The same check is in our release firmware ([PR #46](https://github.com/redox-rpi
 
 | Build | Branch | What | Status |
 |---|---|---|---|
-| `56354b8` | `selector-halt` | 233c8c5 plus the halt check | in test: pi-tests Test 495 |
-| `233c8c5` | `bootcode` | `boot` and the 300 s timeout reset the chip | on the test Pi since 2026-11-11 (Test 320) |
+| `56354b8` | `selector-halt` ([PR #52](https://github.com/redox-rpi/rpi-open-firmware/pull/52)) | 233c8c5 plus the halt check | **current**, on the test Pi since 2026-11-17 ([Test 495](https://github.com/redox-rpi/pi-tests/blob/main/reports/495.md)) |
+| `233c8c5` | `bootcode` | `boot` and the 300 s timeout reset the chip | on the test Pi 2026-11-11 to 2026-11-17 (Test 320) |
 | `b081bfd` | `bootcode` | chains before our SDRAM set-up | Test 313 step 3 |
 
 The built-in Broadcom image is `bootcode.bin` from firmware 1.20260915,
 52624 bytes, CRC-32 `53C9B136`, unchanged.
+
+## Download
+
+`http://homenodellm:8080/sdcard/rpi-open-firmware-boot-selector-56354b8.bin` (lab network only), 61376 bytes,
+sha256 `4c89edbcec591f840e7cbf13b9aa0898de3d055c432a3d05c5d36ec94db28f99`
+(also as `.sha256` next to it), CRC-32 `9de2a646`.
+
+Test 495 on the 3B+ checked:
+- a normal boot to Redox;
+- a cold start with Enter (monitor, then `boot`);
+- a real Redox `poweroff`: halt line, then 0 bytes on serial and 0.0 W for 3 minutes.
 
 ## Putting it on a card
 
@@ -107,3 +118,4 @@ Boot ROM loads up to 128 KB.
 - The monitor is open to anyone on the serial pins. Use the selector only
   on lab Pis.
 - Waking from the halt with GPIO3 has not been tried on hardware yet.
+- Chained from another monitor (`rbc-load.sh … chainmon`), the selector's Enter path hangs. Its SDRAM set-up cannot run over an SDRAM that is already up, which later firmware handles. A cold start is not affected.
