@@ -71,6 +71,12 @@ Test 495 on the 3B+ checked:
 - a cold start with Enter (monitor, then `boot`);
 - a real Redox `poweroff`: halt line, then 0 bytes on serial and 0.0 W for 3 minutes.
 
+Tests 496 and 497 checked the halt itself:
+- The VPU stays alive in the halt, polling GPIO3 at 0.0 W on the plug.
+- With GPIO3 pulled low, `halt: GPIO3 low, starting again` came 41 ms later, then a watchdog restart and a normal boot.
+
+**How to tell the reset type:** the Boot ROM line's `timer` is about 210 ms after a watchdog reset and about 313 ms after a power-on.
+
 ## Putting it on a card
 
 On the FAT boot partition:
@@ -117,5 +123,4 @@ Boot ROM loads up to 128 KB.
 - Pi 3B+ tested. The Zero 2 W ran our firmware but not the selector.
 - The monitor is open to anyone on the serial pins. Use the selector only
   on lab Pis.
-- Waking from the halt with GPIO3 has not been tried on hardware yet.
 - Chained from another monitor (`rbc-load.sh … chainmon`), the selector's Enter path hangs. Its SDRAM set-up cannot run over an SDRAM that is already up, which later firmware handles. A cold start is not affected.
