@@ -78,7 +78,6 @@ static void vectors_init(void) {
 	IC1_VADDR = (uint32_t)VECTORS;
 }
 
-/* what the Boot ROM left behind, read before we change it */
 /*
  * The OS halted the Pi (rof #40, redox-rpi #418): it wrote partition 63 to
  * PM_RSTS and reset through the watchdog, as Linux's bcm2835_wdt power-off
@@ -125,6 +124,7 @@ static void halt_if_asked(void) {
 	}
 }
 
+/* what the Boot ROM left behind, read before we change it */
 struct rom_state {
 	uint32_t vpuctl, vpudiv, pllc_ctrl, pllc_frac, sdcs, timer;
 };
