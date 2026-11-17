@@ -85,8 +85,10 @@ static void vectors_init(void) {
  * does. The partition number is spread over the even bits 0-10, so 63 is
  * 0x555. Broadcom's firmware then stays off until GPIO3 (pin 5) goes low;
  * we do the same: the ARM, USB, LAN and HDMI stay unpowered, the SDRAM is
- * not set up, and the VPU only polls GPIO3 (it has the board's pull-up, as
- * I2C SDA). A low pin clears the partition and resets, so the next start
+ * not set up, the VPU runs from the 19.2 MHz oscillator with PLLC powered
+ * down (the UART and the system timer run from the oscillator already, see
+ * clock.c), and it only polls GPIO3 (it has the board's pull-up, as I2C
+ * SDA). A low pin clears the partition and resets, so the next start
  * boots. A power cycle clears PM_RSTS too.
  */
 #define PM_RSTS_PARTITION 0x555u
@@ -99,6 +101,14 @@ static void halt_if_asked(void) {
 		return;
 	printf("halt: the OS halted the Pi (PM_RSTS %08X, partition 63); staying off, GPIO3 (pin 5) to ground wakes it\n",
 	       rsts);
+	udelay(2000); /* let the UART send the line */
+	/* VPU to the oscillator as clock_init() does while it changes the
+	 * divider, then PLLC off: nothing else runs from it now */
+	CM_VPUCTL = CM_PASSWORD | CM_VPUCTL_FRAC_SET | CM_SRC_OSC | CM_VPUCTL_GATE_SET;
+	CM_VPUDIV = CM_PASSWORD | (1u << 12);
+	CM_PLLC = CM_PASSWORD | CM_PLLC_DIGRST_SET | CM_PLLC_HOLDPER_SET | CM_PLLC_HOLDCORE2_SET |
+	          CM_PLLC_HOLDCORE1_SET | CM_PLLC_HOLDCORE0_SET;
+	A2W_PLLC_CTRL = A2W_PASSWORD | A2W_PLLC_CTRL_PWRDN_SET;
 	uint32_t low = 0;
 	for (;;) {
 		udelay(10000);
