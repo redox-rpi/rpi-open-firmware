@@ -5,7 +5,8 @@
  * bootcode.bin from. A read is one READ_MULTIPLE over a run of sectors
  * (up to SD_RUN_MAX), the FIFO read in bursts of its fill count, then one
  * STOP; the bus is 4 bits wide once the card accepts ACMD6 (#34: one
- * sector per command on 1 bit gave about 680 KB/s).
+ * sector per command on 1 bit gave about 680 KB/s), and an SDHC card that
+ * switches to high speed (CMD6) runs at 50 MHz instead of 25 (#34 step 2).
  *
  * Sequence and values from rpi-open-firmware (GPLv2+),
  * arm_chainloader/drivers/sdhost_impl.cc, with our fix from Pi test #249
@@ -21,6 +22,7 @@
 #define CMD_GO_IDLE 0
 #define CMD_ALL_SEND_CID 2
 #define CMD_SET_RCA 3
+#define CMD_SWITCH_FUNC 6
 #define CMD_SELECT 7
 #define CMD_SEND_IF_COND 8
 #define CMD_SEND_CSD 9
@@ -44,7 +46,8 @@
  * assumed a 250 MHz core clock (div 5 or 10); ours is PLLC CORE0 (1000 MHz)
  * / CM_VPUDIV, 250 MHz from clock.c, and the monitor's vpuclk changes it
  * (Pi test 381: at /2 with the old divider the reads went bad). 25 MHz
- * (SDHC) or 12.5 MHz (SDSC). Before payload l core_khz() missed the PLL
+ * (SDHC; 50 MHz after the switch to high speed) or 12.5 MHz (SDSC). A read
+ * error halves the clock again (sd_read_blocks). Before payload l core_khz() missed the PLL
  * prescaler and the card actually ran at 50 MHz.
  */
 static uint32_t g_sd_khz;
@@ -141,6 +144,46 @@ static void drain_fifo(void) {
 	cmd_wait();
 	while (SH_HSTS & SH_HSTS_DATA_FLAG_SET)
 		(void)SH_DATA;
+}
+
+/*
+ * CMD6 (SWITCH_FUNC) in mode 1, function group 1 = 1: high speed, 50 MHz.
+ * The card answers with a 64-byte status block on the data lines; its
+ * byte 16, low nibble, is the function now selected in group 1 (0xF: the
+ * switch failed). SD Physical Layer Simplified Specification 4.3.10. The
+ * new timing holds 8 clocks after the block; the bus clock stays at 25 MHz
+ * until the caller raises it. Only for cards with command class 10.
+ */
+static bool high_speed(void) {
+	uint32_t st[16];
+	drain_fifo();
+	SH_HBCT = 64;
+	SH_HBLC = 1;
+	cmd_send(CMD_SWITCH_FUNC | SH_CMD_READ_CMD_SET, 0x80fffff1u);
+	uint32_t got = 0, t0 = timer_us();
+	while (got < 16) {
+		if (!(SH_EDM & SH_EDM_FIFO_COUNT_SET)) {
+			if ((SH_HSTS & HSTS_ERRORS) || timer_us() - t0 > 100000)
+				break;
+			continue;
+		}
+		st[got++] = SH_DATA;
+	}
+	bool ok = cmd_done() && got == 16 && !(SH_HSTS & HSTS_ERRORS);
+	SH_HSTS = HSTS_ERRORS;
+	if (!ok) {
+		printf("sd: no answer to the switch to high speed\n");
+		return false;
+	}
+	/* bytes arrive in order, byte 0 in the low byte of the first word, as
+	 * for sectors: byte 16 is the low byte of word 4 */
+	uint32_t fn = st[4] & 0xfu;
+	udelay(10);
+	if (fn != 1) {
+		printf("sd: card stays at default speed (group 1 function %X)\n", fn);
+		return false;
+	}
+	return true;
 }
 
 /*
@@ -278,6 +321,7 @@ bool sd_init(void) {
 		return false;
 	}
 	uint32_t csdver = rbits(resp, 126, 2);
+	bool class10 = rbits(resp, 84 + 10, 1); /* CCC bit 10: switch commands */
 	if (csdver == 1) {
 		g_sd.mb = (rbits(resp, 48, 22) + 1) / 2; /* (C_SIZE + 1) * 512 KiB */
 		g_sd_khz = 25000;
@@ -295,6 +339,8 @@ bool sd_init(void) {
 		SH_HCFG |= SH_HCFG_WIDE_EXT_BUS_SET;
 		g_sd.wide = true;
 	}
+	if (csdver == 1 && class10 && high_speed())
+		g_sd_khz = 50000;
 	sd_clock_update();
 	g_sd.ready = true;
 	printf("sd: %s, %u MB, %s, %u-bit bus, %u kHz\n", g_sd.name, g_sd.mb, g_sd.high_capacity ? "SDHC" : "SDSC",
