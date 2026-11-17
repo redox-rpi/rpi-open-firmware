@@ -35,7 +35,7 @@ Every file names the ones it uses:
 
 | Source | Licence | What we take |
 |---|---|---|
-| [christinaa/rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware) (2019) | GPLv2+ | PLL, SDRAM, SDHOST and ARM start sequences; its code is still on the `redox-rpi` branch, with our fixes |
+| [christinaa/rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware) (2019) | GPLv2+ | PLL, SDRAM, SDHOST and ARM start sequences; its 2016 code is in [`upstream/`](upstream/), with our fixes |
 | [librerpi/lk-overlay](https://github.com/librerpi/lk-overlay), the newer rewrite by the same community | GPLv2+ | tested on our Pi ([lk-overlay](https://github.com/redox-rpi/rpi-open-firmware/wiki/lk-overlay)); reference for later steps, no code taken yet |
 | [librerpi/rpi-open-firmware](https://github.com/librerpi/rpi-open-firmware), the 2019 firmware carried on to 2025 (375 commits), with about 100 hardware notes | GPLv2+ | first reference for the mailbox, HDMI and the Pi 400; all outside sources and their status in [Sources](https://github.com/redox-rpi/rpi-open-firmware/wiki/Sources) |
 | Broadcom's register headers (`hardware.h`, `sdhost.h`, …) | BSD 3-clause | register names and bits |
