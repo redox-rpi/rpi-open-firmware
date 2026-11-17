@@ -87,7 +87,7 @@ only one reader on the host's serial port.
 
 ## Using the monitor from the host
 
-`bootcode/rbc-load.sh` sends a file through the monitor and can run it:
+[`bootcode/rbc-load.sh`](https://github.com/redox-rpi/rpi-open-firmware/blob/bootcode/bootcode/rbc-load.sh) sends a file through the monitor and can run it. It is on the branches `bootcode`, `release-0.1` and the ones built on them; it reaches the default branch with [PR #10](https://github.com/redox-rpi/rpi-open-firmware/pull/10).
 - `rbc-load.sh --enter FILE` opens the monitor after a reset and loads FILE.
 - `chain` starts FILE as a `bootcode.bin`.
 - `chainmon` does the same for a monitor build and opens its monitor, so
