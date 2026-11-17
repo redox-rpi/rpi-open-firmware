@@ -101,6 +101,12 @@ static void initrd_progress(uint32_t done, uint32_t total) {
 		printf("boot64: initramfs %u%%, %s\n", s * 5, txt);
 }
 
+/* a failed step: on the boot screen and on the serial line */
+static void fail(const char *a, const char *b) {
+	printf("err boot64: %s%s\n", a, b ? b : "");
+	bs_fail(a, b);
+}
+
 /* the board type: bits 4..11 of the board revision */
 static uint32_t board_type(void) {
 	return (board_revision() >> 4) & 0xffu;
@@ -142,11 +148,11 @@ static bool apply_overlays(struct dt *t, const struct boot_cfg *c) {
 		int32_t n = load_scratch(path);
 		struct dt o;
 		if (n < 0) {
-			bs_fail("not found: ", path);
+			fail("not found: ", path);
 			return false;
 		}
 		if (!dt_open(&o, (uint8_t *)B64_INITRD, (uint32_t)n, (uint32_t)n) || !dt_apply_overlay(t, &o, c->overlay[i])) {
-			bs_fail("could not apply ", path);
+			fail("could not apply ", path);
 			return false;
 		}
 	}
@@ -173,7 +179,7 @@ static bool load_initrd(struct dt *t, const char *name) {
 	int32_t n = fat_load(name, B64_INITRD, B64_MEM_SIZE - B64_ARM(B64_INITRD));
 	g_fat_progress = 0;
 	if (n < 0) {
-		bs_fail("could not load ", name);
+		fail("could not load ", name);
 		return false;
 	}
 	uint32_t ms = (timer_us() - t0) / 1000;
@@ -184,7 +190,7 @@ static bool load_initrd(struct dt *t, const char *name) {
 #endif
 	if (!dt_set_chosen_u32(t, "linux,initrd-start", B64_ARM(B64_INITRD)) ||
 	    !dt_set_chosen_u32(t, "linux,initrd-end", B64_ARM(B64_INITRD) + (uint32_t)n)) {
-		bs_fail("no room for the initrd in the devicetree", 0);
+		fail("no room for the initrd in the devicetree", 0);
 		return false;
 	}
 	return true;
@@ -219,7 +225,7 @@ static bool load_armstub(const struct boot_cfg *c) {
 	if (c->armstub[0]) {
 		if (load_one(c->armstub, B64_STUB, B64_KERNEL - B64_STUB, 30))
 			return true;
-		bs_fail("not found: ", c->armstub);
+		fail("not found: ", c->armstub);
 		return false;
 	}
 	static const char *const old[] = {"armstub8-redox.bin", "armstub8.bin"};
@@ -263,7 +269,7 @@ static int32_t load_dtb(const char *dtb, const struct boot_cfg *c, bool *overlay
 	bs_step(60, "loading ", dtb);
 	int32_t n = fat_load(dtb, B64_DTB, B64_DTB_ROOM);
 	if (n < 0) {
-		bs_fail("not found: ", dtb);
+		fail("not found: ", dtb);
 		return -1;
 	}
 	printf("boot64: %s %u bytes at ARM %08X\n", dtb, (uint32_t)n, B64_ARM(B64_DTB));
@@ -289,7 +295,7 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 	if (!load_armstub(&cfg))
 		return false;
 	if (!load_one(kernel, B64_KERNEL, B64_DTB - B64_KERNEL, 45)) {
-		bs_fail("not found: ", kernel);
+		fail("not found: ", kernel);
 		return false;
 	}
 	volatile uint32_t *stub = (volatile uint32_t *)B64_STUB;
@@ -314,7 +320,7 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 			if (!dt_open(&t, (uint8_t *)B64_DTB, (uint32_t)n, B64_DTB_ROOM) ||
 			    (overlays && !apply_overlays(&t, &cfg)) || !dt_set_memory(&t, 0, B64_MEM_SIZE) ||
 			    !set_bootargs(&t, cfg.cmdline) || (!dtb_in_mem && !load_initrd(&t, cfg.initramfs))) {
-				bs_fail("devicetree: see the serial line", 0);
+				fail("devicetree: see the serial line", 0);
 				return false;
 			}
 			dt_finish(&t);
@@ -333,6 +339,6 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 	if (arm_start(true))
 		mbox_serve();
 	printf("err boot64: the ARM did not start\n");
-	bs_fail("the ARM did not start", 0);
+	fail("the ARM did not start", 0);
 	return false;
 }

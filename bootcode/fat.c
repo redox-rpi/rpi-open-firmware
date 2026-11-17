@@ -1,6 +1,6 @@
 /*
  * redox-rpi bootcode: read files from the SD card's first FAT partition
- * (#230 M2). FAT16 and FAT32, root directory only, long names (ASCII)
+ * (#230 M2). FAT16 and FAT32, paths with subdirectories (rof #48), long names (ASCII)
  * and 8.3 names, case-insensitive. Read-only.
  *
  * New code, written from Microsoft's FAT specification (fatgen103) and
@@ -92,19 +92,20 @@ bool fat_mount(void) {
 }
 
 /*
- * Walk the root directory. For each file call fn(name, first cluster,
- * size, ctx); stop when it returns true. Long names are put together
+ * Walk a directory: the root (dir_clus 0) or a subdirectory's cluster
+ * chain. For each file and subdirectory call fn(name, first cluster, size,
+ * is_dir, ctx); stop when it returns true. Long names are put together
  * from their entries (ASCII part only); otherwise the 8.3 name is used.
  */
-typedef bool (*dir_fn)(const char *name, uint32_t clus, uint32_t size, void *ctx);
+typedef bool (*dir_fn)(const char *name, uint32_t clus, uint32_t size, bool dir, void *ctx);
 
-static bool walk_root(dir_fn fn, void *ctx) {
+static bool walk_dir(uint32_t dir_clus, dir_fn fn, void *ctx) {
 	char lfn[256];
-	bool have_lfn = false;
-	uint32_t clus = v.root_clus, idx = 0;
+	bool have_lfn = false, chain = v.fat32 || dir_clus;
+	uint32_t clus = dir_clus ? dir_clus : v.root_clus, idx = 0;
 	for (;;) {
 		uint32_t s;
-		if (v.fat32) {
+		if (chain) {
 			if (idx == v.spc) {
 				clus = next_clus(clus);
 				if (!clus)
@@ -161,7 +162,8 @@ static bool walk_root(dir_fn fn, void *ctx) {
 			}
 			shortn[n] = 0;
 			uint32_t c = le16(d + 26) | (v.fat32 ? le16(d + 20) << 16 : 0);
-			bool stop = (d[11] & 0x10) ? false : fn(have_lfn ? lfn : shortn, c, le32(d + 28), ctx);
+			bool dot = d[0] == '.';
+			bool stop = !dot && fn(have_lfn ? lfn : shortn, c, le32(d + 28), (d[11] & 0x10) != 0, ctx);
 			have_lfn = false;
 			if (stop)
 				return true;
@@ -169,25 +171,28 @@ static bool walk_root(dir_fn fn, void *ctx) {
 	}
 }
 
-static bool print_entry(const char *name, uint32_t clus, uint32_t size, void *ctx) {
+static bool print_entry(const char *name, uint32_t clus, uint32_t size, bool dir, void *ctx) {
 	(void)clus;
 	(void)ctx;
-	printf("%10u %s\n", size, name);
+	if (dir)
+		printf("     <dir> %s/\n", name);
+	else
+		printf("%10u %s\n", size, name);
 	return false;
 }
 
 bool fat_list(void) {
 	if ((!v.ok || !g_sd.ready) && !fat_mount())
 		return false;
-	walk_root(print_entry, NULL);
+	walk_dir(0, print_entry, NULL);
 	return true;
 }
 
-struct find { const char *name; uint32_t clus, size; bool found; };
+struct find { const char *name; uint32_t clus, size; bool found, dir; };
 
-static bool find_entry(const char *name, uint32_t clus, uint32_t size, void *ctx) {
+static bool find_entry(const char *name, uint32_t clus, uint32_t size, bool dir, void *ctx) {
 	struct find *f = ctx;
-	if (!name_eq(name, f->name))
+	if (dir != f->dir || !name_eq(name, f->name))
 		return false;
 	f->clus = clus;
 	f->size = size;
@@ -195,24 +200,53 @@ static bool find_entry(const char *name, uint32_t clus, uint32_t size, void *ctx
 	return true;
 }
 
-/* the size of a root-directory file, or -1 when there is none (quiet) */
+/*
+ * A file by its path from the root, with / between directories
+ * ("overlays/mmc.dtbo", rof #48); names compare without case.
+ */
+static bool lookup(const char *path, struct find *f) {
+	uint32_t dir = 0;
+	for (;;) {
+		char part[64];
+		uint32_t n = 0;
+		while (path[n] && path[n] != '/') {
+			if (n == sizeof part - 1)
+				return false;
+			part[n] = path[n];
+			n++;
+		}
+		part[n] = 0;
+		struct find g = {part, 0, 0, false, path[n] == '/'};
+		walk_dir(dir, find_entry, &g);
+		if (!g.found)
+			return false;
+		if (!g.dir) {
+			f->clus = g.clus;
+			f->size = g.size;
+			f->found = true;
+			return true;
+		}
+		dir = g.clus;
+		path += n + 1;
+	}
+}
+
+/* the size of a file, or -1 when there is none (quiet) */
 int32_t fat_size(const char *name) {
 	if ((!v.ok || !g_sd.ready) && !fat_mount())
 		return -1;
-	struct find f = {name, 0, 0, false};
-	walk_root(find_entry, &f);
-	return f.found ? (int32_t)f.size : -1;
+	struct find f = {name, 0, 0, false, false};
+	return lookup(name, &f) ? (int32_t)f.size : -1;
 }
 
-/* load a root-directory file to addr; returns its size, or -1 */
+/* load a file (a path from the root) to addr; returns its size, or -1 */
 void (*g_fat_progress)(uint32_t done, uint32_t total);
 
 int32_t fat_load(const char *name, uint32_t addr, uint32_t max) {
 	if ((!v.ok || !g_sd.ready) && !fat_mount())
 		return -1;
-	struct find f = {name, 0, 0, false};
-	walk_root(find_entry, &f);
-	if (!f.found) {
+	struct find f = {name, 0, 0, false, false};
+	if (!lookup(name, &f)) {
 		printf("err fat: %s not found\n", name);
 		return -1;
 	}
