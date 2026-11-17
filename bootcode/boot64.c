@@ -35,7 +35,8 @@ uint32_t crc32(const volatile uint8_t *p, uint32_t n) {
  *             config.txt's dtoverlay= lines applied on the VPU (dt.c),
  *             /memory set, /chosen bootargs from the first line of
  *             cmdline.txt (cmdline=)
- *   initrd    config.txt's initramfs line (else a file called initramfs),
+ *   initrd    config.txt's initramfs line (else, for kernel8.img, a file
+ *             called initramfs),
  *             at ARM 0x2100000, and /chosen linux,initrd-start/-end, as
  *             start.elf does for "initramfs NAME followkernel" (#31)
  * DTB "-" skips the devicetree. DTB "@N" (hex size) uses the N bytes
@@ -161,13 +162,25 @@ static bool apply_overlays(struct dt *t, const struct boot_cfg *c) {
 
 /*
  * The initramfs for a direct boot (#31): the file of config.txt's
- * initramfs line; without one, a file called initramfs if the card has it
- * (our cards before #48). Nothing to do when there is none (U-Boot boots).
+ * initramfs line; without one, and only for the default kernel8.img, a
+ * file called initramfs if the card has it (our cards before #48). Any
+ * other kernel without an initramfs line gets none, as with start.elf
+ * (Test 488: kernel=u-boot.bin in a [gpio3=0] section loaded it).
  * Loaded after the devicetree; /chosen gets its place. False on an error.
  */
-static bool load_initrd(struct dt *t, const char *name) {
+static bool name_is(const char *a, const char *b) {
+	for (; *a && *b; a++, b++) {
+		char x = *a >= 'A' && *a <= 'Z' ? (char)(*a + 32) : *a;
+		char y = *b >= 'A' && *b <= 'Z' ? (char)(*b + 32) : *b;
+		if (x != y)
+			return false;
+	}
+	return *a == *b;
+}
+
+static bool load_initrd(struct dt *t, const char *name, const char *kernel) {
 	if (!name[0]) {
-		if (fat_size("initramfs") < 0)
+		if (!name_is(kernel, "kernel8.img") || fat_size("initramfs") < 0)
 			return true;
 		name = "initramfs";
 		printf("boot64: no initramfs line in config.txt, loading the card's initramfs\n");
@@ -276,6 +289,46 @@ static int32_t load_dtb(const char *dtb, const struct boot_cfg *c, bool *overlay
 	return n;
 }
 
+/*
+ * The serial console as start.elf sets it up with enable_uart=1: when the
+ * devicetree's serial0 alias is the mini UART (Broadcom's devicetree on a
+ * 3B+ or Zero 2 W without dtoverlay=disable-bt), GPIO 14/15 go to it
+ * (ALT5) at 115200 baud from the core clock. U-Boot's mini UART driver
+ * only takes the UART when the pins are muxed to it and does not set the
+ * baud rate; Linux expects the same. Otherwise the pins stay on the PL011,
+ * which our own output uses. Test 488: with 22bbd72 U-Boot got no input.
+ */
+#define AUX_REG(off) (*(volatile uint32_t *)(0x7e215000u + (off)))
+
+static bool console_mini_uart(const struct dt *t) {
+	int32_t a = dt_path(t, "/aliases");
+	uint32_t n;
+	const uint8_t *p = a < 0 ? 0 : dt_prop(t, a, "serial0", &n);
+	if (!p)
+		return false;
+	for (uint32_t i = 0; i + 8 <= n; i++)
+		if (p[i] == '7' && p[i + 1] == 'e' && p[i + 2] == '2' && p[i + 3] == '1' && p[i + 4] == '5' &&
+		    p[i + 5] == '0' && p[i + 6] == '4' && p[i + 7] == '0')
+			return true;
+	return false;
+}
+
+/* after our last line: the pins leave the PL011 */
+static void mini_uart_handover(void) {
+	AUX_REG(0x04) |= 1;    /* AUX_ENABLES: mini UART */
+	AUX_REG(0x60) = 0;     /* CNTL: RX and TX off while set up */
+	AUX_REG(0x44) = 0;     /* IER: no interrupts */
+	AUX_REG(0x4c) = 3;     /* LCR: 8 bits */
+	AUX_REG(0x50) = 0;     /* MCR */
+	AUX_REG(0x48) = 0xc6;  /* IIR: clear both FIFOs */
+	AUX_REG(0x68) = core_khz() * 1000u / (8u * 115200u) - 1u; /* 270 at 250 MHz */
+	uint32_t fsel = GP_FSEL1;
+	fsel &= ~((7u << 12) | (7u << 15));
+	fsel |= (2u << 12) | (2u << 15); /* ALT5: TXD1, RXD1 */
+	GP_FSEL1 = fsel;
+	AUX_REG(0x60) = 3;     /* CNTL: RX and TX on */
+}
+
 bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 	if (!g_sdram_up) {
 		printf("err boot64: SDRAM not set up\n");
@@ -299,6 +352,7 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 		return false;
 	}
 	volatile uint32_t *stub = (volatile uint32_t *)B64_STUB;
+	bool mini = false;
 	stub[0xfc / 4] = B64_ARM(B64_KERNEL); /* kernel_entry32 */
 	stub[0xf8 / 4] = 0;                   /* dtb_ptr32 */
 	if (dtb && dtb[0] == '-' && !dtb[1]) {
@@ -319,10 +373,11 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 			struct dt t;
 			if (!dt_open(&t, (uint8_t *)B64_DTB, (uint32_t)n, B64_DTB_ROOM) ||
 			    (overlays && !apply_overlays(&t, &cfg)) || !dt_set_memory(&t, 0, B64_MEM_SIZE) ||
-			    !set_bootargs(&t, cfg.cmdline) || (!dtb_in_mem && !load_initrd(&t, cfg.initramfs))) {
+			    !set_bootargs(&t, cfg.cmdline) || (!dtb_in_mem && !load_initrd(&t, cfg.initramfs, kernel))) {
 				fail("devicetree: see the serial line", 0);
 				return false;
 			}
+			mini = console_mini_uart(&t);
 			dt_finish(&t);
 			stub[0xf8 / 4] = B64_ARM(B64_DTB);
 			printf("boot64: devicetree %u bytes at ARM %08X, memory 0-%08X\n", dt_size(&t), B64_ARM(B64_DTB),
@@ -335,7 +390,13 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 	bs_step(75, "starting the ARM", 0);
 	/* printed before the start: the ARM's first line came in the middle of
 	 * it otherwise (Pi test 466: "rpi-boot-stub: devicok boot64") */
+	if (mini)
+		printf("boot64: serial0 is the mini UART, GPIO 14/15 go to it at 115200\n");
 	printf("ok boot64, the serial line is the ARM's now\n");
+	if (mini) {
+		uart_flush(); /* our last line out of the PL011 first */
+		mini_uart_handover();
+	}
 	if (arm_start(true))
 		mbox_serve();
 	printf("err boot64: the ARM did not start\n");
