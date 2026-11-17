@@ -88,9 +88,38 @@ int32_t fat_load(const char *name, uint32_t addr, uint32_t max);
 int32_t fat_size(const char *name);
 /* called by fat_load after each cluster when set (bytes done, file size) */
 extern void (*g_fat_progress)(uint32_t done, uint32_t total);
-bool fdt_set_memory(uint8_t *dtb, uint32_t len, uint32_t base, uint32_t size);
-bool fdt_set_initrd(uint8_t *dtb, uint32_t len, uint32_t start, uint32_t end);
-bool fdt_set_bootargs(uint8_t *dtb, uint32_t len, const char *txt, uint32_t n);
+
+/* dt.c: edit a devicetree in a buffer of cap bytes (offsets name nodes;
+ * a change that grows the blob makes later offsets stale) */
+struct dt { uint8_t *b; uint32_t cap; };
+bool dt_open(struct dt *t, uint8_t *b, uint32_t len, uint32_t cap);
+uint32_t dt_size(const struct dt *t);
+void dt_finish(struct dt *t);
+int32_t dt_root(const struct dt *t);
+int32_t dt_path(const struct dt *t, const char *path);
+int32_t dt_subnode(const struct dt *t, int32_t node, const char *name);
+int32_t dt_add_subnode(struct dt *t, int32_t node, const char *name);
+int32_t dt_by_phandle(const struct dt *t, uint32_t ph);
+const uint8_t *dt_prop(const struct dt *t, int32_t node, const char *name, uint32_t *len);
+bool dt_setprop(struct dt *t, int32_t node, const char *name, const void *val, uint32_t len);
+bool dt_setprop_u32(struct dt *t, int32_t node, const char *name, uint32_t v);
+bool dt_setprop_str(struct dt *t, int32_t node, const char *name, const char *s);
+bool dt_apply_overlay(struct dt *base, struct dt *overlay, const char *name);
+bool dt_set_memory(struct dt *t, uint32_t base, uint32_t size);
+bool dt_set_chosen(struct dt *t, const char *prop, const char *str, uint32_t n);
+bool dt_set_chosen_u32(struct dt *t, const char *prop, uint32_t v);
+
+/* config.c: the config.txt keys of a direct boot (rof #48) */
+#define CFG_OVERLAYS 8
+struct boot_cfg {
+	bool arm_64bit, device_tree_set;
+	char kernel[32], initramfs[32], armstub[32], device_tree[40], cmdline[32];
+	char overlay[CFG_OVERLAYS][32];
+	uint32_t n_overlays, unknown_filters;
+};
+void cfg_defaults(struct boot_cfg *c);
+void cfg_parse(struct boot_cfg *c, const char *txt, uint32_t len, uint32_t board_type, uint32_t lev0, uint32_t lev1);
+const char *cfg_board_dtb(uint32_t board_type);
 
 /* boot64.c (monitor and release builds): load from FAT and start the ARM;
  * returns only on an error */

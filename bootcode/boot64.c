@@ -6,6 +6,11 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "hw.h"
+#include "armstub8-builtin.h"
+
+#ifndef BOOT_CONFIG
+#define BOOT_CONFIG "config.txt"
+#endif
 
 uint32_t crc32(const volatile uint8_t *p, uint32_t n) {
 	uint32_t crc = 0xffffffffu;
@@ -18,23 +23,25 @@ uint32_t crc32(const volatile uint8_t *p, uint32_t n) {
 }
 
 /*
- * boot64 [KERNEL [DTB]]: load armstub8, the kernel and the devicetree from
- * the FAT partition, as Broadcom's start.elf does, and start the ARM in
- * AArch64. ARM addresses: stub at 0, kernel at 0x80000, devicetree at
- * 0x2000000 (bus 0xc... = ARM 0x0...). DTB "-" skips the devicetree.
- * Without DTB: by board (revision in OTP), redox-3bp.dtb or, on a Zero
- * 2 W, redox-zero2w.dtb (Broadcom's devicetree with the overlays of
- * redox-rpi's config.txt already applied, from redox-rpi/make-dtb.sh),
- * else Broadcom's bcm2710-rpi-3-b-plus.dtb or bcm2710-rpi-zero-2-w.dtb
- * as it is. When the card has an initramfs, it goes to ARM 0x2100000 and
- * /chosen linux,initrd-start/-end get its place, as start.elf does for
- * "initramfs initramfs followkernel" (direct boot without U-Boot, #31), and
- * the first line of cmdline.txt goes into /chosen bootargs. We don't apply
- * overlays on the VPU. DTB "@N" (hex size) uses the N bytes already at
- * ARM 0x2000000, sent over serial with "l c2000000 N C", so a devicetree
- * can be tried without writing the card (the monitor passes its size as
- * dtb_in_mem). Returns only on an error; on success the VPU stays in
- * mbox_serve().
+ * boot64 [KERNEL [DTB]]: start the ARM in AArch64 from the FAT partition, as
+ * Broadcom's start.elf does, reading the keys of config.txt that matter for
+ * that (config.c, rof #48), so a card made for start.elf boots unchanged:
+ *   armstub   armstub= or the card's armstub8-redox.bin / armstub8.bin,
+ *             else the built-in armstub8, at ARM 0
+ *   kernel    KERNEL, else kernel= (default kernel8.img), at ARM 0x80000
+ *   dtb       DTB, else device_tree=, else redox-3bp.dtb / redox-zero2w.dtb
+ *             if the card has it (overlays merged by make-dtb.sh), else
+ *             Broadcom's devicetree for the board, at ARM 0x2000000; then
+ *             config.txt's dtoverlay= lines applied on the VPU (dt.c),
+ *             /memory set, /chosen bootargs from the first line of
+ *             cmdline.txt (cmdline=)
+ *   initrd    config.txt's initramfs line (else a file called initramfs),
+ *             at ARM 0x2100000, and /chosen linux,initrd-start/-end, as
+ *             start.elf does for "initramfs NAME followkernel" (#31)
+ * DTB "-" skips the devicetree. DTB "@N" (hex size) uses the N bytes
+ * already at ARM 0x2000000, sent over serial with "l c2000000 N C" (the
+ * monitor passes the size as dtb_in_mem; no initramfs then). Returns only
+ * on an error; on success the VPU stays in mbox_serve().
  */
 #define B64_STUB 0xc0000000u
 #define B64_KERNEL 0xc0080000u
@@ -43,6 +50,7 @@ uint32_t crc32(const volatile uint8_t *p, uint32_t n) {
 #define B64_ARM(bus) ((bus) - 0xc0000000u)
 #define BOARD_ZERO2W 0x12u /* board type, revision bits 4..11 */
 #define B64_MEM_SIZE MBOX_ARM_MEM_SIZE
+#define B64_DTB_ROOM (B64_INITRD - B64_DTB) /* 1 MB for the devicetree to grow in */
 
 /* the boot screen (#430): "loading NAME", the bar to pct */
 static bool load_one(const char *name, uint32_t addr, uint32_t max, uint32_t pct) {
@@ -93,59 +101,173 @@ static void initrd_progress(uint32_t done, uint32_t total) {
 		printf("boot64: initramfs %u%%, %s\n", s * 5, txt);
 }
 
-/*
- * cmdline.txt into /chosen bootargs, as start.elf does: the kernel8.img
- * stub's options (rpi-open-firmware #31). Read into the initramfs's place,
- * which is loaded later. Nothing to do when the card has none; a
- * devicetree without the placeholder only gets a message (U-Boot cards
- * have their own command line).
- */
-static void set_bootargs(uint8_t *dtb, uint32_t dtb_len) {
-	int32_t n = fat_size("cmdline.txt");
+/* the board type: bits 4..11 of the board revision */
+static uint32_t board_type(void) {
+	return (board_revision() >> 4) & 0xffu;
+}
+
+/* a file into scratch space (the initramfs's place, loaded last) */
+static int32_t load_scratch(const char *name) {
+	int32_t n = fat_size(name);
 	if (n <= 0 || n > 0x10000)
-		return;
-	if (fat_load("cmdline.txt", B64_INITRD, 0x10000u) != n)
-		return;
+		return -1;
+	return fat_load(name, B64_INITRD, 0x10000u) == n ? n : -1;
+}
+
+/* the first line of cmdline.txt (or cmdline=) into /chosen bootargs */
+static bool set_bootargs(struct dt *t, const char *name) {
+	int32_t n = load_scratch(name);
+	if (n < 0)
+		return true; /* none: U-Boot cards have their own command line */
 	const char *txt = (const char *)B64_INITRD;
-	if (!fdt_set_bootargs(dtb, dtb_len, txt, (uint32_t)n)) {
-		printf("boot64: cmdline.txt not passed on\n");
-		return;
-	}
+	if (!dt_set_chosen(t, "bootargs", txt, (uint32_t)n))
+		return false;
 	uint32_t l = 0;
 	while (l < (uint32_t)n && txt[l] && txt[l] != '\r' && txt[l] != '\n')
 		l++;
-	printf("boot64: bootargs from cmdline.txt, %u bytes\n", l);
+	printf("boot64: bootargs from %s, %u bytes\n", name, l);
+	return true;
+}
+
+/* config.txt's dtoverlay= lines, from overlays/NAME.dtbo */
+static bool apply_overlays(struct dt *t, const struct boot_cfg *c) {
+	for (uint32_t i = 0; i < c->n_overlays; i++) {
+		char path[48] = "overlays/";
+		uint32_t k = 9;
+		for (const char *q = c->overlay[i]; *q && k < 40; q++)
+			path[k++] = *q;
+		for (const char *q = ".dtbo"; *q; q++)
+			path[k++] = *q;
+		path[k] = 0;
+		int32_t n = load_scratch(path);
+		struct dt o;
+		if (n < 0) {
+			bs_fail("not found: ", path);
+			return false;
+		}
+		if (!dt_open(&o, (uint8_t *)B64_INITRD, (uint32_t)n, (uint32_t)n) || !dt_apply_overlay(t, &o, c->overlay[i])) {
+			bs_fail("could not apply ", path);
+			return false;
+		}
+	}
+	return true;
 }
 
 /*
- * The initramfs for a direct boot (#31): nothing to do when the card has
- * none (U-Boot boots); else load it after the devicetree and tell the
- * kernel8.img stub where it is. False on an error.
+ * The initramfs for a direct boot (#31): the file of config.txt's
+ * initramfs line; without one, a file called initramfs if the card has it
+ * (our cards before #48). Nothing to do when there is none (U-Boot boots).
+ * Loaded after the devicetree; /chosen gets its place. False on an error.
  */
-static bool load_initrd(uint8_t *dtb, uint32_t dtb_len) {
-	if (fat_size("initramfs") < 0)
-		return true;
-	bs_step(65, "loading ", "initramfs");
+static bool load_initrd(struct dt *t, const char *name) {
+	if (!name[0]) {
+		if (fat_size("initramfs") < 0)
+			return true;
+		name = "initramfs";
+		printf("boot64: no initramfs line in config.txt, loading the card's initramfs\n");
+	}
+	bs_step(65, "loading ", name);
 	uint32_t t0 = timer_us();
 	g_load_step = ~0u; /* so 0 % prints too */
 	g_fat_progress = initrd_progress;
-	int32_t n = fat_load("initramfs", B64_INITRD, B64_MEM_SIZE - B64_ARM(B64_INITRD));
+	int32_t n = fat_load(name, B64_INITRD, B64_MEM_SIZE - B64_ARM(B64_INITRD));
 	g_fat_progress = 0;
 	if (n < 0) {
-		bs_fail("could not load ", "initramfs");
+		bs_fail("could not load ", name);
 		return false;
 	}
 	uint32_t ms = (timer_us() - t0) / 1000;
-	printf("boot64: initramfs %u bytes at ARM %08X in %u ms (%u KB/s)\n", (uint32_t)n, B64_ARM(B64_INITRD), ms,
+	printf("boot64: %s %u bytes at ARM %08X in %u ms (%u KB/s)\n", name, (uint32_t)n, B64_ARM(B64_INITRD), ms,
 	       ms ? (uint32_t)n / ms : 0);
 #if LOAD_CRC
 	printf("boot64: initramfs crc32 %08X\n", crc32((const volatile uint8_t *)B64_INITRD, (uint32_t)n));
 #endif
-	if (!fdt_set_initrd(dtb, dtb_len, B64_ARM(B64_INITRD), B64_ARM(B64_INITRD) + (uint32_t)n)) {
-		bs_fail("no initrd place in the devicetree", 0);
+	if (!dt_set_chosen_u32(t, "linux,initrd-start", B64_ARM(B64_INITRD)) ||
+	    !dt_set_chosen_u32(t, "linux,initrd-end", B64_ARM(B64_INITRD) + (uint32_t)n)) {
+		bs_fail("no room for the initrd in the devicetree", 0);
 		return false;
 	}
 	return true;
+}
+
+/* config.txt (or the build's CONFIG=) into c; none is fine */
+static void read_config(struct boot_cfg *c) {
+	cfg_defaults(c);
+	int32_t n = load_scratch(BOOT_CONFIG);
+	if (n < 0) {
+		printf("boot64: no %s, defaults\n", BOOT_CONFIG);
+		cfg_parse(c, "", 0, board_type(), 0, 0);
+		return;
+	}
+	cfg_parse(c, (const char *)B64_INITRD, (uint32_t)n, board_type(), GP_LEV0, GP_LEV1);
+	printf("boot64: %s: kernel %s, initramfs %s, armstub %s, device_tree %s, %u overlays%s\n", BOOT_CONFIG,
+	       c->kernel, c->initramfs[0] ? c->initramfs : "-", c->armstub[0] ? c->armstub : "built-in",
+	       c->device_tree_set ? (c->device_tree[0] ? c->device_tree : "none") : "default", c->n_overlays,
+	       c->arm_64bit ? "" : ", arm_64bit=0 (only 64-bit is supported)");
+	if (c->unknown_filters)
+		printf("boot64: %u config.txt sections with filters we do not know, skipped\n", c->unknown_filters);
+#if HDMI
+	/* the boot screen's title from the card (boot_title= in config.txt) */
+	if (bs_config_title((const char *)B64_INITRD, (uint32_t)n))
+		printf("boot64: boot screen title from %s\n", BOOT_CONFIG);
+#endif
+}
+
+/* the armstub: armstub= from config.txt, else the card's armstub8-redox.bin
+ * or armstub8.bin (our cards before #48), else the built-in one */
+static bool load_armstub(const struct boot_cfg *c) {
+	if (c->armstub[0]) {
+		if (load_one(c->armstub, B64_STUB, B64_KERNEL - B64_STUB, 30))
+			return true;
+		bs_fail("not found: ", c->armstub);
+		return false;
+	}
+	static const char *const old[] = {"armstub8-redox.bin", "armstub8.bin"};
+	for (uint32_t i = 0; i < 2; i++)
+		if (fat_size(old[i]) > 0 && load_one(old[i], B64_STUB, B64_KERNEL - B64_STUB, 30))
+			return true;
+	volatile uint8_t *d = (volatile uint8_t *)B64_STUB;
+	for (uint32_t i = 0; i < sizeof armstub8_builtin; i++)
+		d[i] = armstub8_builtin[i];
+	printf("boot64: built-in armstub8, %u bytes at ARM 00000000\n", (uint32_t)sizeof armstub8_builtin);
+	return true;
+}
+
+/*
+ * The devicetree into B64_DTB; *overlays false when it has them already.
+ * dtb != NULL (the monitor's boot64 KERNEL DTB) wins, then device_tree=
+ * from config.txt, then redox-3bp.dtb / redox-zero2w.dtb (our cards before
+ * #48: Broadcom's devicetree with the overlays merged, make-dtb.sh), then
+ * Broadcom's devicetree for the board. Returns the size, 0 for none, or
+ * -1 on an error.
+ */
+static int32_t load_dtb(const char *dtb, const struct boot_cfg *c, bool *overlays) {
+	*overlays = true;
+	if (!dtb && c->device_tree_set) {
+		if (!c->device_tree[0])
+			return 0;
+		dtb = c->device_tree;
+	}
+	if (!dtb) {
+		uint32_t type = board_type();
+		printf("boot64: board revision %06X\n", board_revision());
+		const char *redox = type == BOARD_ZERO2W ? "redox-zero2w.dtb" : "redox-3bp.dtb";
+		if (fat_size(redox) > 0) {
+			dtb = redox;
+			*overlays = false;
+			printf("boot64: %s has its overlays already, config.txt's dtoverlay lines not applied\n", redox);
+		} else {
+			dtb = cfg_board_dtb(type);
+		}
+	}
+	bs_step(60, "loading ", dtb);
+	int32_t n = fat_load(dtb, B64_DTB, B64_DTB_ROOM);
+	if (n < 0) {
+		bs_fail("not found: ", dtb);
+		return -1;
+	}
+	printf("boot64: %s %u bytes at ARM %08X\n", dtb, (uint32_t)n, B64_ARM(B64_DTB));
+	return n;
 }
 
 bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
@@ -156,23 +278,16 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 	/* the Zero 2 W's BCM2710A1 is rated for 1000 MHz; at 1200 MHz, with no
 	 * core voltage control, Redox crashed under load (an instruction
 	 * abort at PC 0 while logging in, right after the governor's switch) */
-	if (((board_revision() >> 4) & 0xffu) == BOARD_ZERO2W && arm_max_mhz > 1000u) {
+	if (board_type() == BOARD_ZERO2W && arm_max_mhz > 1000u) {
 		arm_max_mhz = 1000u;
 		printf("boot64: Zero 2 W, ARM clock at most 1000 MHz\n");
 	}
-#if HDMI
-	/* the boot screen's title from the card (boot_title= in config.txt);
-	 * read into the devicetree's place, which is loaded later */
-	int32_t cn = fat_size("config.txt");
-	if (cn > 0 && cn <= 0x10000 && !dtb_in_mem && fat_load("config.txt", B64_DTB, 0x10000u) == cn &&
-	    bs_config_title((const char *)B64_DTB, (uint32_t)cn))
-		printf("boot64: boot screen title from config.txt\n");
-#endif
-	if (!load_one("armstub8-redox.bin", B64_STUB, B64_KERNEL - B64_STUB, 30) &&
-	    !load_one("armstub8.bin", B64_STUB, B64_KERNEL - B64_STUB, 30)) {
-		bs_fail("not found: ", "armstub8.bin");
+	static struct boot_cfg cfg;
+	read_config(&cfg);
+	if (!kernel)
+		kernel = cfg.kernel;
+	if (!load_armstub(&cfg))
 		return false;
-	}
 	if (!load_one(kernel, B64_KERNEL, B64_DTB - B64_KERNEL, 45)) {
 		bs_fail("not found: ", kernel);
 		return false;
@@ -180,42 +295,35 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 	volatile uint32_t *stub = (volatile uint32_t *)B64_STUB;
 	stub[0xfc / 4] = B64_ARM(B64_KERNEL); /* kernel_entry32 */
 	stub[0xf8 / 4] = 0;                   /* dtb_ptr32 */
-	if (!dtb || dtb[0] != '-' || dtb[1]) {
-		int32_t n = -1;
-		uint32_t mem = 0;
+	if (dtb && dtb[0] == '-' && !dtb[1]) {
+		printf("boot64: no devicetree\n");
+	} else {
+		int32_t n;
+		bool overlays = false;
 		if (dtb_in_mem) {
-			mem = dtb_in_mem;
-			n = (int32_t)mem;
-			dtb = "devicetree in memory";
-			printf("boot64: devicetree in memory, %u bytes, crc32 %08X\n", mem,
-			       crc32((const volatile uint8_t *)B64_DTB, mem));
-		} else if (!dtb) {
-			uint32_t rev = board_revision();
-			bool zero = ((rev >> 4) & 0xffu) == BOARD_ZERO2W;
-			printf("boot64: board revision %06X%s\n", rev, zero ? ", Zero 2 W" : "");
-			dtb = zero ? "redox-zero2w.dtb" : "redox-3bp.dtb";
-			bs_step(60, "loading ", dtb);
-			n = fat_load(dtb, B64_DTB, 0x100000u);
-			if (n < 0) {
-				dtb = zero ? "bcm2710-rpi-zero-2-w.dtb" : "bcm2710-rpi-3-b-plus.dtb";
-				printf("boot64: no overlays applied (disable-bt, mmc): serial0 is the mini UART\n");
+			n = (int32_t)dtb_in_mem;
+			printf("boot64: devicetree in memory, %u bytes, crc32 %08X\n", dtb_in_mem,
+			       crc32((const volatile uint8_t *)B64_DTB, dtb_in_mem));
+		} else {
+			n = load_dtb(dtb, &cfg, &overlays);
+			if (n < 0)
+				return false;
+		}
+		if (n > 0) {
+			struct dt t;
+			if (!dt_open(&t, (uint8_t *)B64_DTB, (uint32_t)n, B64_DTB_ROOM) ||
+			    (overlays && !apply_overlays(&t, &cfg)) || !dt_set_memory(&t, 0, B64_MEM_SIZE) ||
+			    !set_bootargs(&t, cfg.cmdline) || (!dtb_in_mem && !load_initrd(&t, cfg.initramfs))) {
+				bs_fail("devicetree: see the serial line", 0);
+				return false;
 			}
+			dt_finish(&t);
+			stub[0xf8 / 4] = B64_ARM(B64_DTB);
+			printf("boot64: devicetree %u bytes at ARM %08X, memory 0-%08X\n", dt_size(&t), B64_ARM(B64_DTB),
+			       B64_MEM_SIZE);
+		} else {
+			printf("boot64: device_tree= is empty, no devicetree\n");
 		}
-		if (n < 0) {
-			bs_step(60, "loading ", dtb);
-			n = fat_load(dtb, B64_DTB, 0x100000u);
-		}
-		if (n < 0) {
-			bs_fail("not found: ", dtb);
-			return false;
-		}
-		if (!fdt_set_memory((uint8_t *)B64_DTB, (uint32_t)n, 0, B64_MEM_SIZE))
-			return false;
-		stub[0xf8 / 4] = B64_ARM(B64_DTB);
-		printf("boot64: %s %u bytes at ARM %08X, memory 0-%08X\n", dtb, (uint32_t)n, B64_ARM(B64_DTB), B64_MEM_SIZE);
-		set_bootargs((uint8_t *)B64_DTB, (uint32_t)n);
-		if (!dtb_in_mem && !load_initrd((uint8_t *)B64_DTB, (uint32_t)n))
-			return false;
 	}
 	sd_off();
 	bs_step(75, "starting the ARM", 0);
@@ -228,4 +336,3 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 	bs_fail("the ARM did not start", 0);
 	return false;
 }
-

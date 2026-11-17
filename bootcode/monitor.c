@@ -394,7 +394,7 @@ static bool run(int argc, char **argv) {
 	}
 	if (!strcmp_s(argv[0], "boot64")) {
 		if (argc <= 3)
-			cmd_boot64(argc > 1 ? argv[1] : "kernel8.img", argc > 2 ? argv[2] : NULL);
+			cmd_boot64(argc > 1 ? argv[1] : NULL, argc > 2 ? argv[2] : NULL);
 		else
 			printf("err usage: boot64 [KERNEL [DTB]]\n");
 		return false;
