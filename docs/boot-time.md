@@ -52,6 +52,7 @@ The firmware's part is the first 0.5 s and the minimal card.
 | 2026-11-17 | 3B+, minimal Redox (keyboard only), SD at 25 MHz | `release-0.1` + direct boot | about 0.31 s | 12.85 s | **about 13.2 s** | 470 |
 | 2026-11-17 | 3B+, the same, SD at 50 MHz (PR #45) | + high speed | about 0.31 s | 10.96 s | **about 11.3 s** | 473 |
 | 2026-11-18 | Zero 2 W, standard direct card (248 MB initramfs, not minimal) | `cfg-20261117c` | 1.01 s | 30.83 s | **about 31.8 s** | 492 |
+| 2026-11-18 | Zero 2 W, the same card, SD at 50 MHz (initramfs 22.6 MB/s) | `psci-20261118b` (PR #55 on `direct-boot-31`) | 1.37 s | 20.06 s | **about 21.4 s** | 505 |
 
 The Zero's value is for the full standard card. Of it, 22.5 s goes to
 reading the 248 MB initramfs. The minimal release card (#56) is the big
