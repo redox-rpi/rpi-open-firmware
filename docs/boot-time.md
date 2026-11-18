@@ -1,8 +1,30 @@
 # Boot time to login
 
 The firmware's main indicator is the time **from power-on to `redox login:`**
-on the release card. We want it to go down. The details and the next cuts
+on the release card. We want it to go down, as close to no boot time as we
+can. The details and the next cuts
 are in [#44](https://github.com/redox-rpi/rpi-open-firmware/issues/44).
+
+## Aim
+
+There is no fixed target. The aim is to show that a system tuned from the
+first instruction up boots with **next to no boot time**. Our estimate
+from earlier discussions is that 2–3 s to the login should be possible.
+We own every stage from the VPU's first instruction to the login, and
+this project is meant to demonstrate that.
+
+A rough budget for 2–3 s on the 3B+, compared with today (Test 473):
+
+| Stage | Today | Possible | How |
+|---|---|---|---|
+| Boot ROM | 0.3 s | 0.3 s | fixed, in the chip |
+| Firmware up to the kernel | 3.2 s | 0.3–0.5 s | a small initramfs (#56) at 50 MHz, `kernel8.img` at the same speed as the initramfs (it reads at 2.6 MB/s now, unexplained), HDMI set up while the SD card reads |
+| Kernel | 1.9 s | 0.2–0.3 s | no DEBUG lines on the 115200 baud serial line (about 1.4 s now) |
+| Services up to the login | 5.7 s | 1–1.5 s | `dwc2d` stops waiting for the LAN link ([redox-rpi#536](https://github.com/redox-rpi/redox-rpi/issues/536), about 3 s); start only what the login needs, the rest in the background after it |
+| **Sum** | **11.3 s** | **about 2–2.5 s** | |
+
+Most of the services and kernel time is in redox-rpi, not in the firmware.
+The firmware's part is the first 0.5 s and the minimal card.
 
 ## How it is measured
 
