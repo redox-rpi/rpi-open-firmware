@@ -240,6 +240,24 @@ static bool load_armstub(const struct boot_cfg *c) {
 }
 
 /*
+ * /psci when the armstub answers PSCI ("PSCI" at 0x100, our armstub8 since
+ * rof #40): Redox and Linux then stop and restart the Pi through it, and
+ * our bootcode stays off after a SYSTEM_OFF. Without the node the kernel
+ * has no way to stop the Pi but to stand still.
+ */
+static bool add_psci(struct dt *t) {
+	const volatile uint8_t *m = (const volatile uint8_t *)(B64_STUB + 0x100);
+	if (m[0] != 'P' || m[1] != 'S' || m[2] != 'C' || m[3] != 'I')
+		return true;
+	static const char compat[] = "arm,psci-1.0\0arm,psci-0.2";
+	int32_t p = dt_add_subnode(t, dt_root(t), "psci");
+	if (p < 0 || !dt_setprop(t, p, "compatible", compat, sizeof compat) || !dt_setprop_str(t, p, "method", "smc"))
+		return false;
+	printf("boot64: the armstub answers PSCI, /psci added (method smc)\n");
+	return true;
+}
+
+/*
  * The devicetree into B64_DTB; *overlays false when it has them already.
  * dtb != NULL (the monitor's boot64 KERNEL DTB) wins, then device_tree=
  * from config.txt, then redox-3bp.dtb / redox-zero2w.dtb (our cards before
@@ -319,7 +337,8 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 			struct dt t;
 			if (!dt_open(&t, (uint8_t *)B64_DTB, (uint32_t)n, B64_DTB_ROOM) ||
 			    (overlays && !apply_overlays(&t, &cfg)) || !dt_set_memory(&t, 0, B64_MEM_SIZE) ||
-			    !set_bootargs(&t, cfg.cmdline) || (!dtb_in_mem && !load_initrd(&t, cfg.initramfs))) {
+			    !set_bootargs(&t, cfg.cmdline) || (!dtb_in_mem && !load_initrd(&t, cfg.initramfs)) ||
+			    !add_psci(&t)) {
 				fail("devicetree: see the serial line", 0);
 				return false;
 			}

@@ -13,6 +13,20 @@
  * U-Boot and Linux find the slots through "cpu-release-addr" in the
  * devicetree; core 0's slot (0xd8) is never used.
  *
+ * PSCI (rof #40): SMC is on, and an EL3 vector table at 0x800 answers
+ * the PSCI 1.0 calls Redox and Linux use to stop or restart the Pi:
+ *   PSCI_VERSION   1.0
+ *   PSCI_FEATURES  0 for the four calls here, NOT_SUPPORTED otherwise
+ *   SYSTEM_OFF     set the halt partition (63) in PM_RSTS and reset through
+ *                  the PM watchdog, as Linux does with Broadcom's firmware;
+ *                  our bootcode then stays off until GPIO3 goes low
+ *   SYSTEM_RESET   reset through the PM watchdog
+ * Everything else answers NOT_SUPPORTED: the cores still start through
+ * the spin table, not CPU_ON. The word "PSCI" at 0x100 tells our VPU
+ * loader that this stub answers PSCI, so it adds a /psci node to the
+ * devicetree. The stub is 0xc04 bytes and must stay inside the first
+ * 4 KiB, which the devicetree's /memreserve/ keeps from the kernel.
+ *
  * Interface: the last 16 bytes are the layout that Broadcom's start.elf
  * patches in an armstub (magic 0x5afe570b at 0xf0, version at 0xf4, then
  * the devicetree and kernel addresses), as in the published
@@ -35,10 +49,10 @@
 
 #define SCR_NS		(1 << 0)	/* lower ELs are non-secure */
 #define SCR_RES1	(3 << 4)
-#define SCR_SMD		(1 << 7)	/* no SMC: nothing answers it */
 #define SCR_HCE		(1 << 8)	/* HVC allowed */
-#define SCR_RW		(1 << 10)	/* EL2 is AArch64 */
-#define SCR_VALUE	(SCR_NS | SCR_RES1 | SCR_SMD | SCR_HCE | SCR_RW)
+#define SCR_RW		(1 << 10)	/* EL2 is AArch64; SMD (bit 7) stays 0:
+					   SMC is on and lands in el3_vectors */
+#define SCR_VALUE	(SCR_NS | SCR_RES1 | SCR_HCE | SCR_RW)
 
 #define SPSR_EL2H	0x3c9		/* EL2 with SP_EL2, D A I F masked */
 #define SCTLR_EL2_OFF	0x30c50830	/* RES1 bits only: MMU, caches off */
@@ -47,6 +61,23 @@
 #define CPUECTLR_SMPEN	(1 << 6)	/* take part in cache coherency */
 
 #define STUB_MAGIC	0x5afe570b
+
+/* PSCI function IDs (SMC32 convention, also used from AArch64) */
+#define PSCI_VERSION	0x84000000
+#define PSCI_OFF_OFF	8		/* SYSTEM_OFF = PSCI_VERSION + 8 */
+#define PSCI_RESET_OFF	9		/* SYSTEM_RESET */
+#define PSCI_FEAT_OFF	10		/* PSCI_FEATURES */
+#define EC_SMC64	0x17		/* ESR_EL3.EC: SMC from AArch64 */
+
+/* power management block, BCM2837 (Pi 3, 3B+, Zero 2 W) */
+#define PM_BASE		0x3f100000
+#define PM_RSTC		0x1c
+#define PM_RSTS		0x20
+#define PM_WDOG		0x24
+#define PM_PASSWORD	0x5a000000
+#define PM_RSTS_HALT	0x555		/* partition 63, bits spread out */
+#define PM_RSTC_WRCFG	0x30
+#define PM_RSTC_FULL	0x20
 
 	.text
 	.globl	_start
@@ -72,6 +103,8 @@ _start:
 	msr	S3_1_C15_C2_1, x0
 
 	msr	cptr_el3, xzr		/* no FP/SIMD traps */
+	adr	x0, el3_vectors		/* SMC from EL1/EL2: PSCI */
+	msr	vbar_el3, x0
 	mov	x0, #SCR_VALUE
 	msr	scr_el3, x0
 	ldr	x0, =SCTLR_EL2_OFF
@@ -137,3 +170,81 @@ dtb_ptr32:
 	.globl	kernel_entry32
 kernel_entry32:
 	.word	0x80000
+
+/* our VPU loader looks for this word: the stub answers PSCI */
+	.org	0x100
+psci_marker:
+	.ascii	"PSCI"
+	.word	0x10000			/* PSCI 1.0 */
+
+/*
+ * SMC from a lower EL. x0 = function ID, x1 = argument. The result goes
+ * back in x0; x9-x11 are scratch (SMCCC: the caller keeps nothing in
+ * x4-x17 across the call). MMU and caches are off in EL3, so the PM
+ * registers are reached directly.
+ */
+psci_smc:
+	mrs	x9, esr_el3
+	lsr	x9, x9, #26
+	cmp	x9, #EC_SMC64
+	b.ne	not_supported
+	ldr	w9, =PSCI_VERSION
+	cmp	w0, w9
+	b.eq	psci_version
+	sub	w10, w0, w9
+	cmp	w10, #PSCI_OFF_OFF
+	b.eq	system_off
+	cmp	w10, #PSCI_RESET_OFF
+	b.eq	system_reset
+	cmp	w10, #PSCI_FEAT_OFF
+	b.eq	psci_features
+not_supported:
+	mov	x0, #-1			/* NOT_SUPPORTED */
+	eret
+
+psci_version:
+	mov	x0, #0x10000		/* 1.0 */
+	eret
+
+psci_features:				/* x1 = the function asked about */
+	sub	w10, w1, w9
+	cmp	w1, w9
+	b.eq	1f
+	cmp	w10, #PSCI_OFF_OFF
+	b.eq	1f
+	cmp	w10, #PSCI_RESET_OFF
+	b.eq	1f
+	cmp	w10, #PSCI_FEAT_OFF
+	b.ne	not_supported
+1:	mov	x0, xzr
+	eret
+
+system_off:
+	ldr	x9, =PM_BASE
+	ldr	w10, [x9, #PM_RSTS]
+	and	w10, w10, #0x00ffffff
+	ldr	w11, =(PM_PASSWORD | PM_RSTS_HALT)
+	orr	w10, w10, w11
+	str	w10, [x9, #PM_RSTS]
+	/* fall through: the reset with the halt partition set */
+system_reset:
+	ldr	x9, =PM_BASE
+	ldr	w10, =(PM_PASSWORD | 10)	/* about 150 us */
+	str	w10, [x9, #PM_WDOG]
+	ldr	w10, [x9, #PM_RSTC]
+	and	w10, w10, #0x00ffffff
+	bic	w10, w10, #PM_RSTC_WRCFG
+	ldr	w11, =(PM_PASSWORD | PM_RSTC_FULL)
+	orr	w10, w10, w11
+	str	w10, [x9, #PM_RSTC]
+2:	wfi
+	b	2b
+	.ltorg
+
+/* EL3 vectors: only "synchronous from a lower EL in AArch64" is used */
+	.balign	0x800
+el3_vectors:
+	.org	el3_vectors + 0x200	/* current EL with SP_ELx: should not happen */
+	b	.
+	.org	el3_vectors + 0x400	/* lower EL, AArch64, synchronous */
+	b	psci_smc
