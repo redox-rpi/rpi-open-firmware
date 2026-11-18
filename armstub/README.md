@@ -61,6 +61,10 @@ The kernel only uses PSCI when the devicetree has a `/psci` node
 an older stub on the card (`armstub8-redox.bin`) gets no node and the
 kernel falls back to the watchdog for reset, as before.
 
+Power in the halt: the Shelly plug read 0.0 W on the 3B+ (Tests 496, 504;
+2.9 W with Redox running), and a power bank's display showed about
+0.1 W on the Zero 2 W (maintainer, 2026-11-18, a rough reading).
+
 The stub must stay inside the first 4 KiB: the Broadcom devicetrees keep
 `0x0–0x1000` from the kernel with `/memreserve/`.
 
