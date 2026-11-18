@@ -266,6 +266,10 @@ bool usb_power_on(void) {
 	 * without it: U-Boot saw a device that could not send its descriptor.
 	 * The clock first, then the reset.
 	 */
+	/* only the 3B+ has the LAN7515 and the FXL6408 expander; on the
+	 * Zero 2 W (no LAN) the probe only printed an err line (Test 492) */
+	if (((board_revision() >> 4) & 0xffu) != BOARD_TYPE_3BP)
+		return true;
 	eth_clock_on();
 	udelay(1000);
 	lan_reset_pulse_begin();

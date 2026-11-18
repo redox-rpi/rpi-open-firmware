@@ -134,6 +134,7 @@ uint32_t crc32(const volatile uint8_t *p, uint32_t n);
 extern bool g_mbox_on;
 void mbox_start(void);
 uint32_t board_revision(void); /* OTP row 30, e.g. a020d3 (3B+), 902120 (Zero 2 W) */
+#define BOARD_TYPE_3BP 0x0du /* board type, bits 4..11 of the revision */
 void mbox_poll(void);
 void mbox_serve(void) __attribute__((noreturn));
 /* monitor: ask for a framebuffer through the real tag path, as U-Boot does */
