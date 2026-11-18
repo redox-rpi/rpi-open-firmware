@@ -7,11 +7,14 @@ set -euo pipefail
 check=no
 [ "${1:-}" = --check ] && { check=yes; shift; }
 bin=${1:?usage: armstub-header.sh [--check] armstub8.bin}
-[ "$(wc -c < "$bin")" -eq 256 ] || { echo "armstub8.bin is not 256 bytes" >&2; exit 1; }
+size=$(wc -c < "$bin")
+# at least the 256-byte layout start.elf patches, at most the 4 KiB the
+# devicetree's /memreserve/ keeps from the kernel (PSCI vectors, rof #40)
+[ "$size" -ge 256 ] && [ "$size" -le 4096 ] || { echo "armstub8.bin is $size bytes, not 256 to 4096" >&2; exit 1; }
 gen() {
 	cat <<H
 /*
- * The built-in armstub8 (rof #48): armstub/armstub8.S, 256 bytes, used when
+ * The built-in armstub8 (rof #48): armstub/armstub8.S, $size bytes, used when
  * the card has no armstub= in config.txt and no armstub8-redox.bin, as
  * start.elf uses its own. Made by \`make armstub-header\` in bootcode/ from
  * armstub/build/armstub8.bin (tests/armstub-header.sh).
@@ -19,7 +22,7 @@ gen() {
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-static const uint8_t armstub8_builtin[256] = {
+static const uint8_t armstub8_builtin[$size] = {
 H
 	od -An -v -tx1 -w8 "$bin" | sed -E 's/ ([0-9a-f]{2})/ 0x\1,/g; s/^ /  /; $ s/,$//'
 	echo "};"
