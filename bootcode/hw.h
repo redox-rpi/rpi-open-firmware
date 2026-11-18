@@ -1,0 +1,133 @@
+/*
+ * redox-rpi bootcode: common header.
+ *
+ * Register names come from Broadcom's released VideoCore IV headers
+ * (../firmware/broadcom, BSD licence), through rpi-open-firmware's
+ * ../firmware/hardware.h glue (GPLv2+).
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+#pragma once
+
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "hardware.h"
+
+/* System timer, free running at 1 MHz once clock_init() has set CM_TIMER. */
+#define ST_CLO_REG HW_REGISTER_RO(0x7e003004)
+
+/* bus address aliases of the same SDRAM: 0x8... L2 cached, 0xc... uncached */
+#define ALIAS_UNCACHED 0xc0000000u
+
+/* main.c */
+extern uint32_t g_cpuid;
+extern uint32_t g_rom_sdcs;  /* SD_CS as the Boot ROM left it */
+extern bool g_sdram_up;      /* sdram_init() has run */
+void panic(const char *fmt, ...) __attribute__((noreturn));
+
+/* clock.c */
+void clock_init(void);
+
+/* timer.c */
+static inline uint32_t timer_us(void) { return ST_CLO_REG; }
+void udelay(uint32_t us);
+
+/* uart.c */
+void uart_init(void);
+void uart_putc(char c);
+int uart_getc_timeout(uint32_t timeout_us);
+
+/* printf.c: no format attribute, because uint32_t is long on VC4 while
+ * int and long are both 32 bits; our printf reads every number as 32 bits */
+int printf(const char *fmt, ...);
+int vprintf(const char *fmt, va_list ap);
+
+/* sdram.c */
+enum ram_size { RAM_1GB, RAM_512MB, RAM_256MB, RAM_128MB, RAM_UNKNOWN };
+extern enum ram_size g_ram_size;
+void sdram_init(void);
+
+/* monitor.c: test builds only (MONITOR=1), never in a release;
+ * CHAIN_IMAGE=1 for the boot selector build (Makefile CHAIN_IMAGE=path) */
+#ifndef CHAIN_IMAGE
+#define CHAIN_IMAGE 0
+#endif
+void monitor(uint32_t wait_s);
+bool monitor_wait(uint32_t wait_s);
+void monitor_run(void);
+void monitor_chain_builtin(void) __attribute__((noreturn));
+void watchdog_reset(void) __attribute__((noreturn));
+
+/* arm.c (monitor builds): start the ARM cores at ARM address 0 */
+bool arm_start(bool aarch64);
+extern uint32_t arm_max_mhz;
+uint32_t arm_set_mhz(uint32_t mhz);
+uint32_t arm_khz(void);
+
+/* sd.c, fat.c (monitor builds): read the SD card and its FAT partition */
+struct sd_card { bool ready, high_capacity; uint32_t mb; char name[6]; };
+extern struct sd_card g_sd;
+bool sd_init(void);
+bool sd_read(uint32_t lba, uint32_t *buf);
+void sd_off(void);
+bool fat_mount(void);
+bool fat_list(void);
+int32_t fat_load(const char *name, uint32_t addr, uint32_t max);
+bool fdt_set_memory(uint8_t *dtb, uint32_t len, uint32_t base, uint32_t size);
+
+/* boot64.c (monitor and release builds): load from FAT and start the ARM;
+ * returns only on an error */
+bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem);
+uint32_t crc32(const volatile uint8_t *p, uint32_t n);
+
+/* mbox.c (monitor builds): answer the ARM's mailbox property requests once
+ * the ARM runs; mbox_poll() is called from uart_getc_timeout()'s wait loop.
+ * The ARM gets 0 .. MBOX_ARM_MEM_SIZE (62 x 16 MB, as arm_start() maps it). */
+#define MBOX_ARM_MEM_SIZE 0x3e000000u
+extern bool g_mbox_on;
+void mbox_start(void);
+void mbox_poll(void);
+void mbox_serve(void) __attribute__((noreturn));
+/* monitor: ask for a framebuffer through the real tag path, as U-Boot does */
+bool mbox_fb_test(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t *base, uint32_t *pitch);
+
+/* power.c (monitor builds): image and USB power domains, USB PHY */
+bool usb_power_on(void);
+bool image_domain_on(void);
+
+/* the ARM's framebuffer as the mailbox describes it (mbox.c g_fb) */
+struct fb_view {
+	uint32_t base; /* bus address */
+	uint32_t w, h, vw, vh, depth, order, xoff, yoff; /* order: 0 BGR, 1 RGB */
+};
+
+/* hvs.c */
+#define HVS_PLANE_WORDS 7u
+uint32_t hvs_plane(uint32_t *dl, const struct fb_view *v, uint32_t scr_w, uint32_t scr_h);
+uint32_t fb_pixel(uint32_t rgb, uint32_t depth, uint32_t order);
+uint32_t fb_pattern(volatile uint8_t *fb, uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t pitch);
+
+/* hdmi.c (monitor builds): 1080p60 DVI, one colour (#442 step 1) or the
+ * ARM's framebuffer (step 2) */
+bool hdmi_on(uint32_t rgb);
+void hdmi_fb(const struct fb_view *v); /* show it (v == NULL: background only) */
+void hdmi_status(void);
+
+/* i2c.c (monitor builds): bit-banged I2C on GPIO 46/47, reads only */
+void i2c_scan(void);
+void i2c_read(uint32_t addr, uint32_t reg, uint32_t n);
+void i2c_write(uint32_t addr, uint32_t reg, uint32_t value);
+bool expander_start(void);
+void pllc_per_on(void);
+uint32_t core_khz(void);
+uint32_t pllc_per_khz(void);
+void eth_clock_on(void);
+void regs_compare(void);
+void sd_pullups(void);
+void vpu_clock(uint32_t div);
+void sd_clock_update(void);
+void lan_reset_pulse_begin(void);
+void lan_reset_pulse_end(void);

@@ -1,0 +1,643 @@
+/*
+ * redox-rpi bootcode: answer the ARM's mailbox property requests (#230 M3).
+ *
+ * After the ARM starts, U-Boot, Linux and Redox ask the firmware for the
+ * memory size, the board revision, the MAC address, clock rates and power
+ * states through mailbox channel 8. Broadcom's start.elf answers these;
+ * here the VPU does, polled from the monitor's input loop (uart.c).
+ *
+ * Message format from the Raspberry Pi firmware wiki ("Mailbox property
+ * interface") and U-Boot's arch/arm/mach-bcm283x/mbox.c: the ARM writes
+ * the bus address of a buffer (16-byte aligned) | channel to mailbox 1;
+ * we fill in the answers and write the same value back to mailbox 0.
+ * Buffer: size, code (0x80000000 = done), then tags of {id, buffer size,
+ * request/response length, values...}, ended by tag 0. A handled tag gets
+ * bit 31 in its length word; U-Boot fails a call with any unhandled tag.
+ *
+ * The VPU side of the mailboxes (ARM_1_MAIL1_RD/_STA, ARM_1_MAIL0_WRT/
+ * _STA) as in glennra's and librerpi's rpi-open-firmware
+ * (firmware/arm_monitor.c, GPLv2+). OTP read sequence from librerpi's
+ * lk-overlay (platform/bcm28xx/otp/otp.c, GPLv2): OTP row 28 is the
+ * chip's serial number, row 30 the board revision (librerpi docs/otp.txt);
+ * the MAC address is b8:27:eb plus the low 24 bits of the serial number.
+ * Clock and power IDs from Linux's raspberrypi-firmware.h and the wiki.
+ * PLL and divider formulas from Linux's clk-bcm2835.c. New code.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+#include "hw.h"
+
+#define CHAN_PROPERTY 8
+#define CODE_DONE 0x80000000u
+#define TAG_RESPONSE 0x80000000u
+
+/* where the ARM's buffer may lie: its SDRAM, 0 .. MBOX_ARM_MEM_SIZE */
+#define MBOX_BUF_MAX 0x1000u
+
+bool g_mbox_on;
+
+/* ---- OTP ---- */
+
+#define OTP_CMD_READ 0
+#define OTP_STAT_CMD_DONE 1
+
+static bool otp_wait(void) {
+	for (int i = 0; i < 1000; i++) {
+		udelay(1);
+		if (OTP_STATUS_REG & OTP_STAT_CMD_DONE)
+			return true;
+	}
+	return false;
+}
+
+static uint32_t otp_read(uint32_t row) {
+	OTP_CONFIG_REG = 3;
+	udelay(1);
+	OTP_CTRL_HI_REG = 0;
+	OTP_CTRL_LO_REG = 0;
+	OTP_ADDR_REG = 0;
+	OTP_DATA_REG = 0;
+	OTP_CONFIG_REG = 2;
+
+	uint32_t v = 0;
+	OTP_ADDR_REG = row;
+	OTP_CTRL_HI_REG = 0;
+	OTP_CTRL_LO_REG = OTP_CMD_READ << 1;
+	if (otp_wait()) {
+		OTP_CTRL_LO_REG = (OTP_CMD_READ << 1) | 1;
+		if (otp_wait())
+			v = OTP_DATA_REG;
+	}
+	OTP_CTRL_HI_REG = 0;
+	OTP_CTRL_LO_REG = 0;
+	OTP_CONFIG_REG = 0;
+	return v;
+}
+
+static uint32_t g_serial, g_revision;
+
+/* ---- clocks ---- */
+
+#define XOSC_KHZ 19200u
+#define SDRAM_KHZ (19200u * 0x53 / 4) /* DDR PLL as set in sdram.c */
+
+/* PLL output: xosc * (NDIV + FRAC / 2^20) / PDIV, in kHz */
+/*
+ * A PLL's output: 19.2 MHz * (NDIV + FRAC / 2^20) / PDIV, doubled when the
+ * feedback prescaler (ANA1 bit 14) is on. clock.c and start.elf both set
+ * ANA1 0x144000, so PLLC (NDIV 52.083) runs at 2000 MHz, not 1000: Linux
+ * clk-bcm2835 (fb_prediv_mask BIT(14)), and start.elf's 400 MHz core clock
+ * from PLLC 2400 / CORE0 2 / VPUDIV 3 (Pi test 380) only add up with it.
+ */
+#define PLL_PREDIV (1u << 14)
+
+static uint32_t pll_khz(uint32_t ctrl, uint32_t frac, uint32_t ana1) {
+	uint32_t ndiv = ctrl & 0x3ff, pdiv = (ctrl >> 12) & 7;
+	if (!pdiv)
+		pdiv = 1;
+	uint32_t khz = XOSC_KHZ * ndiv + ((((frac & 0xfffff) >> 4) * XOSC_KHZ) >> 16);
+	if (ana1 & PLL_PREDIV)
+		khz *= 2;
+	return khz / pdiv;
+}
+
+/* one PLL channel: divider in bits 0-7 (0 = 256), bit 8 disables it */
+static uint32_t chan_khz(uint32_t pll, uint32_t chan) {
+	if (chan & 0x100)
+		return 0;
+	uint32_t div = chan & 0xff;
+	return pll / (div ? div : 256);
+}
+
+static uint32_t pllc_khz(void) { return pll_khz(A2W_PLLC_CTRL, A2W_PLLC_FRAC, A2W_PLLC_ANA1); }
+
+/* the VPU (core) clock: PLLC CORE0 / CM_VPUDIV (clock.c) */
+uint32_t core_khz(void) {
+	uint32_t div = (CM_VPUDIV >> 12) & 0xfff;
+	return div ? chan_khz(pllc_khz(), A2W_PLLC_CORE0) / div : 0;
+}
+
+/* clock manager sources of the peripheral clocks */
+static uint32_t src_khz(uint32_t src) {
+	switch (src) {
+	case 1:
+		return XOSC_KHZ;
+	case 4:
+		return chan_khz(pll_khz(A2W_PLLA_CTRL, A2W_PLLA_FRAC, A2W_PLLA_ANA1), A2W_PLLA_PER);
+	case 5:
+		return chan_khz(pllc_khz(), A2W_PLLC_PER);
+	case 6:
+		return chan_khz(pll_khz(A2W_PLLD_CTRL, A2W_PLLD_FRAC, A2W_PLLD_ANA1), A2W_PLLD_PER);
+	}
+	return 0;
+}
+
+uint32_t pllc_per_khz(void) { return src_khz(5); }
+
+/* a CM_xxCTL/CM_xxDIV pair: ENAB bit 4, source bits 0-3, divider 12.12 */
+static uint32_t cm_hz(uint32_t ctl, uint32_t div) {
+	div &= 0xffffff;
+	if (!(ctl & 0x10) || div < 0x1000)
+		return 0;
+	return src_khz(ctl & 0xf) * 256 / (div >> 4) * 1000;
+}
+
+enum {
+	CLK_EMMC = 1, CLK_UART, CLK_ARM, CLK_CORE, CLK_V3D, CLK_H264, CLK_ISP,
+	CLK_SDRAM, CLK_PIXEL, CLK_PWM,
+};
+
+static uint32_t clock_hz(uint32_t id) {
+	switch (id) {
+	case CLK_EMMC:
+		return cm_hz(CM_EMMCCTL, CM_EMMCDIV);
+	case CLK_UART:
+		return cm_hz(CM_UARTCTL, CM_UARTDIV);
+	case CLK_PWM:
+		return cm_hz(CM_PWMCTL, CM_PWMDIV);
+	case CLK_ARM:
+		/* arm.c: CM_ARMCTL source 4 = the PLLB ARM channel */
+		/* from arm.c's own state: the A2W readback after a change was
+		 * not trusted in row 404 */
+		return arm_khz() * 1000;
+	case CLK_CORE:
+		return core_khz() * 1000;
+	case CLK_SDRAM:
+		return SDRAM_KHZ * 1000;
+	}
+	return 0;
+}
+
+/*
+ * The EMMC (Arasan SDHCI) clock, which U-Boot and Redox use for the SD
+ * card with dtoverlay=mmc: PLLC PER = 2000 / 4 = 500 MHz, then / 2.5 =
+ * 200 MHz. clock.c leaves the PER channel held; release only that hold.
+ * Until payload l the channel divided by 2 (1000 MHz), so EMMC ran at
+ * 400 MHz and ETH_CLK at 48 MHz instead of 24.
+ */
+/* PLLC's PER channel at PLLC / 4 (500 MHz), for the EMMC and Ethernet clocks */
+void pllc_per_on(void) {
+	static bool done;
+	if (done)
+		return;
+	done = true;
+	uint32_t hold = CM_PLLC & ~CM_PLLC_HOLDPER_SET & 0xffffff;
+	A2W_PLLC_PER = A2W_PASSWORD | 4;
+	CM_PLLC = CM_PASSWORD | hold | CM_PLLC_HOLDPER_SET | CM_PLLC_LOADPER_SET;
+	CM_PLLC = CM_PASSWORD | hold | CM_PLLC_HOLDPER_SET;
+	CM_PLLC = CM_PASSWORD | hold;
+}
+
+static void emmc_clock(void) {
+	if (cm_hz(CM_EMMCCTL, CM_EMMCDIV))
+		return;
+	pllc_per_on();
+
+	CM_EMMCCTL = CM_PASSWORD | 5; /* PLLC PER, disabled while the divider changes */
+	while (CM_EMMCCTL & 0x80) {   /* BUSY */
+	}
+	CM_EMMCDIV = CM_PASSWORD | 0x2800; /* 2.5 */
+	CM_EMMCCTL = CM_PASSWORD | (1u << 9) | 5; /* MASH 1 for the fraction */
+	CM_EMMCCTL = CM_PASSWORD | (1u << 9) | 0x10 | 5;
+}
+
+/* ---- power ---- */
+
+#define POWER_ON 1u
+#define POWER_NO_DEVICE 2u
+#define POWER_DEVICES 9 /* SD, UART0, UART1, USB, I2C0-2, SPI, CCP2TX */
+#define POWER_USB 3
+
+static uint32_t g_power[POWER_DEVICES];
+
+/* ---- framebuffer ---- */
+
+/*
+ * The tags answer as start.elf does. In builds with HDMI (the monitor
+ * build, hdmi.c) the HVS scans the buffer out once it is allocated; in the
+ * release build it is still in memory only (#442 step 2). U-Boot
+ * sets up no video without tag 0x40003 (Pi test 391: "Could not query
+ * display resolution"), so the Redox bootloader gets no GOP output: no
+ * menu, no env editor, no FRAMEBUFFER_* for vesad. It sits in the
+ * VideoCore's part of the memory, above MBOX_ARM_MEM_SIZE.
+ */
+#define FB_BASE (MBOX_ARM_MEM_SIZE + 0x400000u)
+#define FB_MAX 0xc00000u /* to 0x3f000000, the peripherals */
+
+/* with HDMI (#442) the physical size is the screen's: 1920x1080 */
+#if HDMI
+#define FB_W0 1920u
+#define FB_H0 1080u
+#else
+#define FB_W0 1024u
+#define FB_H0 768u
+#endif
+
+static struct {
+	uint32_t w, h, vw, vh, depth, order, alpha, xoff, yoff;
+	bool allocated;
+} g_fb = {FB_W0, FB_H0, FB_W0, FB_H0, 32, 1, 2, 0, 0, false};
+
+/*
+ * HDMI step 2 (#442): once the ARM has allocated the framebuffer, hdmi.c
+ * shows it. A tag that changes it marks it; property() hands the result to
+ * hdmi_fb() once per request, after all its tags.
+ */
+#if HDMI
+static bool g_fb_dirty, g_fb_shown;
+#define FB_CHANGED() (g_fb_dirty = true)
+
+static void fb_show(void) {
+	g_fb_dirty = false;
+	if (!g_fb.allocated && !g_fb_shown)
+		return;
+	struct fb_view v = {0xc0000000u | FB_BASE, g_fb.w, g_fb.h, g_fb.vw, g_fb.vh,
+			    g_fb.depth, g_fb.order, g_fb.xoff, g_fb.yoff};
+	hdmi_fb(g_fb.allocated ? &v : 0);
+	g_fb_shown = g_fb.allocated;
+}
+#else
+#define FB_CHANGED() ((void)0)
+#endif
+
+static uint32_t fb_pitch(void) { return g_fb.vw * ((g_fb.depth + 7) / 8); }
+
+static bool fb_fits(uint32_t vw, uint32_t vh, uint32_t depth) {
+	return vw && vh && vw <= 4096 && vh <= 4096 && (depth == 8 || depth == 16 || depth == 24 || depth == 32) &&
+	       vw * ((depth + 7) / 8) * vh <= FB_MAX;
+}
+
+/* ---- tags ---- */
+
+struct tag {
+	uint32_t id, size, len;
+	uint32_t v[];
+};
+
+/* answer with n words (bytes if n_bytes != 0), never past the buffer */
+static void reply(volatile struct tag *t, const uint32_t *v, uint32_t n_bytes) {
+	uint32_t words = (n_bytes + 3) / 4, room = t->size / 4;
+	for (uint32_t i = 0; i < words && i < room; i++)
+		t->v[i] = v[i];
+	t->len = TAG_RESPONSE | n_bytes;
+}
+
+static bool handle(volatile struct tag *t) {
+	uint32_t a = t->size >= 4 ? t->v[0] : 0, b = t->size >= 8 ? t->v[1] : 0;
+	uint32_t r[2];
+	switch (t->id) {
+	case 0x00000001: /* firmware revision */
+		r[0] = 0x20261112;
+		reply(t, r, 4);
+		return true;
+	case 0x00010001: /* board model */
+		r[0] = 0;
+		reply(t, r, 4);
+		return true;
+	case 0x00010002: /* board revision */
+		r[0] = g_revision;
+		reply(t, r, 4);
+		return true;
+	case 0x00010003: { /* MAC address, 6 bytes */
+		uint8_t m[8] = {0xb8, 0x27, 0xeb, (uint8_t)(g_serial >> 16), (uint8_t)(g_serial >> 8),
+		                (uint8_t)g_serial, 0, 0};
+		uint32_t w[2];
+		w[0] = m[0] | (uint32_t)m[1] << 8 | (uint32_t)m[2] << 16 | (uint32_t)m[3] << 24;
+		w[1] = m[4] | (uint32_t)m[5] << 8;
+		reply(t, w, 6);
+		return true;
+	}
+	case 0x00010004: /* board serial, 64 bits */
+		r[0] = g_serial;
+		r[1] = 0;
+		reply(t, r, 8);
+		return true;
+	case 0x00010005: /* ARM memory: base, size */
+		r[0] = 0;
+		r[1] = MBOX_ARM_MEM_SIZE;
+		reply(t, r, 8);
+		return true;
+	case 0x00010006: /* VideoCore memory: the rest of the 1 GB */
+		r[0] = MBOX_ARM_MEM_SIZE;
+		r[1] = 0x40000000u - MBOX_ARM_MEM_SIZE;
+		reply(t, r, 8);
+		return true;
+	case 0x00010007: /* clocks list: none given */
+		reply(t, r, 0);
+		return true;
+	case 0x00020001: /* get power state */
+		r[0] = a;
+		r[1] = a < POWER_DEVICES ? g_power[a] : POWER_NO_DEVICE;
+		reply(t, r, 8);
+		return true;
+	case 0x00020002: /* power-on wait time, us */
+		r[0] = a;
+		r[1] = a < POWER_DEVICES ? 0 : 0xffffffffu;
+		reply(t, r, 8);
+		return true;
+	case 0x00028001: /* set power state: bit 0 on, bit 1 wait */
+		/* USB is powered in mbox_start() and never switched off: its
+		 * state stays what the hardware says (power.c) */
+		r[0] = a;
+		if (a == POWER_USB && (b & POWER_ON) && !g_power[a] && usb_power_on())
+			g_power[a] = POWER_ON;
+		if (a < POWER_DEVICES) {
+			if (a != POWER_USB)
+				g_power[a] = b & POWER_ON;
+			r[1] = g_power[a];
+		} else {
+			r[1] = POWER_NO_DEVICE;
+		}
+		reply(t, r, 8);
+		return true;
+	case 0x00030001: /* clock state */
+		r[0] = a;
+		r[1] = clock_hz(a) ? 1 : 0;
+		reply(t, r, 8);
+		return true;
+	case 0x00030002: /* clock rate */
+	case 0x00030004: /* max */
+	case 0x00030007: /* min */
+	case 0x00030047: /* measured */
+	case 0x00038002: /* set clock rate: the ARM clock only, others keep their rate */
+		r[0] = a;
+		r[1] = clock_hz(a);
+		if (a == CLK_ARM && t->id == 0x00030004)
+			r[1] = arm_max_mhz * 1000000u;
+		else if (a == CLK_ARM && t->id == 0x00030007)
+			r[1] = 600000000u;
+		else if (a == CLK_ARM && t->id == 0x00038002) {
+			r[1] = arm_set_mhz(b / 1000000u) * 1000u;
+		}
+		reply(t, r, 8);
+		return true;
+	case 0x00038042: { /* set SDHOST clock: rate, then two rates back */
+		/* ~0 = we do not set SH_CDIV for the driver: U-Boot and Linux
+		 * then program it themselves from the core clock (U-Boot
+		 * bcm2835_sdhost.c, firmware_sets_cdiv; Pi test row 365) */
+		uint32_t w[3] = {a, 0xffffffffu, 0xffffffffu};
+		reply(t, w, 12);
+		return true;
+	}
+	case 0x0003000a: /* max temperature, millidegrees */
+		r[0] = a;
+		r[1] = 85000;
+		reply(t, r, 8);
+		return true;
+	case 0x00030046: /* throttled: never */
+		r[0] = 0;
+		reply(t, r, 4);
+		return true;
+	case 0x00030048: /* notify reboot */
+		reply(t, r, 0);
+		return true;
+
+	/* framebuffer (see g_fb) */
+	case 0x00040001: /* allocate: alignment -> bus base, size */
+		g_fb.allocated = true;
+		FB_CHANGED();
+		r[0] = 0xc0000000u | FB_BASE;
+		r[1] = fb_pitch() * g_fb.vh;
+		reply(t, r, 8);
+		return true;
+	case 0x00048001: /* release */
+		g_fb.allocated = false;
+		FB_CHANGED();
+		reply(t, r, 0);
+		return true;
+	case 0x00040002: /* blank screen */
+		r[0] = a & 1;
+		reply(t, r, 4);
+		return true;
+	case 0x00048003: /* set physical size */
+		if (fb_fits(a, b, g_fb.depth)) {
+			g_fb.w = a;
+			g_fb.h = b;
+			FB_CHANGED();
+		}
+		/* fall through */
+	case 0x00040003: /* get physical size */
+	case 0x00044003: /* test physical size */
+		r[0] = g_fb.w;
+		r[1] = g_fb.h;
+		reply(t, r, 8);
+		return true;
+	case 0x00048004: /* set virtual size */
+		if (fb_fits(a, b, g_fb.depth)) {
+			g_fb.vw = a;
+			g_fb.vh = b;
+			FB_CHANGED();
+		}
+		/* fall through */
+	case 0x00040004:
+	case 0x00044004:
+		r[0] = g_fb.vw;
+		r[1] = g_fb.vh;
+		reply(t, r, 8);
+		return true;
+	case 0x00048005: /* set depth */
+		if (fb_fits(g_fb.vw, g_fb.vh, a)) {
+			g_fb.depth = a;
+			FB_CHANGED();
+		}
+		/* fall through */
+	case 0x00040005:
+	case 0x00044005:
+		r[0] = g_fb.depth;
+		reply(t, r, 4);
+		return true;
+	case 0x00048006: /* set pixel order, 0 BGR 1 RGB */
+		g_fb.order = a & 1;
+		FB_CHANGED();
+		/* fall through */
+	case 0x00040006:
+	case 0x00044006:
+		r[0] = g_fb.order;
+		reply(t, r, 4);
+		return true;
+	case 0x00048007: /* set alpha mode */
+		if (a <= 2)
+			g_fb.alpha = a;
+		/* fall through */
+	case 0x00040007:
+	case 0x00044007:
+		r[0] = g_fb.alpha;
+		reply(t, r, 4);
+		return true;
+	case 0x00040008: /* pitch */
+		r[0] = fb_pitch();
+		reply(t, r, 4);
+		return true;
+	case 0x00048009: /* set virtual offset */
+		g_fb.xoff = a;
+		g_fb.yoff = b;
+		FB_CHANGED();
+		/* fall through */
+	case 0x00040009:
+	case 0x00044009:
+		r[0] = g_fb.xoff;
+		r[1] = g_fb.yoff;
+		reply(t, r, 8);
+		return true;
+	case 0x0004000a: /* overscan: none */
+	case 0x0004400a:
+	case 0x0004800a: {
+		uint32_t w[4] = {0, 0, 0, 0};
+		reply(t, w, 16);
+		return true;
+	}
+	}
+	return false;
+}
+
+/*
+ * MBOX_TRACE=1 (the monitor build's default, or make BOOT=1 MBOX_TRACE=1):
+ * one line per request on the serial line, with its tags and "?" after an
+ * unanswered one, and an "alive" line every 10 s. Without it (the release
+ * build) only errors are printed: Redox uses the same UART as its console,
+ * and the trace lines landed in the middle of typed commands (Pi test 426,
+ * redox-rpi #443).
+ */
+#ifndef MBOX_TRACE
+#define MBOX_TRACE 0
+#endif
+
+/* the first requests are logged on the serial line, the rest not */
+#define MBOX_LOG_MAX 400 /* U-Boot alone used 40 (Pi test 391) */
+static uint32_t g_logged;
+static uint32_t g_requests;
+
+static bool in_arm_memory(uint32_t bus, uint32_t len) {
+	uint32_t phys = bus & 0x3fffffffu;
+	return phys < MBOX_ARM_MEM_SIZE && len <= MBOX_BUF_MAX && phys + len <= MBOX_ARM_MEM_SIZE;
+}
+
+static void property(uint32_t bus) {
+	volatile uint32_t *buf = (volatile uint32_t *)(ALIAS_UNCACHED | (bus & 0x3fffffffu));
+	uint32_t size = buf[0];
+	if (size < 12 || (size & 3) || !in_arm_memory(bus, size)) {
+		printf("mbox: bad buffer %08X size %u, dropped\n", bus, size);
+		return;
+	}
+	g_requests++;
+	bool log = MBOX_TRACE && g_logged < MBOX_LOG_MAX;
+	if (log && ++g_logged == MBOX_LOG_MAX)
+		printf("mbox: requests after this one are not logged\n");
+	if (log)
+		printf("mbox:");
+	uint32_t i = 2;
+	while (i + 3 <= size / 4 && buf[i]) {
+		volatile struct tag *t = (volatile struct tag *)&buf[i];
+		uint32_t tsize = t->size;
+		if ((tsize & 3) || i + 3 + tsize / 4 > size / 4) {
+			if (log)
+				printf(" %08X (tag past the buffer)", t->id);
+			break;
+		}
+		bool ok = handle(t);
+		if (log)
+			printf(" %08X%s", t->id, ok ? "" : "?");
+		i += 3 + tsize / 4;
+	}
+	if (log)
+		printf("\n");
+	buf[1] = CODE_DONE;
+#if HDMI
+	if (g_fb_dirty)
+		fb_show();
+#endif
+}
+
+/* answer one waiting request, if there is one */
+void mbox_poll(void) {
+	if (!g_mbox_on || (ARM_1_MAIL1_STA & ARM_MS_EMPTY))
+		return;
+	uint32_t msg = ARM_1_MAIL1_RD;
+	if ((msg & 0xf) != CHAN_PROPERTY) {
+		printf("mbox: channel %u not served, %08X dropped\n", msg & 0xf, msg);
+		return;
+	}
+	property(msg & ~0xfu);
+	while (ARM_1_MAIL0_STA & ARM_MS_FULL) {
+	}
+	ARM_1_MAIL0_WRT = msg;
+}
+
+/*
+ * A line every 10 s for 10 minutes (trace builds only): the VPU is alive,
+ * and what the mailboxes hold. In Pi tests 391-393 Redox's rpi-firmwared
+ * went silent before any request reached us; this tells a dead VPU from a
+ * request that never comes.
+ */
+static uint32_t g_next_beat, g_beats;
+
+static void beat(uint32_t now) {
+	if (!MBOX_TRACE || g_beats >= 60 || (int32_t)(now - g_next_beat) < 0)
+		return;
+	g_beats++;
+	g_next_beat += 10000000u;
+	printf("mbox: alive %u s, %u requests, ARM->VPU %08X VPU->ARM %08X\n", g_beats * 10, g_requests,
+	       ARM_1_MAIL1_STA, ARM_1_MAIL0_STA);
+}
+
+/*
+ * After boot64 the ARM owns the serial line: serve the mailbox and read no
+ * input, so keys typed for U-Boot or Redox reach them. Never returns.
+ */
+void mbox_serve(void) {
+	g_next_beat = timer_us() + 10000000u;
+	for (;;) {
+		mbox_poll();
+		beat(timer_us());
+	}
+}
+
+/* start serving, right before the ARM starts */
+void mbox_start(void) {
+	g_serial = otp_read(28);
+	g_revision = otp_read(30);
+	for (int i = 0; i < POWER_DEVICES; i++)
+		g_power[i] = POWER_ON;
+	/* as start.elf: USB is on before the ARM starts (power.c) */
+	g_power[POWER_USB] = ((PM_USB & PM_USB_CTRLEN_SET) || usb_power_on()) ? POWER_ON : 0;
+	emmc_clock();
+	sd_pullups();
+	/* requests left from an earlier run of the ARM */
+	while (!(ARM_1_MAIL1_STA & ARM_MS_EMPTY))
+		(void)ARM_1_MAIL1_RD;
+	g_mbox_on = true;
+	printf("mbox: serving, revision %08X serial %08X, ARM %u Hz, core %u Hz, EMMC %u Hz, UART %u Hz, PM_USB %08X PM_IMAGE %08X\n",
+	       g_revision, g_serial, clock_hz(CLK_ARM), clock_hz(CLK_CORE), clock_hz(CLK_EMMC), clock_hz(CLK_UART),
+	       PM_USB, PM_IMAGE);
+}
+
+#if HDMI
+/*
+ * Monitor: ask for a framebuffer the way U-Boot's bcm2835_set_video_params
+ * does, through property() and so through the same tags and hdmi_fb() as
+ * a real request from the ARM. The buffer lies in the ARM's memory.
+ */
+#define FB_TEST_REQ 0x00700000u
+bool mbox_fb_test(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t *base, uint32_t *pitch) {
+	volatile uint32_t *b = (volatile uint32_t *)(ALIAS_UNCACHED | FB_TEST_REQ);
+	const uint32_t req[] = {
+		0, 0,
+		0x00048003, 8, 8, w, h,     /* physical size */
+		0x00048004, 8, 8, w, h,     /* virtual size */
+		0x00048005, 4, 4, depth,    /* depth */
+		0x00048006, 4, 4, order,    /* pixel order */
+		0x00040001, 8, 4, 16, 0,    /* allocate */
+		0x00040008, 4, 0, 0,        /* pitch */
+		0,
+	};
+	for (uint32_t i = 0; i < sizeof req / sizeof req[0]; i++)
+		b[i] = req[i];
+	b[0] = sizeof req;
+	property(FB_TEST_REQ);
+	*base = b[23];
+	*pitch = b[28];
+	/* every tag answered, and the sizes taken as asked */
+	return b[1] == CODE_DONE && (b[4] & TAG_RESPONSE) && (b[22] & TAG_RESPONSE) && (b[27] & TAG_RESPONSE) &&
+	       b[5] == w && b[6] == h && b[15] == depth;
+}
+#endif

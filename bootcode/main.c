@@ -1,0 +1,143 @@
+/*
+ * redox-rpi bootcode: stage 1 main.
+ *
+ * Clocks, UART and SDRAM. The release build (BOOT=1) then loads armstub8,
+ * kernel8.img and the devicetree from the SD card and starts the ARM, as
+ * the monitor's boot64 does. Test builds (MONITOR=1) open the serial
+ * monitor instead. The plain build (M1) only shows a heartbeat. Plan: https://github.com/redox-rpi/redox-rpi/issues/230
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+#include "hw.h"
+
+#ifndef BUILD_ID
+#define BUILD_ID "unknown"
+#endif
+
+#if MONITOR && CHAIN_IMAGE
+#define VARIANT "M1, monitor, test build, boot selector"
+#elif MONITOR
+#define VARIANT "M1, monitor, test build"
+#elif BOOT && MBOX_TRACE
+#define VARIANT "release, boots from the SD card, mailbox trace"
+#elif BOOT
+#define VARIANT "release, boots from the SD card"
+#else
+#define VARIANT "M1"
+#endif
+
+uint32_t g_cpuid;
+uint32_t g_rom_sdcs;
+bool g_sdram_up;
+
+extern uint32_t __start_bss[], __stop_bss[];
+extern const uint32_t exc_stub_table[33];
+
+#define VECTORS ((volatile uint32_t *)0x8001b000)
+#define NUM_VECTORS 128 /* 32 exceptions, then the interrupts */
+
+static const char *const exc_name[] = {
+	"zero", "misaligned", "divide by zero", "undefined instruction",
+	"forbidden instruction", "illegal memory", "bus error",
+	"floating point", "isp", "dummy", "icache", "vector core",
+	"bad L2 alias", "breakpoint",
+};
+
+void exception_fatal(uint32_t num, const uint32_t *sp) __attribute__((noreturn));
+void exception_fatal(uint32_t num, const uint32_t *sp) {
+	const char *name = num < sizeof(exc_name) / sizeof(exc_name[0]) ? exc_name[num]
+	                   : num == 32 ? "interrupt" : "unknown";
+	/* the CPU pushed sr and pc; the stub's bl changed nothing below sp */
+	printf("\nEXCEPTION %u (%s): sr 0x%08X pc 0x%08X sp %p\n", num, name, sp[0], sp[1], sp);
+	for (;;) {
+	}
+}
+
+void panic(const char *fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	printf("\nPANIC: ");
+	vprintf(fmt, ap);
+	printf("\n");
+	va_end(ap);
+	for (;;) {
+	}
+}
+
+static void vectors_init(void) {
+	for (int i = 0; i < NUM_VECTORS; i++)
+		VECTORS[i] = exc_stub_table[i < 32 ? i : 32];
+	IC0_VADDR = (uint32_t)VECTORS;
+	IC1_VADDR = (uint32_t)VECTORS;
+}
+
+/* what the Boot ROM left behind, read before we change it */
+struct rom_state {
+	uint32_t vpuctl, vpudiv, pllc_ctrl, pllc_frac, sdcs, timer;
+};
+
+void bootcode_main(uint32_t cpuid) __attribute__((noreturn));
+void bootcode_main(uint32_t cpuid) {
+	for (uint32_t *p = __start_bss; p < __stop_bss; p++)
+		*p = 0;
+	g_cpuid = cpuid;
+
+	struct rom_state rom = {
+		CM_VPUCTL, CM_VPUDIV, A2W_PLLC_CTRL, A2W_PLLC_FRAC, SD_CS, ST_CLO_REG,
+	};
+
+	g_rom_sdcs = rom.sdcs;
+	vectors_init();
+	clock_init();
+	uart_init();
+
+	printf("\n\nredox-rpi bootcode " BUILD_ID " (" VARIANT ")\n");
+	printf("VPU cpuid 0x%X\n", cpuid);
+	printf("from the Boot ROM: CM_VPUCTL 0x%X CM_VPUDIV 0x%X PLLC_CTRL 0x%X PLLC_FRAC 0x%X SD_CS 0x%X timer %u us\n",
+	       rom.vpuctl, rom.vpudiv, rom.pllc_ctrl, rom.pllc_frac, rom.sdcs, rom.timer);
+
+#if MONITOR && CHAIN_IMAGE
+	/* boot selector: the normal boot chains before our SDRAM set-up, so
+	 * Broadcom's code finds the SDRAM as the Boot ROM left it (Pi test
+	 * #313: after our set-up and reset it never got going) */
+	if (!monitor_wait(5))
+		monitor_chain_builtin();
+#endif
+	uint32_t t0 = timer_us();
+	/*
+	 * Chained over running SDRAM (the monitor's `chain A N`, as rbc-load.sh
+	 * chainmon does): our set-up already ran and left SDUP and RESTRT set.
+	 * Running it again switches the clock of a live controller and hangs
+	 * (Pi test #346), so keep the SDRAM as it is. The Boot ROM leaves the
+	 * controller down, and a watchdog reset takes it down too.
+	 */
+	const uint32_t up = SD_CS_SDUP_SET | SD_CS_RESTRT_SET;
+	if ((rom.sdcs & up) == up)
+		printf("[sdram] already up (SD_CS 0x%X), kept as it is\n", rom.sdcs);
+	else
+		sdram_init();
+	g_sdram_up = true;
+	printf("SDRAM ready after %u us\n", timer_us() - t0);
+#if MONITOR && CHAIN_IMAGE
+	/* after our SDRAM set-up Broadcom's code does not start (Pi tests
+	 * #313, #320), so leave through a chip reset: the selector starts
+	 * again and, with nobody pressing Enter, chains before the set-up */
+	monitor_run();
+	watchdog_reset();
+#elif MONITOR
+	monitor(5);
+#elif BOOT
+	if (sd_init())
+		boot64("kernel8.img", NULL, 0);
+	printf("boot failed: see the line above; nothing else to try\n");
+#endif
+#if !BOOT
+	printf("M1 done: stage 1 runs, SDRAM works. Nothing to load yet.\n");
+#endif
+
+	for (uint32_t n = 1;; n++) {
+		udelay(10 * 1000 * 1000);
+		if (n <= 6)
+			printf("alive %u s\n", n * 10);
+	}
+}
