@@ -7,8 +7,8 @@ except where this plan says otherwise. The scope is small and the release
 model is different. This plan is written so that the sub-project can later
 become a project of its own (see [Becoming independent](#becoming-independent)).
 
-This plan is owned by the project lead and changed by pull request. The
-maintainer approves it.
+This plan is owned by the Process session and changed by pull request.
+The maintainer approves it.
 
 Status: draft, 2026-11-19.
 
@@ -37,7 +37,8 @@ package with its own owner (VC4 Tools); this project uses it.
 |---|---|---|
 | Maintainer | the maintainer | scope of each milestone, merges, release decision, tags |
 | Owner | Open firmware session | design and code, the issues and the milestones' content, release candidates, the docs in this repository |
-| Project lead | coordinator session | this plan, status, `merge-next`, reporting to the maintainer |
+| Process | Process session | this plan |
+| Project lead | coordinator session | status, `merge-next`, reporting to the maintainer |
 | V&V | Pi test agent | Pi tests through the [pi-tests queue](https://github.com/redox-rpi/pi-tests/blob/main/queue.md), the release card tests, preparing person tests |
 | Requirements | Requirements session | the `REQ-VPU-<n>` requirements and their trace |
 | Quality | Quality session | the KPIs, above all the boot time, on the KPI dashboard |
@@ -56,11 +57,17 @@ is done.** There is no target date and no time box.
 - **Release candidate** (`-rc1`, `-rc2`, ...): the owner may build a
   candidate card at any time to see where the release stands, also before
   all issues are done. A candidate image is a test build; it gets no tag
-  unless the maintainer approves one on the exact commit.
+  unless the maintainer approves one on the exact commit. Unlike
+  redox-rpi, where Release and CI builds the candidates, the owner builds
+  them here.
 - **Release:** when all issues of the milestone are done (or moved by the
   maintainer) and the [release checklist](release-checklist.md) passes on
   both boards, the owner asks the maintainer. The maintainer approves the
-  tag on the exact commit.
+  tag on the exact commit. The owner writes the release notes in the
+  GitHub release: files, boards, limits, tests and boot times (see the
+  checklist).
+- **Review:** after each release the owner and the project lead write a
+  short review on the milestone: what shipped, what moved, boot times.
 - **Version numbers:** `v0.x.y`. A release with new milestone features
   raises the minor number, a release with only fixes the patch number.
   1.0 is a separate decision.
@@ -88,8 +95,10 @@ The plan for each release is its milestone and the
   clock, power, mailbox, sd, build, hdmi, monitor, sim) and `needs:<what>`
   (person, pi, nothing). Requirements are issues named `REQ-VPU-<n>`.
 - **Branches and pull requests** as in redox-rpi: code through a branch
-  and a PR that names its issue; the default branch is `redox-rpi`. The
-  maintainer merges code. Docs go straight to the default branch.
+  and a PR that names its issue; the default branch is `redox-rpi`. Only
+  the maintainer merges code PRs here (the merge rights of the redox-rpi
+  PMP give nobody else a right in this repository). Docs go straight to
+  the default branch.
 - **Pi tests** go through the pi-tests queue, like every other test on the
   shared lab Pis. The test Pi's boot files may be changed by a test if it
   restores them.
