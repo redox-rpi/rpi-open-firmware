@@ -2,7 +2,9 @@
  * redox-rpi bootcode: the boot screen on HDMI (#430). From the moment the
  * SDRAM runs until the ARM asks for its own framebuffer, a small panel in
  * the middle of the 1080p screen shows a title, a progress bar and the
- * last few boot steps. It is compiled in, so it needs nothing from the SD
+ * last few boot steps. The title is the firmware's neutral one until
+ * boot64 finds boot_title= in the card's config.txt (bs_config_title()),
+ * so the system on the card names itself. The panel is compiled in, so it needs nothing from the SD
  * card; the font is U-Boot's 8x16 (font8x16.h).
  *
  * The panel is a 640x160 RGB565 buffer in the VideoCore's part of the
@@ -10,7 +12,10 @@
  * is the black background fill. A step redraws only the bar and the text
  * lines. When the ARM allocates a framebuffer (U-Boot, later Redox), mbox.c
  * shows that one instead and calls bs_handover(); from then on the steps
- * draw nothing.
+ * draw nothing. The handover clears the ARM's framebuffer to black and
+ * copies the panel into its middle, so the picture stays until the system
+ * draws its own (quiet boot step I4A; until then the buffer held whatever
+ * the SDRAM had).
  *
  * Drawing touches only memory, so tests/bootscreen-sim.sh runs it in resim
  * and compares the panel with a Python model. New code.
@@ -20,7 +25,8 @@
 #include "hw.h"
 #include "font8x16.h"
 
-#define BS_TITLE "Redox on Raspberry Pi"
+#define BS_TITLE "Booting Raspberry Pi ..."
+#define BS_TITLE_MAX (BS_W / (FONT_W * 2)) /* 40 characters at twice the size */
 #define BS_PITCH (BS_W * 2u)
 #define BS_TITLE_Y 0u /* twice the font size: 32 lines */
 #define BS_BAR_Y 48u
@@ -40,6 +46,7 @@
 #define C_EMPTY 0x3186u  /* 303030: the bar still to go */
 #define C_BAR 0xfc00u    /* ff8000 */
 
+static char g_title[BS_TITLE_MAX + 1] = BS_TITLE;
 static char g_line[BS_LINES][BS_LINE_MAX + 1];
 static bool g_fail[BS_LINES];
 static uint32_t g_nline, g_pct;
@@ -99,10 +106,19 @@ static void draw_lines(volatile uint8_t *fb) {
 	}
 }
 
+/* the title centred (x even); the rest of its 32 lines black */
+static void draw_title(volatile uint8_t *fb) {
+	uint32_t n = 0;
+	while (g_title[n])
+		n++;
+	uint32_t tw = n * FONT_W * 2, x = (BS_W - tw) / 2 & ~1u;
+	fill(fb, 0, BS_TITLE_Y, BS_W, FONT_H * 2, C_BLACK);
+	text(fb, x, BS_TITLE_Y, g_title, 1, C_WHITE, C_BLACK, x + tw);
+}
+
 static void draw_all(volatile uint8_t *fb) {
 	fill(fb, 0, 0, BS_W, BS_H, C_BLACK);
-	uint32_t tw = (sizeof BS_TITLE - 1) * FONT_W * 2;
-	text(fb, (BS_W - tw) / 2, BS_TITLE_Y, BS_TITLE, 1, C_WHITE, C_BLACK, (BS_W + tw) / 2);
+	draw_title(fb);
 	draw_bar(fb);
 	draw_lines(fb);
 }
@@ -167,8 +183,66 @@ static void step(uint32_t pct, const char *a, const char *b, bool fail) {
 	g_t_draw += timer_us() - t0;
 }
 
+/* a new title (printable ASCII, cut at BS_TITLE_MAX), drawn at once */
+void bs_title(const char *s) {
+	uint32_t n = 0;
+	for (; s[n] && n < BS_TITLE_MAX; n++)
+		g_title[n] = s[n] >= ' ' && s[n] <= '~' ? s[n] : ' ';
+	g_title[n] = 0;
+	if (g_on)
+		draw_title(g_bs_fb);
+}
+
+/*
+ * config.txt (len bytes at txt): the value of boot_title= becomes the
+ * title. Lines starting with # are comments; spaces around the key, the
+ * = and the value are dropped. Broadcom's start.elf ignores the key.
+ * True when the key was there.
+ */
+bool bs_config_title(const char *txt, uint32_t len) {
+	static const char key[] = "boot_title";
+	const char *p = txt, *end = txt + len;
+	while (p < end) {
+		while (p < end && (*p == ' ' || *p == '\t'))
+			p++;
+		const char *k = key;
+		while (p < end && *k && *p == *k)
+			p++, k++;
+		const char *q = p;
+		while (q < end && (*q == ' ' || *q == '\t'))
+			q++;
+		if (!*k && q < end && *q == '=') {
+			q++;
+			while (q < end && (*q == ' ' || *q == '\t'))
+				q++;
+			char v[BS_TITLE_MAX + 1];
+			uint32_t n = 0;
+			while (q < end && *q != '\r' && *q != '\n' && n < BS_TITLE_MAX)
+				v[n++] = *q++;
+			while (n && (v[n - 1] == ' ' || v[n - 1] == '\t'))
+				n--;
+			v[n] = 0;
+			if (n) {
+				bs_title(v);
+				return true;
+			}
+		}
+		while (p < end && *p != '\n')
+			p++;
+		p++;
+	}
+	return false;
+}
+
 /* a boot step a + b done or begun, the bar to pct percent */
 void bs_step(uint32_t pct, const char *a, const char *b) {
+	step(pct, a, b, false);
+}
+
+/* the newest line becomes a + b (a step that goes on, as a large load) */
+void bs_update(uint32_t pct, const char *a, const char *b) {
+	if (g_on && g_nline && !g_fail[g_nline - 1])
+		g_nline--;
 	step(pct, a, b, false);
 }
 
@@ -177,13 +251,127 @@ void bs_fail(const char *a, const char *b) {
 	step(0, a, b, true);
 }
 
-/* the ARM shows its own framebuffer now (mbox.c): stop drawing */
-void bs_handover(void) {
+/* an RGB565 panel pixel in the ARM framebuffer's format (16 or 32 bit) */
+static uint32_t panel_pixel(uint32_t p, uint32_t depth, uint32_t order) {
+	uint32_t r = p >> 11 & 31, g = p >> 5 & 63, b = p & 31;
+	uint32_t rgb = (r << 3 | r >> 2) << 16 | (g << 2 | g >> 4) << 8 | (b << 3 | b >> 2);
+	return fb_pixel(rgb, depth, order);
+}
+
+/*
+ * Clear n bytes at bus address dst (16-byte aligned, n a multiple of 16)
+ * with DMA channel 0: one control block, a 16-byte zero source that does
+ * not move, 128-bit writes in bursts. The VPU's own uncached stores took
+ * 79 ms for 1280x720x32 (Pi test 466); the DMA engine writes in bursts.
+ * The block and the zero source lie in the VideoCore's memory behind the
+ * panel (the bootcode itself may run from L2, which the DMA engine does
+ * not see). The channel is reset afterwards, before the ARM gets its
+ * answer. False when it did not finish (resim has no DMA): the caller
+ * then clears with the VPU.
+ */
+#define BSDMA_CS (*(volatile uint32_t *)0x7e007000u)
+#define BSDMA_CONBLK (*(volatile uint32_t *)0x7e007004u)
+#define BSDMA_ENABLE (*(volatile uint32_t *)0x7e007ff0u)
+#define BSDMA_CS_RESET (1u << 31)
+#define BSDMA_CS_END (1u << 1)
+#define BSDMA_CS_ACTIVE 1u
+#define BSDMA_TI_DEST_INC (1u << 4)
+#define BSDMA_TI_DEST_W128 (1u << 5)
+#define BSDMA_TI_SRC_W128 (1u << 9)
+#define BSDMA_TI_BURST(n) ((uint32_t)(n) << 12)
+#define BS_DMA_OFF 0x40000u /* behind the 200 KB panel */
+
+static bool dma_clear(uint32_t dst, uint32_t n) {
+	if ((dst | n) & 15 || !n || n >= 1u << 30)
+		return false;
+	uint32_t blk = BS_BASE + BS_DMA_OFF;
+	volatile uint32_t *cb = (volatile uint32_t *)(ALIAS_UNCACHED | blk);
+	for (uint32_t i = 8; i < 12; i++)
+		cb[i] = 0; /* the zero source, right after the 32-byte block */
+	cb[0] = BSDMA_TI_DEST_INC | BSDMA_TI_DEST_W128 | BSDMA_TI_SRC_W128 | BSDMA_TI_BURST(8);
+	cb[1] = ALIAS_UNCACHED | (blk + 32);
+	cb[2] = dst;
+	cb[3] = n;
+	cb[4] = 0;
+	cb[5] = 0;
+	cb[6] = 0;
+	cb[7] = 0;
+	BSDMA_ENABLE |= 1u;
+	BSDMA_CS = BSDMA_CS_RESET;
+	BSDMA_CS = BSDMA_CS_END; /* clear a stale END */
+	BSDMA_CONBLK = ALIAS_UNCACHED | blk;
+	BSDMA_CS = BSDMA_CS_ACTIVE;
+	bool done = false;
+	for (uint32_t i = 0; i < 4000000u; i++) {
+		if (BSDMA_CS & BSDMA_CS_END) {
+			done = true;
+			break;
+		}
+	}
+	BSDMA_CS = BSDMA_CS_RESET;
+	BSDMA_CONBLK = 0;
+	if (!done)
+		return false;
+	/* first and last word: did it write? */
+	volatile uint32_t *d = (volatile uint32_t *)(ALIAS_UNCACHED | (dst & 0x3fffffffu));
+	return d[0] == 0 && d[n / 4 - 1] == 0;
+}
+
+/*
+ * The panel into the ARM's new framebuffer v: its visible part black, the
+ * panel in the middle (where the HVS showed it, as hvs.c centres a smaller
+ * buffer too). 16 and 32 bit only; others, and a buffer smaller than the
+ * panel, are only cleared or left alone.
+ */
+static void keep_panel(const struct fb_view *v) {
+	if (v->depth != 16 && v->depth != 32)
+		return;
+	uint32_t bpp = v->depth / 8, pitch = v->vw * bpp;
+	volatile uint8_t *base = (volatile uint8_t *)(ALIAS_UNCACHED | (v->base & 0x3fffffffu)) + v->yoff * pitch +
+				 v->xoff * bpp;
+	uint32_t first = (v->base & 0x3fffffffu) + v->yoff * pitch + v->xoff * bpp;
+	bool whole = v->xoff == 0 && v->w == v->vw; /* the shown rows in one piece */
+	if (!whole || !dma_clear(ALIAS_UNCACHED | first, v->h * pitch)) {
+		for (uint32_t y = 0; y < v->h; y++) {
+			volatile uint32_t *row = (volatile uint32_t *)(base + y * pitch);
+			for (uint32_t i = 0; i < v->w * bpp / 4; i++)
+				row[i] = 0;
+		}
+	}
+	if (v->w < BS_W || v->h < BS_H)
+		return;
+	uint32_t x0 = (v->w - BS_W) / 2, y0 = (v->h - BS_H) / 2, last_in = 0, last_out = 0;
+	for (uint32_t y = 0; y < BS_H; y++) {
+		const volatile uint16_t *src = (const volatile uint16_t *)(g_bs_fb + y * BS_PITCH);
+		volatile uint8_t *dst = base + (y0 + y) * pitch + x0 * bpp;
+		for (uint32_t x = 0; x < BS_W; x++) {
+			uint32_t p = src[x];
+			if (!p)
+				continue; /* black already */
+			if (p != last_in) /* a handful of colours: convert each once per run */
+				last_in = p, last_out = panel_pixel(p, v->depth, v->order);
+			if (bpp == 2)
+				((volatile uint16_t *)dst)[x] = (uint16_t)last_out;
+			else
+				((volatile uint32_t *)dst)[x] = last_out;
+		}
+	}
+}
+
+/*
+ * The ARM shows its own framebuffer v now (mbox.c): stop drawing, and keep
+ * the panel on the screen by copying it there. v NULL: only stop.
+ */
+void bs_handover(const struct fb_view *v) {
 	if (!g_on)
 		return;
 	g_on = false;
-	printf("bootscreen: handed over to the ARM's framebuffer %u ms after it came up; HDMI start %u us, drawing %u us\n",
-	       (timer_us() - g_t_up) / 1000, g_t_hdmi, g_t_draw);
+	uint32_t t0 = timer_us();
+	if (v)
+		keep_panel(v);
+	printf("bootscreen: handed over to the ARM's framebuffer %u ms after it came up; HDMI start %u us, drawing %u us, "
+	       "copy %u us\n",
+	       (timer_us() - g_t_up) / 1000, g_t_hdmi, g_t_draw, timer_us() - t0);
 }
 
 /*

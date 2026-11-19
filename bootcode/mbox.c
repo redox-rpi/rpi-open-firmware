@@ -50,6 +50,13 @@ static bool otp_wait(void) {
 	return false;
 }
 
+static uint32_t otp_read(uint32_t row);
+
+/* the board revision code from OTP row 30 (boot64 picks the devicetree) */
+uint32_t board_revision(void) {
+	return otp_read(30);
+}
+
 static uint32_t otp_read(uint32_t row) {
 	OTP_CONFIG_REG = 3;
 	udelay(1);
@@ -254,7 +261,7 @@ static void fb_show(void) {
 	struct fb_view v = {0xc0000000u | FB_BASE, g_fb.w, g_fb.h, g_fb.vw, g_fb.vh,
 			    g_fb.depth, g_fb.order, g_fb.xoff, g_fb.yoff};
 	if (g_fb.allocated)
-		bs_handover(); /* the boot screen (#430) gives way */
+		bs_handover(&v); /* the boot screen (#430) gives way, its panel copied */
 	hdmi_fb(g_fb.allocated ? &v : 0);
 	g_fb_shown = g_fb.allocated;
 }

@@ -89,7 +89,7 @@ the prompt `rbc> `. Numbers are hex.
 | `sdr L A N` | read N sectors from sector L to A | `ok crc32 X` |
 | `ls` | list the root directory of the card's first FAT partition (FAT16/32) | lines, then `ok` |
 | `fl NAME A` | load a root-directory file to A (long names, any case) | `ok NAME N bytes crc32 X` |
-| `boot64 [K [DTB]]` | load `armstub8-redox.bin` (or `armstub8.bin`) to ARM 0, the kernel K (default `kernel8.img`) to 0x80000 and the devicetree (default `redox-3bp.dtb` from `redox-rpi/make-dtb.sh`, else `bcm2710-rpi-3-b-plus.dtb` without overlays; `-` for none; `@N` for the N (hex) bytes already at 0x2000000, sent with `l c2000000 N C`) to 0x2000000; set the memory size in the devicetree, `kernel_entry32` and `dtb_ptr32`; power the SD controller down; start the ARM in AArch64 | `ok boot64` |
+| `boot64 [K [DTB]]` | read `config.txt` (`config.c`, rof #48: `kernel=`, `initramfs`, `armstub=`, `device_tree=`, `dtoverlay=`, `cmdline=`, model and GPIO filters); load the armstub to ARM 0 (`armstub=`, else the card's `armstub8-redox.bin`/`armstub8.bin`, else the built-in one), the kernel K (default `kernel=`, `kernel8.img`) to 0x80000 and the devicetree to 0x2000000 (DTB, else `device_tree=`, else `redox-3bp.dtb`/`redox-zero2w.dtb` if on the card, else Broadcom's for the board plus the `dtoverlay=` lines applied on the VPU; `-` for none; `@N` for the N (hex) bytes already at 0x2000000, sent with `l c2000000 N C`); set `/memory`, `/chosen bootargs` (cmdline.txt) and the initrd; power the SD controller down; start the ARM in AArch64 | `ok boot64` |
 | `reset` | full chip reset through the watchdog, as a reboot | `ok reset`, `rbc> watchdog reset`, no return |
 | `boot` | leave the monitor (boot selector: chain the built-in image) | `ok boot` |
 
@@ -156,7 +156,9 @@ our own VPU loader (M2) replaces the built-in Broadcom image.
 | `timer.c`, `printf.c` | delay, small printf | new |
 | `sd.c` | SD card through SDHOST, read-only; ported from rpi-open-firmware's `sdhost_impl.cc`, with the slower-clock retry from Pi test #249 |
 | `fat.c` | FAT16/32 root directory and file reads, new code from the FAT specification; host test in `tests/fat-test.sh` (FAT16 and FAT32 images made with mtools) |
-| `fdt.c` | writes `/memory@0 reg` in the devicetree, as `start.elf` does; new code from the Devicetree Specification; host test in `tests/fdt-test.sh` |
+| `dt.c` | edits the devicetree as `start.elf` does: `/memory`, `/chosen`, and `dtoverlay=` overlays (libfdt's rules: `__fixups__`, `__local_fixups__`); new code from the Devicetree Specification; host test in `tests/fdt-test.sh` (the result equals `fdtoverlay`'s) |
+| `config.c` | the `config.txt` keys and filters of a direct boot (rof #48); host test in `tests/config-test.sh` |
+| `armstub8-builtin.h` | the built-in armstub8 from `../armstub`, `make armstub-header`; `tests/armstub-header.sh --check` compares it |
 | `arm.c` | ARM start for the monitor's `arm`: address map, ARM clock (PLLB), ARM power domain, bridge; ported from rpi-open-firmware's ARM control and power drivers |
 | `chain-image.S` | places a `bootcode.bin` image in the boot selector build | new; the image is Broadcom's, unchanged |
 | `monitor.c`, `go-test.S`, `rbc-load.sh`, `libc.c` | serial monitor (test builds), its test payload and host script, `memset`/`memcpy` | new; cache flush registers from Broadcom's `vpu_l1_cache_ctrl.h` |
