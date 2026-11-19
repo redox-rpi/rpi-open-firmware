@@ -11,6 +11,7 @@ What stays in the repository, because it changes with the code:
 | Page | What |
 |---|---|
 | [bootcode/README.md](https://github.com/redox-rpi/rpi-open-firmware/blob/bootcode/bootcode/README.md) | Our VPU firmware: build, monitor commands, boot selector, files (branch `bootcode` until [PR #10](https://github.com/redox-rpi/rpi-open-firmware/pull/10) is merged) |
+| [pmp.md](pmp.md) | Project management plan: roles, releases by scope (no time box), the way to independence |
 | [release-checklist.md](release-checklist.md) | The checks for every firmware release: both boards, HDMI, boot time, no avoidable error lines |
 | [boot-time.md](boot-time.md) | The main indicator: boot time from power-on to `redox login:`, how it is measured, values per board |
 | [boot-selector.md](boot-selector.md) | The boot selector: a `bootcode.bin` for lab Pis that picks the boot path from the serial line; halt after poweroff; versions, install, build |
