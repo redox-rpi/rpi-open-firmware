@@ -15,6 +15,12 @@ bool sd_read(uint32_t lba, uint32_t *buf) {
 	fseek(img, (long)lba * 512, SEEK_SET);
 	return fread(buf, 512, 1, img) == 1;
 }
+bool sd_read_blocks(uint32_t lba, uint32_t n, uint32_t *buf) {
+	if (n == 0 || n > SD_RUN_MAX)
+		return false;
+	fseek(img, (long)lba * 512, SEEK_SET);
+	return fread(buf, 512, n, img) == n;
+}
 
 int main(int argc, char **argv) {
 	img = fopen(argv[1], "rb");

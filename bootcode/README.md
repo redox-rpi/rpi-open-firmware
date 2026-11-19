@@ -39,6 +39,18 @@ make BOOT=1 MBOX_TRACE=1      # the same with the mailbox trace (debug)
 
 Serial console on GPIO 14/15, 115200 8N1.
 
+`make BOOT=1` is the release build: it boots from the SD card at once
+and starts `kernel8.img` (`KERNEL=U-BOOT.BIN` for a test on the selector
+card).
+`make BOOT=1 HDMI=1` adds 1080p on HDMI with a boot screen (#430): from
+the SDRAM onwards a 640x160 panel in the middle of the screen shows a
+title, a progress bar and the last four boot steps (SD card, armstub,
+kernel, devicetree, ARM start, first mailbox request); a failed step is
+red. When U-Boot or Redox allocates a framebuffer, that one is shown
+instead, and the serial line gets one line with the time HDMI and
+drawing took. Test builds (`MONITOR=1`) always have HDMI; the monitor's
+`bs` command shows the panel with fixed texts.
+
 **Mailbox trace (`MBOX_TRACE`).** After the ARM starts, `mbox.c` can print
 one line per mailbox request, with its tags and `?` after a tag it does not
 answer, plus an "alive" line every 10 s. This shows which tags U-Boot and
@@ -77,7 +89,7 @@ the prompt `rbc> `. Numbers are hex.
 | `sdr L A N` | read N sectors from sector L to A | `ok crc32 X` |
 | `ls` | list the root directory of the card's first FAT partition (FAT16/32) | lines, then `ok` |
 | `fl NAME A` | load a root-directory file to A (long names, any case) | `ok NAME N bytes crc32 X` |
-| `boot64 [K [DTB]]` | load `armstub8-redox.bin` (or `armstub8.bin`) to ARM 0, the kernel K (default `kernel8.img`) to 0x80000 and the devicetree (default `redox-3bp.dtb` from `redox-rpi/make-dtb.sh`, else `bcm2710-rpi-3-b-plus.dtb` without overlays; `-` for none; `@N` for the N (hex) bytes already at 0x2000000, sent with `l c2000000 N C`) to 0x2000000; set the memory size in the devicetree, `kernel_entry32` and `dtb_ptr32`; power the SD controller down; start the ARM in AArch64 | `ok boot64` |
+| `boot64 [K [DTB]]` | read `config.txt` (`config.c`, rof #48: `kernel=`, `initramfs`, `armstub=`, `device_tree=`, `dtoverlay=`, `cmdline=`, model and GPIO filters); load the armstub to ARM 0 (`armstub=`, else the card's `armstub8-redox.bin`/`armstub8.bin`, else the built-in one), the kernel K (default `kernel=`, `kernel8.img`) to 0x80000 and the devicetree to 0x2000000 (DTB, else `device_tree=`, else `redox-3bp.dtb`/`redox-zero2w.dtb` if on the card, else Broadcom's for the board plus the `dtoverlay=` lines applied on the VPU; `-` for none; `@N` for the N (hex) bytes already at 0x2000000, sent with `l c2000000 N C`); set `/memory`, `/chosen bootargs` (cmdline.txt) and the initrd; power the SD controller down; start the ARM in AArch64 | `ok boot64` |
 | `reset` | full chip reset through the watchdog, as a reboot | `ok reset`, `rbc> watchdog reset`, no return |
 | `boot` | leave the monitor (boot selector: chain the built-in image) | `ok boot` |
 
@@ -144,11 +156,16 @@ our own VPU loader (M2) replaces the built-in Broadcom image.
 | `timer.c`, `printf.c` | delay, small printf | new |
 | `sd.c` | SD card through SDHOST, read-only; ported from rpi-open-firmware's `sdhost_impl.cc`, with the slower-clock retry from Pi test #249 |
 | `fat.c` | FAT16/32 root directory and file reads, new code from the FAT specification; host test in `tests/fat-test.sh` (FAT16 and FAT32 images made with mtools) |
-| `fdt.c` | writes `/memory@0 reg` in the devicetree, as `start.elf` does; new code from the Devicetree Specification; host test in `tests/fdt-test.sh` |
+| `dt.c` | edits the devicetree as `start.elf` does: `/memory`, `/chosen`, and `dtoverlay=` overlays (libfdt's rules: `__fixups__`, `__local_fixups__`); new code from the Devicetree Specification; host test in `tests/fdt-test.sh` (the result equals `fdtoverlay`'s) |
+| `config.c` | the `config.txt` keys and filters of a direct boot (rof #48); host test in `tests/config-test.sh` |
+| `armstub8-builtin.h` | the built-in armstub8 from `../armstub`, `make armstub-header`; `tests/armstub-header.sh --check` compares it |
 | `arm.c` | ARM start for the monitor's `arm`: address map, ARM clock (PLLB), ARM power domain, bridge; ported from rpi-open-firmware's ARM control and power drivers |
 | `chain-image.S` | places a `bootcode.bin` image in the boot selector build | new; the image is Broadcom's, unchanged |
 | `monitor.c`, `go-test.S`, `rbc-load.sh`, `libc.c` | serial monitor (test builds), its test payload and host script, `memset`/`memcpy` | new; cache flush registers from Broadcom's `vpu_l1_cache_ctrl.h` |
 | `sdram.c` | LPDDR2 set-up and self test | rpi-open-firmware `firmware/sdram.c` (Julian Brown and the rpi-open-firmware authors); sequence, timings and magic values unchanged; self test extended |
+| `hdmi.c`, `hvs.c` | 1080p60 DVI on HDMI and the HVS plane for a framebuffer (#442); `tests/hvs-sim.sh` in resim | new; order and register names from Linux `drivers/gpu/drm/vc4` and `clk-bcm2835.c`, analog values from lk-overlay; target values from start.elf (Pi test row 337) |
+| `bootscreen.c` | boot screen on HDMI: title, progress bar, boot steps (#430); `tests/bootscreen-sim.sh` in resim against `tests/bootscreen-model.py` | new |
+| `font8x16.h` | 8x16 bitmap font, printable ASCII | U-Boot `include/video_font_8x16.h` (GPL-2.0+), cut to characters 32..126 |
 | `hw.h` | common header | new; register names from Broadcom's headers |
 | `../broadcom/` | VideoCore IV register definitions | released by Broadcom (BSD), used as they are |
 

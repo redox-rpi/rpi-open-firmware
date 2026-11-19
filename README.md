@@ -41,7 +41,7 @@ Every file names the ones it uses:
 | Broadcom's register headers (`hardware.h`, `sdhost.h`, …) | BSD 3-clause | register names and bits |
 | [raspberrypi/tools `armstub8.S`](https://github.com/raspberrypi/tools/tree/master/armstubs) | BSD 3-clause | what the stub must do (ours is new code) |
 | Linux drivers and devicetrees | GPLv2 | register behaviour, the devicetree we load |
-| Specifications: Microsoft FAT (fatgen103), SD (via NetBSD `sdmmcreg.h`, ISC), Devicetree v0.4, Arm Architecture Reference Manual | – | `fat.c`, `sd.c`, `fdt.c`, `armstub8` |
+| Specifications: Microsoft FAT (fatgen103), SD (via NetBSD `sdmmcreg.h`, ISC), Devicetree v0.4, Arm Architecture Reference Manual | – | `fat.c`, `sd.c`, `dt.c`, `armstub8` |
 | Herman Hermitage's VideoCore IV notes, Julian Brown's VC4 GCC | – | the VPU itself, the compiler |
 | An internal disassembly of Broadcom's firmware | – | behaviour notes only, no code; the disassembly is not published |
 

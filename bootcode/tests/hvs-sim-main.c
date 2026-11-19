@@ -36,8 +36,20 @@ uint32_t arm_khz(void) {
 
 uint32_t arm_max_mhz = 1400;
 
+/* sdram.c is not linked: the 1 GB split, as before sdram_init() */
+uint32_t g_ram_bytes = 0x40000000u, g_arm_mem = 0x40000000u - VC_MEM;
+
 uint32_t arm_set_mhz(uint32_t mhz) {
 	return mhz;
+}
+
+/* the boot screen (#430) has its own test, bootscreen-sim.sh */
+void bs_step(uint32_t pct, const char *a, const char *b) {
+	(void)pct, (void)a, (void)b;
+}
+
+void bs_handover(const struct fb_view *v) {
+	(void)v;
 }
 
 static void dump(const char *what, uint32_t bad, const volatile uint8_t *p, uint32_t n) {

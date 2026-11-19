@@ -50,6 +50,13 @@ static bool otp_wait(void) {
 	return false;
 }
 
+static uint32_t otp_read(uint32_t row);
+
+/* the board revision code from OTP row 30 (boot64 picks the devicetree) */
+uint32_t board_revision(void) {
+	return otp_read(30);
+}
+
 static uint32_t otp_read(uint32_t row) {
 	OTP_CONFIG_REG = 3;
 	udelay(1);
@@ -222,7 +229,7 @@ static uint32_t g_power[POWER_DEVICES];
  * VideoCore's part of the memory, above MBOX_ARM_MEM_SIZE.
  */
 #define FB_BASE (MBOX_ARM_MEM_SIZE + 0x400000u)
-#define FB_MAX 0xc00000u /* to 0x3f000000, the peripherals */
+#define FB_MAX 0xc00000u /* 12 MB, below the end of the SDRAM (VC_MEM is 32 MB) */
 
 /* with HDMI (#442) the physical size is the screen's: 1920x1080 */
 #if HDMI
@@ -253,6 +260,8 @@ static void fb_show(void) {
 		return;
 	struct fb_view v = {0xc0000000u | FB_BASE, g_fb.w, g_fb.h, g_fb.vw, g_fb.vh,
 			    g_fb.depth, g_fb.order, g_fb.xoff, g_fb.yoff};
+	if (g_fb.allocated)
+		bs_handover(&v); /* the boot screen (#430) gives way, its panel copied */
 	hdmi_fb(g_fb.allocated ? &v : 0);
 	g_fb_shown = g_fb.allocated;
 }
@@ -317,9 +326,9 @@ static bool handle(volatile struct tag *t) {
 		r[1] = MBOX_ARM_MEM_SIZE;
 		reply(t, r, 8);
 		return true;
-	case 0x00010006: /* VideoCore memory: the rest of the 1 GB */
+	case 0x00010006: /* VideoCore memory: the rest of the SDRAM */
 		r[0] = MBOX_ARM_MEM_SIZE;
-		r[1] = 0x40000000u - MBOX_ARM_MEM_SIZE;
+		r[1] = g_ram_bytes - MBOX_ARM_MEM_SIZE;
 		reply(t, r, 8);
 		return true;
 	case 0x00010007: /* clocks list: none given */
@@ -519,7 +528,8 @@ static void property(uint32_t bus) {
 		printf("mbox: bad buffer %08X size %u, dropped\n", bus, size);
 		return;
 	}
-	g_requests++;
+	if (++g_requests == 1)
+		bs_step(90, "ARM running", 0);
 	bool log = MBOX_TRACE && g_logged < MBOX_LOG_MAX;
 	if (log && ++g_logged == MBOX_LOG_MAX)
 		printf("mbox: requests after this one are not logged\n");
