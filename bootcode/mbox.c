@@ -393,6 +393,12 @@ static bool handle(volatile struct tag *t) {
 		r[1] = 85000;
 		reply(t, r, 8);
 		return true;
+	case 0x000f0001: /* redox-rpi: diag sampler (#66): period in us (0 stops) -> ring bus address, bytes */
+		diag_start(a);
+		r[0] = diag_bus_addr();
+		r[1] = diag_bytes();
+		reply(t, r, 8);
+		return true;
 	case 0x00030046: /* throttled: never */
 		r[0] = 0;
 		reply(t, r, 4);
@@ -560,6 +566,7 @@ static void property(uint32_t bus) {
 
 /* answer one waiting request, if there is one */
 void mbox_poll(void) {
+	diag_poll();
 	if (!g_mbox_on || (ARM_1_MAIL1_STA & ARM_MS_EMPTY))
 		return;
 	uint32_t msg = ARM_1_MAIL1_RD;

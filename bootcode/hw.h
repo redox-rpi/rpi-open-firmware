@@ -136,6 +136,12 @@ void mbox_start(void);
 uint32_t board_revision(void); /* OTP row 30, e.g. a020d3 (3B+), 902120 (Zero 2 W) */
 #define BOARD_TYPE_3BP 0x0du /* board type, bits 4..11 of the revision */
 void mbox_poll(void);
+/* diag.c: display/graphics sampler into a ring buffer for the ARM (#66) */
+void diag_start(uint32_t period_us); /* 0 stops */
+void diag_poll(void);
+void diag_dump(uint32_t count);
+uint32_t diag_bus_addr(void);
+uint32_t diag_bytes(void);
 void mbox_serve(void) __attribute__((noreturn));
 /* monitor: ask for a framebuffer through the real tag path, as U-Boot does */
 bool mbox_fb_test(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t *base, uint32_t *pitch);
