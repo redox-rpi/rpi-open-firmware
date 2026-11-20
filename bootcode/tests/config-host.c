@@ -24,6 +24,6 @@ int main(int argc, char **argv) {
 	       c.unknown_filters);
 	for (uint32_t i = 0; i < c.n_overlays; i++)
 		printf("%s%s", i ? "," : "", c.overlay[i]);
-	printf(" boarddtb=%s\n", cfg_board_dtb((uint32_t)strtoul(argv[2], NULL, 16)));
+	printf(" diag=%u boarddtb=%s\n", c.diag_period, cfg_board_dtb((uint32_t)strtoul(argv[2], NULL, 16)));
 	return 0;
 }
