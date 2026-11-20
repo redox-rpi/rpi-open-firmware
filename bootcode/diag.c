@@ -4,8 +4,12 @@
  * While the ARM runs, the VPU only answers the mailbox. When the ARM asks
  * (mailbox tag 0x000f0001), config.txt has diag_period=US (started before
  * the ARM) or the monitor's "diag" command starts it, the VPU also
- * writes one record per period into a ring buffer at the end of the
- * VideoCore's memory, which the ARM can read:
+ * writes one record per period into a ring buffer in the VideoCore's
+ * memory, which the ARM can read: 2 MB into the VideoCore's part
+ * (g_arm_mem), between the boot screen panel and the ARM's framebuffer
+ * (mbox.c FB_BASE, 4 MB in). Not at the end of the SDRAM: on a 1 GB
+ * board the ARM sees its last 16 MB as the peripherals at 0x3f000000
+ * (Pi test 516).
  *
  *   header, 16 words: magic "DIAG", version, record words, records in the
  *     ring, records written (wraps the ring; never reset while running),
@@ -52,7 +56,8 @@
 #define DIAG_HDR_WORDS 16u
 #define DIAG_REC_WORDS 8u
 #define DIAG_REC_WORDS_AXI 32u
-#define DIAG_BYTES 0x100000u /* 1 MB at the end of the SDRAM */
+#define DIAG_BYTES 0x100000u /* 1 MB */
+#define DIAG_OFF 0x200000u  /* into the VideoCore's part, below FB_BASE */
 
 enum { H_MAGIC, H_VERSION, H_REC_WORDS, H_RECS, H_WRITTEN, H_PERIOD, H_MARKER, H_DROPPED, H_FLAGS, H_AXI_BUSES };
 
@@ -79,11 +84,11 @@ static uint32_t g_diag_next, g_diag_period, g_diag_rec_words, g_diag_recs;
 
 static volatile uint32_t *diag_ring(void) {
 	/* uncached alias, so the ARM sees every word at once */
-	return (volatile uint32_t *)(0xc0000000u | (g_ram_bytes - DIAG_BYTES));
+	return (volatile uint32_t *)(0xc0000000u | (g_arm_mem + DIAG_OFF));
 }
 
 uint32_t diag_bus_addr(void) {
-	return 0xc0000000u | (g_ram_bytes - DIAG_BYTES);
+	return 0xc0000000u | (g_arm_mem + DIAG_OFF);
 }
 
 uint32_t diag_bytes(void) {
