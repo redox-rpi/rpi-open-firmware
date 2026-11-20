@@ -12,7 +12,7 @@
 # Usage: redox-rpi/build-toolchain.sh [WORKDIR]   (default: ../toolchains)
 # Result: WORKDIR/prefix/bin on PATH, see redox-rpi/env.sh.
 #
-# Tested on Ubuntu 26.04 with host GCC 15 (homenodellm). The old GCC 6
+# Tested on Ubuntu 26.04 with host GCC 15. The old GCC 6
 # sources need an older C/C++ dialect, set in HOST_CFLAGS/HOST_CXXFLAGS.
 
 set -euo pipefail

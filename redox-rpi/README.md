@@ -5,14 +5,14 @@ project added to Kristina Brooks's
 [rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware) to find
 out how far an open-source `bootcode.bin` gets on a **Raspberry Pi 3B+**
 (BCM2837B0), and what is missing before it could start Redox OS instead of
-the closed Broadcom firmware. The upstream code outside this directory is
+the closed Broadcom firmware. Upstream's code, now in [`../upstream/`](../upstream/), is
 unchanged apart from the chainloader fixes listed in the top-level [README](../README.md), which also has the results.
 
 | File | What it does |
 | --- | --- |
 | `build-toolchain.sh` | Builds the VC4 toolchain (binutils/GCC 6.2.1/newlib from [itszor/vc4-toolchain](https://github.com/itszor/vc4-toolchain), pinned) and an `arm-none-eabi` GCC 13.3 for the chainloader, as a normal user, into `../toolchains/prefix` |
 | `toolchain.sha256` | Checksums of the GNU source tarballs the script downloads |
-| `build.sh` | Runs upstream `buildall.sh` with those toolchains and builds the test payload |
+| `build.sh` | Runs upstream's `buildall.sh` (in `../upstream/`) with those toolchains and builds the test payload |
 | `payload/` | A 32-bit test program the chainloader starts as `zImage`; it prints the CPU mode and IDs on the UART |
 | `make-dtb.sh` | Makes `redox-3bp.dtb` for the bootcode monitor's `boot64`: Broadcom's 3B+ devicetree with redox-rpi's overlays (`disable-bt`, `mmc`) applied, since our VPU code does not apply overlays |
 | `make-sdcard.sh` | Makes a small SD card image (FAT16: `bootcode.bin`, `rpi.dtb`, `cmdline.txt`, `zImage`) without root |

@@ -13,11 +13,11 @@ with open code. That means:
 - on newer boards, the EEPROM bootloader.
 
 Only the Boot ROM inside the chip stays. The models we look at (Zero W,
-Zero 2 W, 3B+, Pi 400, Pi 5) are described in [docs/models.md](docs/models.md);
+Zero 2 W, 3B+, Pi 400, Pi 5) are described in [Models](https://github.com/redox-rpi/rpi-open-firmware/wiki/Models) in the wiki;
 work starts on the Pi 3B+. Plan and progress:
-[redox-rpi#230](https://github.com/redox-rpi/redox-rpi/issues/230). Every
+[#18](https://github.com/redox-rpi/rpi-open-firmware/issues/18). Every
 closed piece, per model, and whether it can be replaced:
-[docs/broadcom/](docs/broadcom/README.md#every-closed-piece-and-whether-it-can-be-replaced).
+[Broadcom](https://github.com/redox-rpi/rpi-open-firmware/wiki/Broadcom#every-closed-piece-and-whether-it-can-be-replaced) in the wiki.
 
 The firmware is not tied to Redox: it starts U-Boot, Linux or Redox the
 same way, so it has its own docs, Pi tests and pace. What redox-rpi uses
@@ -35,9 +35,9 @@ Every file names the ones it uses:
 
 | Source | Licence | What we take |
 |---|---|---|
-| [christinaa/rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware) (2019) | GPLv2+ | PLL, SDRAM, SDHOST and ARM start sequences; its code is still on the `redox-rpi` branch, with our fixes |
-| [librerpi/lk-overlay](https://github.com/librerpi/lk-overlay), the newer rewrite by the same community | GPLv2+ | tested on our Pi ([lk-overlay.md](docs/lk-overlay.md)); reference for later steps, no code taken yet |
-| [librerpi/rpi-open-firmware](https://github.com/librerpi/rpi-open-firmware), the 2019 firmware carried on to 2025 (375 commits), with about 100 hardware notes | GPLv2+ | first reference for the mailbox, HDMI and the Pi 400; all outside sources and their status in [docs/sources.md](docs/sources.md) |
+| [christinaa/rpi-open-firmware](https://github.com/christinaa/rpi-open-firmware) (2019) | GPLv2+ | PLL, SDRAM, SDHOST and ARM start sequences; its 2016 code is in [`upstream/`](upstream/), with our fixes |
+| [librerpi/lk-overlay](https://github.com/librerpi/lk-overlay), the newer rewrite by the same community | GPLv2+ | tested on our Pi ([lk-overlay](https://github.com/redox-rpi/rpi-open-firmware/wiki/lk-overlay)); reference for later steps, no code taken yet |
+| [librerpi/rpi-open-firmware](https://github.com/librerpi/rpi-open-firmware), the 2019 firmware carried on to 2025 (375 commits), with about 100 hardware notes | GPLv2+ | first reference for the mailbox, HDMI and the Pi 400; all outside sources and their status in [Sources](https://github.com/redox-rpi/rpi-open-firmware/wiki/Sources) |
 | Broadcom's register headers (`hardware.h`, `sdhost.h`, …) | BSD 3-clause | register names and bits |
 | [raspberrypi/tools `armstub8.S`](https://github.com/raspberrypi/tools/tree/master/armstubs) | BSD 3-clause | what the stub must do (ours is new code) |
 | Linux drivers and devicetrees | GPLv2 | register behaviour, the devicetree we load |
@@ -63,29 +63,35 @@ README, with its credits, is in [docs/upstream-README.md](docs/upstream-README.m
 
 Today every image of redox-rpi still boots with Broadcom's firmware. How
 each release starts, and what is still Broadcom's after each step:
-[docs/boot-chain.md](docs/boot-chain.md).
+[Boot chain](https://github.com/redox-rpi/rpi-open-firmware/wiki/Boot-chain).
 
 ## Documentation
 
-All in [docs/](docs/README.md):
+The pages for reading are in the [wiki](https://github.com/redox-rpi/rpi-open-firmware/wiki):
 
-- [models.md](docs/models.md): the Pi models and their hardware.
-- [broadcom/](docs/broadcom/README.md): Broadcom's firmware per model
-  (Zero W, Zero 2 W, 3B+, Pi 400, Pi 5), every closed piece, and one page
-  per file (`bootcode.bin`, `start*.elf`, `fixup*.dat`, `armstub8`,
-  devicetree, overlays, licence) with what is inside it.
-- [boot-chain.md](docs/boot-chain.md): Broadcom's boot pieces, how each
-  redox-rpi release starts, the steps to the end goal (with pictures).
-- [own-firmware.md](docs/own-firmware.md): our firmware (#230): design,
+- [Models](https://github.com/redox-rpi/rpi-open-firmware/wiki/Models): the Pi models and their hardware.
+- [Broadcom](https://github.com/redox-rpi/rpi-open-firmware/wiki/Broadcom): Broadcom's firmware per model (Zero W,
+  Zero 2 W, 3B+, Pi 400, Pi 5), every closed piece, and one page per file
+  (`bootcode.bin`, `start*.elf`, `fixup*.dat`, `armstub8`, devicetree,
+  overlays, licence) with what is inside it.
+- [Boot chain](https://github.com/redox-rpi/rpi-open-firmware/wiki/Boot-chain): Broadcom's boot pieces, how each redox-rpi
+  release starts, the steps to the end goal (with pictures).
+- [Own firmware](https://github.com/redox-rpi/rpi-open-firmware/wiki/Own-firmware): our firmware (#18): design,
   milestones, monitor and boot selector, findings.
-- [test-results.md](docs/test-results.md): every Pi test of this
-  repository in one table.
-- [rpi-open-firmware-2019.md](docs/rpi-open-firmware-2019.md): the
-  upstream firmware on our Pi, and the 3B+ risks.
-- [lk-overlay.md](docs/lk-overlay.md): librerpi/lk-overlay on our Pi.
-- [sources.md](docs/sources.md): every outside source (librerpi, glennra, toolchain, simulator), its last change, and whether we watch it.
-- [vpu-compiler.md](docs/vpu-compiler.md), [socdump.md](docs/socdump.md): ideas and later work.
-- [docs/hardware/](docs/hardware/): one page per model (3B+, Pi 400, Pi 5/CM5) with what we know about its hardware.
+- [rpi-open-firmware (2019)](https://github.com/redox-rpi/rpi-open-firmware/wiki/rpi-open-firmware-2019): the upstream
+  firmware on our Pi, and the 3B+ risks.
+- [lk-overlay](https://github.com/redox-rpi/rpi-open-firmware/wiki/lk-overlay): librerpi/lk-overlay on our Pi.
+- [Sources](https://github.com/redox-rpi/rpi-open-firmware/wiki/Sources): every outside source (librerpi, glennra,
+  toolchain, simulator), its last change, and whether we watch it.
+- [VPU compiler](https://github.com/redox-rpi/rpi-open-firmware/wiki/VPU-compiler), [socdump](https://github.com/redox-rpi/rpi-open-firmware/wiki/Socdump): ideas and later work.
+- [Hardware](https://github.com/redox-rpi/redox-rpi/wiki) (redox-rpi wiki):
+  one page per model (3B+, Pi 400, Pi 5/CM5).
+
+Pi test results: redox-rpi/pi-tests [queue](https://github.com/redox-rpi/pi-tests/blob/main/queue.md#done)
+and [reports](https://github.com/redox-rpi/pi-tests/tree/main/reports).
+Pages that change with the code stay in the repository: the READMEs in
+`bootcode/`, `armstub/` and `redox-rpi/` (build, flash, test), and
+[docs/upstream-README.md](docs/upstream-README.md).
 
 ## Branches and directories
 
