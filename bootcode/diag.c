@@ -2,9 +2,10 @@
  * diag.c: a sampler for finding display and graphics stalls (rof #66).
  *
  * While the ARM runs, the VPU only answers the mailbox. When the ARM asks
- * (mailbox tag 0x000f0001) or the monitor's "diag" command starts it, the
- * VPU also writes one record per period into a ring buffer at the end of
- * the VideoCore's memory, which the ARM can read:
+ * (mailbox tag 0x000f0001), config.txt has diag_period=US (started before
+ * the ARM) or the monitor's "diag" command starts it, the VPU also
+ * writes one record per period into a ring buffer at the end of the
+ * VideoCore's memory, which the ARM can read:
  *
  *   header, 16 words: magic "DIAG", version, record words, records in the
  *     ring, records written (wraps the ring; never reset while running),
@@ -13,6 +14,10 @@
  *     (channel 1, with its frame count), pixel valve 2 STAT, HDMI frame
  *     count, thermal sensor status (raw), ARM clock divider/PLL word,
  *     marker as it was at this sample
+ *
+ * The devicetree's /chosen redox-rpi,diag-ring = <ARM address, bytes>
+ * names the ring (boot64.c), so a reader (redox-rpi tools/diagread, Redox
+ * and Linux) needs no mailbox to find it.
  *
  * No V3D counters yet: our firmware does not power V3D (M5). The AXI bus
  * monitors come next, once their registers are confirmed.

@@ -38,6 +38,16 @@ expect "standard card, 3B+" "$t/std.txt" d 0 "kernel=kernel8.img " "initramfs=in
 expect "standard card, Zero 2 W" "$t/std.txt" 12 0 "boarddtb=bcm2710-rpi-zero-2-w.dtb" "overlays=disable-bt,mmc "
 printf '' > "$t/empty.txt"
 expect "no config: defaults" "$t/empty.txt" d 0 "kernel=kernel8.img " "initramfs= " "cmdline=cmdline.txt " "overlays= "
+cat > "$t/diag.txt" <<'C'
+arm_64bit=1
+diag_period=1000
+[pi02]
+diag_period=0x64
+[all]
+C
+expect "diag_period, 3B+" "$t/diag.txt" d 0 "diag=1000 "
+expect "diag_period, Zero 2 W filter" "$t/diag.txt" 12 0 "diag=100 "
+expect "diag_period default off" "$t/empty.txt" d 0 "diag=0 "
 
 cat > "$t/filt.txt" <<'C'
 kernel=common.img
