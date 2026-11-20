@@ -48,6 +48,11 @@ C
 expect "diag_period, 3B+" "$t/diag.txt" d 0 "diag=1000 "
 expect "diag_period, Zero 2 W filter" "$t/diag.txt" 12 0 "diag=100 "
 expect "diag_period default off" "$t/empty.txt" d 0 "diag=0 "
+printf 'arm_freq=600\n' > "$t/af.txt"
+expect "arm_freq" "$t/af.txt" d 0 "armfreq=600 "
+printf 'arm_freq=2000\n' > "$t/af2.txt"
+expect "arm_freq out of range ignored" "$t/af2.txt" d 0 "armfreq=0 "
+expect "arm_freq default" "$t/empty.txt" d 0 "armfreq=0 "
 
 cat > "$t/filt.txt" <<'C'
 kernel=common.img

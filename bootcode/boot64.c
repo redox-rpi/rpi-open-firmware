@@ -312,6 +312,12 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 		printf("err boot64: SDRAM not set up\n");
 		return false;
 	}
+	static struct boot_cfg cfg;
+	read_config(&cfg);
+	if (cfg.arm_freq) {
+		arm_max_mhz = cfg.arm_freq;
+		printf("boot64: arm_freq, ARM clock at most %u MHz\n", arm_max_mhz);
+	}
 	/* the Zero 2 W's BCM2710A1 is rated for 1000 MHz; at 1200 MHz, with no
 	 * core voltage control, Redox crashed under load (an instruction
 	 * abort at PC 0 while logging in, right after the governor's switch) */
@@ -319,8 +325,6 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 		arm_max_mhz = 1000u;
 		printf("boot64: Zero 2 W, ARM clock at most 1000 MHz\n");
 	}
-	static struct boot_cfg cfg;
-	read_config(&cfg);
 	if (!kernel)
 		kernel = cfg.kernel;
 	if (!load_armstub(&cfg))

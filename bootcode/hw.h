@@ -117,6 +117,7 @@ struct boot_cfg {
 	char overlay[CFG_OVERLAYS][32];
 	uint32_t n_overlays, unknown_filters;
 	uint32_t diag_period; /* diag_period=US: start the sampler at boot (#66) */
+	uint32_t arm_freq;    /* arm_freq=MHZ: top ARM clock, 0 = default */
 };
 void cfg_defaults(struct boot_cfg *c);
 void cfg_parse(struct boot_cfg *c, const char *txt, uint32_t len, uint32_t board_type, uint32_t lev0, uint32_t lev1);
