@@ -1,30 +1,35 @@
 
-TARGET_BOOTCODE = bootcode.bin
+TARGET_ARM_CHAINLOADER = arm_chainloader.bin
 
-#
-# when building bootcode.bin, always ensure start.s is at the top, providing
-# the 0x200 byte long header and some init code.
-# 
 SRCS = \
 	start.s \
-	romstage.c \
-	sdram.c \
-	arm_monitor.cc \
-	trap.c \
-	lib/xprintf.c \
-	lib/panic.c \
-	lib/udelay.c \
-	lib/memcpy.c \
-	lib/cxx_runtime.c \
-	drivers/IODevice.cc \
-	drivers/BCM2708PowerManagement.cc \
-	drivers/BCM2708UsbPhy.cc \
-	drivers/BCM2708ArmControl.cc \
-	drivers/BCM2708ClockDomains.cc \
-	drivers/BCM2708Gpio.cc \
-	BCM2708PlatformStartup.cc
+	lib_armv6/arm_bcopy.s \
+	lib_armv6/arm_bzero.s \
+	lib_armv6/arm_locore.s \
+	lib_armv6/arm_strlen.s \
+	lib_armv6/arm_memcmp.s \
+	lib_armv6/string_misc.c \
+	drivers/uart.c \
+	drivers/cprman.cc \
+	drivers/libfdt/fdt.c \
+	drivers/libfdt/fdt_ro.c \
+	drivers/libfdt/fdt_wip.c \
+	drivers/libfdt/fdt_rw.c \
+	drivers/libfdt/fdt_strerror.c \
+	drivers/fatfs/ff.c \
+	drivers/sdhost_impl.cc \
+	drivers/mbr_disk.cc \
+	drivers/mailbox.cc \
+	../lib/xprintf.c \
+	../lib/panic.c \
+	../lib/udelay.c \
+	../lib/cxx_runtime.c \
+	../lib/tlsf/tlsf.c \
+	loader.cc \
+	trap.cc \
+	main.c
 
-ARCH = vc4
+ARCH = armv6zk
 
 BUILD_DIR = build
 TARGET_BUILD_DIR = $(BUILD_DIR)/$(ARCH)-objects
@@ -37,21 +42,22 @@ WARN_COLOR=""
 
 .PHONY: default all clean create_build_directory device
 
-default: $(TARGET_BOOTCODE)
+default: $(TARGET_ARM_CHAINLOADER)
 
 OBJ := $(addprefix $(TARGET_BUILD_DIR)/, $(addsuffix .o, $(basename $(SRCS))))
 
-# the cross compiler should already be in your path
-CROSS_COMPILE ?= vc4-elf-
+CROSS_COMPILE ?= arm-none-eabi-
 CC = $(CROSS_COMPILE)gcc
-CXX = $(CROSS_COMPILE)g++
+CXX = $(CROSS_COMPILE)gcc
 AS = $(CC)
 OBJCOPY = $(CROSS_COMPILE)objcopy
-LINKFLAGS = -nostdlib -nostartfiles -Wl,--build-id=none -T linker.lds
+LINKFLAGS = -nostdlib -march=$(ARCH) -Wl,--build-id=none -T linker.lds
+COMMON_FLAGS = -c -nostdlib -nostartfiles -ffreestanding -march=$(ARCH) -I../ -I../../ -I./ -I./drivers/libfdt/ \
+ -mfpu=vfp -mfloat-abi=hard -mtune=arm1176jzf-s
 
-CFLAGS = -c -nostdlib -Wno-multichar -std=c11 -fsingle-precision-constant -Wdouble-promotion -D__VIDEOCORE4__ -I./vc4_include/ -I./
-ASFLAGS = -c -nostdlib -x assembler-with-cpp -D__VIDEOCORE4__ -I./vc4_include/ -I./
-CXXFLAGS = -c -nostdlib -Wno-multichar -std=c++11 -fno-exceptions -fno-rtti -D__VIDEOCORE4__ -I./vc4_include/ -I./
+CFLAGS = $(COMMON_FLAGS) -std=c11 
+CXXFLAGS = $(COMMON_FLAGS) -std=c++11 -fno-exceptions -fno-rtti
+ASFLAGS = $(COMMON_FLAGS) -x assembler-with-cpp
 
 HEADERS := \
 	$(shell find . -type f -name '*.h') \
@@ -64,7 +70,6 @@ create_build_directory:
 CREATE_SUBDIR = \
 	@DIR="$(dir $@)"; \
 	if [ ! -d $$DIR ]; then mkdir -p $$DIR; fi
-
 
 #
 # rules to build c/asm files.
@@ -86,9 +91,9 @@ $(TARGET_BUILD_DIR)/%.o: %.s $(HEADERS)
 
 .PRECIOUS: $(OBJ)
 
-$(TARGET_BOOTCODE): create_build_directory $(OBJ)
+$(TARGET_ARM_CHAINLOADER): create_build_directory $(OBJ)
 	@echo $(WARN_COLOR)LD  $(NO_COLOR) $@.elf
-	@$(CC) $(LINKFLAGS) $(OBJ) -o $(PRODUCT_DIRECTORY)/$@.elf
+	@$(CC) $(LINKFLAGS) $(OBJ) -o $(PRODUCT_DIRECTORY)/$@.elf -lgcc
 	@echo $(WARN_COLOR)OBJ$(NO_COLOR) $@
 	@$(OBJCOPY) -O binary $(PRODUCT_DIRECTORY)/$@.elf $(PRODUCT_DIRECTORY)/$@
 
