@@ -117,6 +117,7 @@ struct boot_cfg {
 	char overlay[CFG_OVERLAYS][32];
 	uint32_t n_overlays, unknown_filters;
 	uint32_t diag_period; /* diag_period=US: start the sampler at boot (#66) */
+	bool diag_axi;        /* diag_axi=1: with AXI bus counters */
 };
 void cfg_defaults(struct boot_cfg *c);
 void cfg_parse(struct boot_cfg *c, const char *txt, uint32_t len, uint32_t board_type, uint32_t lev0, uint32_t lev1);
@@ -138,6 +139,7 @@ uint32_t board_revision(void); /* OTP row 30, e.g. a020d3 (3B+), 902120 (Zero 2 
 #define BOARD_TYPE_3BP 0x0du /* board type, bits 4..11 of the revision */
 void mbox_poll(void);
 /* diag.c: display/graphics sampler into a ring buffer for the ARM (#66) */
+#define DIAG_AXI 0x80000000u /* with diag_start's period: AXI bus counters too */
 void diag_start(uint32_t period_us); /* 0 stops */
 void diag_poll(void);
 void diag_dump(uint32_t count);

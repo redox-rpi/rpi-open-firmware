@@ -365,8 +365,9 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 	}
 	sd_off();
 	if (cfg.diag_period) {
-		diag_start(cfg.diag_period);
-		printf("boot64: display sampler on, every %u us, ring at %08X\n", cfg.diag_period, diag_bus_addr());
+		diag_start(cfg.diag_period | (cfg.diag_axi ? DIAG_AXI : 0));
+		printf("boot64: display sampler on, every %u us%s, ring at %08X\n", cfg.diag_period,
+		       cfg.diag_axi ? ", AXI counters" : "", diag_bus_addr());
 	}
 	bs_step(75, "starting the ARM", 0);
 	/* printed before the start: the ARM's first line came in the middle of

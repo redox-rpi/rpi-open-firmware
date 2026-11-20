@@ -43,11 +43,12 @@ arm_64bit=1
 diag_period=1000
 [pi02]
 diag_period=0x64
+diag_axi=1
 [all]
 C
 expect "diag_period, 3B+" "$t/diag.txt" d 0 "diag=1000 "
-expect "diag_period, Zero 2 W filter" "$t/diag.txt" 12 0 "diag=100 "
-expect "diag_period default off" "$t/empty.txt" d 0 "diag=0 "
+expect "diag_period, Zero 2 W filter" "$t/diag.txt" 12 0 "diag=100 axi=1"
+expect "diag_period default off" "$t/empty.txt" d 0 "diag=0 axi=0"
 
 cat > "$t/filt.txt" <<'C'
 kernel=common.img
