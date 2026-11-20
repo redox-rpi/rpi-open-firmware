@@ -314,10 +314,17 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 	}
 	static struct boot_cfg cfg;
 	read_config(&cfg);
+	/* the 3B+'s core voltage through its PMIC (#72): 1200 MHz by default */
+	if (board_type() == BOARD_TYPE_3BP && !cfg.core_dvs_off && pmic_start()) {
+		arm_core_dvs = true;
+		arm_max_mhz = 1200u;
+	}
 	if (cfg.arm_freq) {
 		arm_max_mhz = cfg.arm_freq;
 		printf("boot64: arm_freq, ARM clock at most %u MHz\n", arm_max_mhz);
 	}
+	printf("boot64: ARM clock at most %u MHz, core voltage %s\n", arm_max_mhz,
+	       arm_core_dvs ? "by the PMIC" : "fixed");
 	/* the Zero 2 W's BCM2710A1 is rated for 1000 MHz; at 1200 MHz, with no
 	 * core voltage control, Redox crashed under load (an instruction
 	 * abort at PC 0 while logging in, right after the governor's switch) */

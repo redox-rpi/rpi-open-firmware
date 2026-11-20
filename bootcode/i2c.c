@@ -227,6 +227,48 @@ void i2c_write(uint32_t addr, uint32_t reg, uint32_t value) {
  * Registers from the FXL6408 datasheet: 0x03 direction (1 = output),
  * 0x05 output state, 0x07 output high-Z (1 = high-Z).
  */
+/*
+ * The 3B+'s PMIC: a MaxLinear MxL7704 at 0x1D on the same bus (Pi test rows
+ * 367, 407). Register 0x14 is Buck 4, the SoC core rail, 6.25 mV per step:
+ * C0 = 1.200 V after power-on, D9 = 1.35625 V is what start.elf sets for
+ * 1.4 GHz (row 409); DF = 1.39375 V is the rail's maximum. The chip NAKs a
+ * second write to a rail within 2.2 ms (datasheet Rev 1B, p. 24) and slews
+ * at 10 V/ms (p. 26).
+ */
+#define PMIC_ADDR 0x1D
+#define PMIC_REV 0x00
+#define PMIC_CORE 0x14
+#define PMIC_CORE_MAX 0xDFu
+
+/* the PMIC answers with its revision A0 */
+bool pmic_start(void) {
+	uint32_t rev = 0, core = 0;
+	if (!i2c_read_reg(PMIC_ADDR, PMIC_REV, &rev) || rev != 0xa0 ||
+	    !i2c_read_reg(PMIC_ADDR, PMIC_CORE, &core)) {
+		printf("pmic: no MxL7704 at %02X (rev %02X), core voltage stays\n", PMIC_ADDR, rev);
+		return false;
+	}
+	printf("pmic: MxL7704 rev %02X, core %02X = %u mV\n", rev, core, core * 625u / 100u);
+	return true;
+}
+
+/* core rail to code (6.25 mV steps), read back; tries again over the 2.2 ms NAK window */
+bool pmic_core_set(uint32_t code) {
+	if (code > PMIC_CORE_MAX)
+		return false;
+	for (int i = 0; i < 5; i++) {
+		uint32_t got = 0;
+		if (i2c_write_reg(PMIC_ADDR, PMIC_CORE, code) &&
+		    i2c_read_reg(PMIC_ADDR, PMIC_CORE, &got) && got == code) {
+			udelay(100); /* slew: 160 mV take 16 us at 10 V/ms */
+			return true;
+		}
+		udelay(1000);
+	}
+	printf("pmic: core %02X NOT set\n", code);
+	return false;
+}
+
 #define EXP_ADDR 0x43
 #define EXP_DIR 0x03
 #define EXP_OUT 0x05
