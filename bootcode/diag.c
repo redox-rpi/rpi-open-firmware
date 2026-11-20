@@ -16,7 +16,8 @@
  *     period in us, marker (the ARM writes it), dropped samples
  *   record, 8 words: system timer (us), HVS DISPSTAT, HVS DISPSTAT1
  *     (channel 1, with its frame count), pixel valve 2 STAT, HDMI frame
- *     count, thermal sensor status (raw), ARM clock divider/PLL word,
+ *     count, thermal sensor status (raw), ARM clock word (bits 31:30 the
+ *     ARM channel divider, 29:20 PLLB ndiv, 19:0 frac),
  *     marker as it was at this sample
  *
  * The devicetree's /chosen redox-rpi,diag-ring = <ARM address, bytes>
@@ -39,6 +40,8 @@
 #define D_HD_FRAME_COUNT R(0x7e808068)
 #define D_TS_CTL R(0x7e212000)
 #define D_TS_STAT R(0x7e212004)
+#define D_CM_TSENSCTL R(0x7e1010e0)
+#define D_CM_TSENSDIV R(0x7e1010e4)
 
 #define DIAG_MAGIC 0x47414944u /* "DIAG" little-endian */
 #define DIAG_VERSION 1u
@@ -50,6 +53,7 @@
 
 enum { H_MAGIC, H_VERSION, H_REC_WORDS, H_RECS, H_WRITTEN, H_PERIOD, H_MARKER, H_DROPPED };
 
+static void ts_start(void);
 static bool g_diag_on;
 static uint32_t g_diag_next, g_diag_period;
 
@@ -82,11 +86,30 @@ void diag_start(uint32_t period_us) {
 	h[H_RECS] = DIAG_RECS;
 	h[H_PERIOD] = period_us;
 	h[H_MAGIC] = DIAG_MAGIC;
-	if (!(D_TS_CTL & 1u << 7)) /* sensor not running: start it as Linux does */
-		D_TS_CTL = 0x00000083u;
+	ts_start();
 	g_diag_period = period_us;
 	g_diag_next = timer_us();
 	g_diag_on = true;
+}
+
+/*
+ * The thermal sensor, as Broadcom's firmware leaves it (Pi test 337) and
+ * Linux bcm2835_thermal.c starts it: its clock at 19.2 MHz / 10 from the
+ * crystal, then TSENSCTL with the bandgap default, the regulator and the
+ * recommended reset delay, written once without and once with RSTB. Before
+ * this the sensor had no clock and read a fixed 268 C (Pi test 530).
+ */
+static void ts_start(void) {
+	if (!(D_CM_TSENSCTL & 0x10u)) { /* ENAB */
+		D_CM_TSENSDIV = CM_PASSWORD | 0xa000u;
+		D_CM_TSENSCTL = CM_PASSWORD | 1u;         /* source: crystal */
+		D_CM_TSENSCTL = CM_PASSWORD | 0x10u | 1u; /* enable */
+	}
+	if (!(D_TS_CTL & 2u)) { /* RSTB */
+		uint32_t v = 1u << 2 | 1u << 26 | 0xfeu << 18 | 607u << 8; /* threshold 80 C */
+		D_TS_CTL = v;
+		D_TS_CTL = v | 2u;
+	}
 }
 
 /* called from the mailbox loop: one record when the period is due */
@@ -111,7 +134,8 @@ void diag_poll(void) {
 	r[3] = D_PV2_STAT;
 	r[4] = D_HD_FRAME_COUNT;
 	r[5] = D_TS_STAT;
-	r[6] = (A2W_PLLB_CTRL & 0x3ffu) << 20 | (A2W_PLLB_FRAC & 0xfffffu);
+	/* ARM channel divider (1 or 2, arm.c) in bits 31:30, PLLB ndiv, frac */
+	r[6] = (A2W_PLLB_ARM & 3u) << 30 | (A2W_PLLB_CTRL & 0x3ffu) << 20 | (A2W_PLLB_FRAC & 0xfffffu);
 	r[7] = marker;
 	h[H_WRITTEN] = n + 1;
 }
