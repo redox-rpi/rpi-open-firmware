@@ -464,7 +464,11 @@ uint32_t bs_redox_step(uint32_t pct, uint32_t flags, const char *s) {
 	draw_lines(g_bs_fb);
 	copy_rows(&g_view, first ? 0 : BS_BAR_Y, BS_H, true);
 	g_redox_n++;
-	g_redox_us += timer_us() - t0;
+	uint32_t us = timer_us() - t0;
+	g_redox_us += us;
+	/* one serial line per step, so a test without a screen sees them */
+	printf("bootscreen: Redox step %u%s%s, bar %u %%, \"%s\", %u us\n", g_redox_n, flags & 1 ? ", failed" : "",
+	       flags & 2 ? ", last" : "", g_pct, line, us);
 	if (g_done)
 		printf("bootscreen: Redox's last step, %u steps, drawing %u us\n", g_redox_n, g_redox_us);
 	return 1;
