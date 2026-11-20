@@ -495,8 +495,13 @@ static bool run(int argc, char **argv) {
 	} else if (!strcmp_s(c, "boot") && n == 0) {
 		printf("ok boot\n");
 		return true;
+	} else if (!strcmp_s(c, "diag") && n == 1) {
+		diag_start(a[0]);
+		printf("ok diag %s, ring at %08X, %u bytes\n", a[0] ? "on" : "off", diag_bus_addr(), diag_bytes());
+	} else if (!strcmp_s(c, "diagdump") && n == 1) {
+		diag_dump(a[0]);
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | hdmi [RGB] | hdmistat | bs | regs | vpuclk D | armmax M | boot64 [K [DTB]] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | hdmi [RGB] | hdmistat | diag US(hex, 0 off) | diagdump N | bs | regs | vpuclk D | armmax M | boot64 [K [DTB]] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();
