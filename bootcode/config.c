@@ -18,7 +18,8 @@
  *   diag_period=US       ours, not Broadcom's: start the display sampler
  *                        (diag.c, #66) before the ARM, one record per US
  *   arm_freq=MHZ         top ARM clock for the mailbox (the governor), as
- *                        Broadcom's; 600..1400, the Zero 2 W stays at 1000
+ *                        Broadcom's; 600..1400, default 1000 (no core voltage
+ *                        control yet), the Zero 2 W stays at 1000
  *
  * Filters: a [section] line decides whether the lines after it apply.
  * [all] applies everything again. A model filter ([pi3], [pi3+], [pi02],
