@@ -184,6 +184,8 @@ bool bs_start(const char *a, const char *b, uint32_t pct);
 void bs_step(uint32_t pct, const char *a, const char *b);
 void bs_fail(const char *a, const char *b);
 void bs_handover(const struct fb_view *v);
+#define BS_STEP_MAX 79u /* text of a Redox step (#43) */
+uint32_t bs_redox_step(uint32_t pct, uint32_t flags, const char *s);
 void bs_title(const char *s);
 void bs_update(uint32_t pct, const char *a, const char *b);
 bool bs_config_title(const char *txt, uint32_t len);
@@ -195,6 +197,8 @@ void bs_report(void);
 #define bs_fail(a, b) ((void)(a), (void)(b))
 #define bs_update(pct, a, b) ((void)(pct), (void)(a), (void)(b))
 #define bs_handover(v) ((void)(v))
+#define bs_redox_step(p, f, s) ((void)(p), (void)(f), (void)(s), 0u)
+#define BS_STEP_MAX 79u
 #define bs_config_title(t, n) ((void)(t), (void)(n), false)
 #endif
 

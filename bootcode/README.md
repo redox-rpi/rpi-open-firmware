@@ -164,7 +164,7 @@ our own VPU loader (M2) replaces the built-in Broadcom image.
 | `monitor.c`, `go-test.S`, `rbc-load.sh`, `libc.c` | serial monitor (test builds), its test payload and host script, `memset`/`memcpy` | new; cache flush registers from Broadcom's `vpu_l1_cache_ctrl.h` |
 | `sdram.c` | LPDDR2 set-up and self test | rpi-open-firmware `firmware/sdram.c` (Julian Brown and the rpi-open-firmware authors); sequence, timings and magic values unchanged; self test extended |
 | `hdmi.c`, `hvs.c` | 1080p60 DVI on HDMI and the HVS plane for a framebuffer (#442); `tests/hvs-sim.sh` in resim | new; order and register names from Linux `drivers/gpu/drm/vc4` and `clk-bcm2835.c`, analog values from lk-overlay; target values from start.elf (Pi test row 337) |
-| `bootscreen.c` | boot screen on HDMI: title, progress bar, boot steps (#430); `tests/bootscreen-sim.sh` in resim against `tests/bootscreen-model.py` | new |
+| `bootscreen.c` | boot screen on HDMI: title, progress bar, boot steps (#430), Redox's own steps after the handover through tag 0x000f0002 (#43); `tests/bootscreen-sim.sh` in resim against `tests/bootscreen-model.py` | new |
 | `font8x16.h` | 8x16 bitmap font, printable ASCII | U-Boot `include/video_font_8x16.h` (GPL-2.0+), cut to characters 32..126 |
 | `hw.h` | common header | new; register names from Broadcom's headers |
 | `../broadcom/` | VideoCore IV register definitions | released by Broadcom (BSD), used as they are |

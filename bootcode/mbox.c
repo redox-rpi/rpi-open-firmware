@@ -399,6 +399,20 @@ static bool handle(volatile struct tag *t) {
 		r[1] = diag_bytes();
 		reply(t, r, 8);
 		return true;
+	case 0x000f0002: { /* redox-rpi: Redox's boot step on the boot screen (#43): pct, flags, text -> 1 shown */
+		char s[BS_STEP_MAX + 1];
+		uint32_t n = 0;
+		for (uint32_t i = 8; i < t->size && n < BS_STEP_MAX; i++) {
+			char c = ((volatile char *)t->v)[i];
+			if (!c)
+				break;
+			s[n++] = c;
+		}
+		s[n] = 0;
+		r[0] = t->size >= 8 ? bs_redox_step(a, b, s) : 0;
+		reply(t, r, 4);
+		return true;
+	}
 	case 0x00030046: /* throttled: never */
 		r[0] = 0;
 		reply(t, r, 4);
