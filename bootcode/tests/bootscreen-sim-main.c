@@ -60,7 +60,7 @@ static void sums(const char *what) {
 static uint32_t want_pixel(uint32_t p, uint32_t depth, uint32_t order) {
 	/* bit replication, as the HVS widens RGB565 */
 	uint32_t r = (p >> 11) * 33 >> 2, g = (p >> 5 & 63) * 65 >> 4, b = (p & 31) * 33 >> 2;
-	if (!order) {
+	if (depth == 16 ? !order : order) { /* hvs.c fb_pixel(), #82 */
 		uint32_t t = r;
 		r = b, b = t;
 	}
