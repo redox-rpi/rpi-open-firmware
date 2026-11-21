@@ -2,13 +2,14 @@
  * diag.c: a sampler for finding display and graphics stalls (rof #66).
  *
  * While the ARM runs, the VPU only answers the mailbox. When the ARM asks
- * (mailbox tag 0x000f0001) or the monitor's "diag" command starts it, the
- * VPU also writes one record per period into a ring buffer in the
- * VideoCore's memory, which the ARM can read: 2 MB into the VideoCore's
- * part (g_arm_mem), between the boot screen panel and the ARM's
- * framebuffer (mbox.c FB_BASE, 4 MB in). Not at the end of the SDRAM: on
- * a 1 GB board the ARM sees its last 16 MB as the peripherals at
- * 0x3f000000 (Pi test 516).
+ * (mailbox tag 0x000f0001), config.txt has diag_period=US (started before
+ * the ARM) or the monitor's "diag" command starts it, the VPU also
+ * writes one record per period into a ring buffer in the VideoCore's
+ * memory, which the ARM can read: 2 MB into the VideoCore's part
+ * (g_arm_mem), between the boot screen panel and the ARM's framebuffer
+ * (mbox.c FB_BASE, 4 MB in). Not at the end of the SDRAM: on a 1 GB
+ * board the ARM sees its last 16 MB as the peripherals at 0x3f000000
+ * (Pi test 516).
  *
  *   header, 16 words: magic "DIAG", version, record words, records in the
  *     ring, records written (wraps the ring; never reset while running),
@@ -18,6 +19,10 @@
  *     count, thermal sensor status (raw), ARM clock word (bits 31:30 the
  *     ARM channel divider, 29:20 PLLB ndiv, 19:0 frac),
  *     marker as it was at this sample
+ *
+ * The devicetree's /chosen redox-rpi,diag-ring = <ARM address, bytes>
+ * names the ring (boot64.c), so a reader (redox-rpi tools/diagread, Redox
+ * and Linux) needs no mailbox to find it.
  *
  * No V3D counters yet: our firmware does not power V3D (M5). The AXI bus
  * monitors come next, once their registers are confirmed.
