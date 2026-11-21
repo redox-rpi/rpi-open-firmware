@@ -159,9 +159,9 @@ int main(void) {
 	bs_start("redox", 0, 60);
 	keep(800, 200, 32, 1, 0);
 	uint32_t r1 = bs_redox_step(50, 0, "Redox: drivers\t\x01");
-	/* bar: 60 % + 50 % of the remaining 40 % = 80 % */
+	/* bar: the firmware's 60 is 60 * 40 / 90 = 26 %, + 50 % of the remaining 74 % = 63 % */
 	/* bootscreen.c: border 2, bar at line 48, 16 high; C_BAR ff8000, C_EMPTY 303030 */
-	uint32_t done = (BS_W - 2 * 2) * 80 / 100 & ~1u, y = 48 + 8;
+	uint32_t done = (BS_W - 2 * 2) * 63 / 100 & ~1u, y = 48 + 8;
 	const volatile uint16_t *row = (const volatile uint16_t *)(g_bs_fb + y * BS_W * 2);
 	bool bar = row[2 + done - 1] == 0xfc00u && row[2 + done] == 0x3186u;
 	check(800, 200, 32, 1, 0, "step");

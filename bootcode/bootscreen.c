@@ -101,6 +101,18 @@ static void text(volatile uint8_t *fb, uint32_t x, uint32_t y, const char *s, ui
 	}
 }
 
+/*
+ * The bar by time (#43 follow-up): the firmware's own steps give pct 0..90
+ * (90: the ARM runs) and fill the first BS_FW_SHARE % of the bar; Redox's
+ * steps fill the rest. The firmware's part is the short one (about 4 s of
+ * about 22 s to the login, Test 559), and a monitor shows the picture only
+ * 1.5 to 3 s after HDMI starts.
+ */
+#define BS_FW_SHARE 40u
+static uint32_t fw_bar(uint32_t pct) {
+	return pct >= 90 ? BS_FW_SHARE : pct * BS_FW_SHARE / 90;
+}
+
 static void draw_bar(volatile uint8_t *fb) {
 	uint32_t inner = BS_W - 2 * BS_BORDER;
 	uint32_t done = (inner * g_pct / 100) & ~1u;
@@ -169,7 +181,7 @@ bool bs_start(const char *a, const char *b, uint32_t pct) {
 	g_on = false;
 	g_arm = g_redox = g_done = false;
 	g_nline = 0;
-	g_pct = pct;
+	g_pct = fw_bar(pct);
 	add_line(a, b, false);
 	if (!hdmi_on(0x000000)) {
 		printf("bootscreen: HDMI did not come up, no boot screen\n");
@@ -191,6 +203,7 @@ static void step(uint32_t pct, const char *a, const char *b, bool fail) {
 		return;
 	uint32_t t0 = timer_us();
 	add_line(a, b, fail);
+	pct = fw_bar(pct);
 	if (pct > g_pct) /* the bar never goes back */
 		g_pct = pct;
 	draw_bar(g_bs_fb);
