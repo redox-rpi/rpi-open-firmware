@@ -6,8 +6,10 @@
 #
 #   scripts/build-image.sh --release-netboot --experiment quiet-boot \
 #       --experiment boot-no-errors --experiment rof-test-autologin
-#   scripts/console-image.sh --minimal     (no network, sound, desktop or
-#                                           developer tools; USB keyboard)
+#   scripts/console-image.sh --minimal --root-on-card
+#                           (no network, sound, desktop or developer tools;
+#                           USB keyboard; initfs without drivers for other
+#                           hardware; root on the card, redox-rpi#615 A)
 #
 #   quiet-boot          HDMI shows the boot screen, then the console
 #   boot-no-errors      no avoidable ERROR/WARN lines, kernel DEBUG lines
@@ -21,10 +23,11 @@
 #      the version does not name it
 #   2. Redox, in the redox-rpi clone given with --redox (a clone of your
 #      own: the build writes into its upstream/ and build/)
-#   3. the card: one FAT32 partition with bootcode.bin, config.txt,
-#      cmdline.txt (quiet), kernel8.img, initramfs, Broadcom's devicetrees
+#   3. the card: a FAT32 partition with bootcode.bin, config.txt,
+#      cmdline.txt (quiet, and the root partition's REDOXFS_UUID),
+#      kernel8.img, initramfs (the initfs only), Broadcom's devicetrees
 #      with the overlays merged for both boards (make-dtb.sh) and
-#      LICENCE.broadcom
+#      LICENCE.broadcom; then the RedoxFS root partition
 #   4. rof-card.txt on the card and next to the image: both commits, the
 #      Redox build ID, the flags and the SHA-256 of every boot file
 #   5. with --publish: the image server, swiftflash family redox-rpi-rof
@@ -55,7 +58,7 @@ FAMILY=redox-rpi-rof
 EXPERIMENTS=(quiet-boot boot-no-errors rof-test-autologin)
 REDOX_FLAGS=(--release-netboot)
 for e in "${EXPERIMENTS[@]}"; do REDOX_FLAGS+=(--experiment "$e"); done
-CARD_MIB=96
+FAT_MIB=63 # partition 1 from 1 MiB; the RedoxFS partition follows
 redox=""
 version=""
 out="$HERE/build/rof-card"
@@ -122,7 +125,7 @@ echo "== Redox: build-image.sh ${REDOX_FLAGS[*]}"
 	{ tail -20 "$work/redox-build.log" >&2; die "Redox build failed (log $work/redox-build.log)"; }
 rx_build=$(grep -o 'build v[^,]*' "$work/redox-build.log" | tail -1 | cut -d' ' -f2)
 echo "== Redox: console-image.sh --minimal ($rx_build)"
-"$redox/scripts/console-image.sh" --minimal \
+"$redox/scripts/console-image.sh" --minimal --root-on-card \
 	--image "$redox/upstream/redox/build/aarch64/release-netboot/harddrive.img" \
 	--out "$work/console" >"$work/console.log" 2>&1 ||
 	{ tail -20 "$work/console.log" >&2; die "console-image.sh failed (log $work/console.log)"; }
@@ -130,6 +133,8 @@ for e in "${EXPERIMENTS[@]}"; do
 	grep -q "EXPERIMENTS=.*\\b$e\\b" "$work/console/manifest.txt" || die "the console image has no $e"
 done
 grep -q '^prune config/console-prune-minimal.txt' "$work/console/manifest.txt" || die "the console image is not --minimal"
+grep -q '^prune_initfs ' "$work/console/manifest.txt" || die "the console image has the full initfs (redox-rpi too old?)"
+root_words=$(cat "$work/console/cmdline-root.txt" 2>/dev/null) || die "no cmdline-root.txt: console-image.sh without --root-on-card?"
 
 # 3. The card's FAT partition
 echo "== card"
@@ -168,7 +173,7 @@ gpu_mem=16
 # Boot screen title of the open firmware.
 boot_title=Redox minimal, open firmware $version
 EOF
-printf 'quiet RPI_FB=1280x720\n' >"$work/fat/cmdline.txt"
+printf 'quiet RPI_FB=1280x720 %s\n' "$root_words" >"$work/fat/cmdline.txt"
 
 {
 	echo "# $name"
@@ -179,6 +184,7 @@ printf 'quiet RPI_FB=1280x720\n' >"$work/fat/cmdline.txt"
 	echo "redox_build $rx_build"
 	echo "redox_flags build-image.sh ${REDOX_FLAGS[*]}; console-image.sh --minimal"
 	echo "broadcom_files $(basename "$fwc")"
+	echo "root partition 2, RedoxFS $(sha256sum "$work/console/console.fs" | cut -d' ' -f1), $root_words"
 	grep -E '^(release (EXPERIMENTS|IMAGE)|prune )' "$work/console/manifest.txt"
 	(cd "$work/fat" && sha256sum bootcode.bin config.txt cmdline.txt kernel8.img initramfs \
 		redox-3bp.dtb redox-zero2w.dtb | sed 's/^/sha256 /')
@@ -186,10 +192,13 @@ printf 'quiet RPI_FB=1280x720\n' >"$work/fat/cmdline.txt"
 
 img="$out/$name.img"
 rm -f "$img"
-truncate -s "${CARD_MIB}M" "$img"
-echo 'start=2048, type=c, bootable' | sfdisk -q "$img"
+root_bytes=$(stat -c %s "$work/console/console.fs")
+truncate -s $(((1 + FAT_MIB) * 1048576 + root_bytes)) "$img"
+printf 'start=2048, size=%d, type=c, bootable\nstart=%d, size=%d, type=83\n' \
+	$((FAT_MIB * 2048)) $(((1 + FAT_MIB) * 2048)) $((root_bytes / 512)) | sfdisk -q "$img"
+dd if="$work/console/console.fs" of="$img" bs=1M seek=$((1 + FAT_MIB)) conv=notrunc status=none
 fat="$img@@1048576"
-mformat -i "$fat" -F -v REDOXBOOT -T $(((CARD_MIB - 1) * 2048)) ::
+mformat -i "$fat" -F -v REDOXBOOT -T $((FAT_MIB * 2048)) ::
 mmd -i "$fat" ::/overlays
 mcopy -i "$fat" "$work/fat/overlays/"* ::/overlays/
 for f in "$work/fat"/*; do
