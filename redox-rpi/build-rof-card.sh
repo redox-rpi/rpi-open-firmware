@@ -4,9 +4,16 @@
 # Redox flags are fixed here, so a card never misses the minimal
 # configuration:
 #
-#   scripts/build-image.sh --release-netboot --experiment quiet-boot
+#   scripts/build-image.sh --release-netboot --experiment quiet-boot \
+#       --experiment boot-no-errors --experiment rof-test-autologin
 #   scripts/console-image.sh --minimal     (no network, sound, desktop or
 #                                           developer tools; USB keyboard)
+#
+#   quiet-boot          HDMI shows the boot screen, then the console
+#   boot-no-errors      no avoidable ERROR/WARN lines, kernel DEBUG lines
+#                       off the serial line (#59, redox-rpi#556)
+#   rof-test-autologin  root logged in on the HDMI console, a test card
+#                       only (the serial console keeps its login prompt)
 #
 # Steps:
 #   1. firmware: host tests, then the release build (make BOOT=1 HDMI=1);
@@ -45,7 +52,9 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 FAMILY=redox-rpi-rof
-REDOX_FLAGS=(--release-netboot --experiment quiet-boot)
+EXPERIMENTS=(quiet-boot boot-no-errors rof-test-autologin)
+REDOX_FLAGS=(--release-netboot)
+for e in "${EXPERIMENTS[@]}"; do REDOX_FLAGS+=(--experiment "$e"); done
 CARD_MIB=96
 redox=""
 version=""
@@ -67,6 +76,9 @@ done
 redox="$(cd "$redox" && pwd)"
 [ -x "$redox/scripts/build-image.sh" ] && [ -x "$redox/scripts/console-image.sh" ] ||
 	die "$redox is not a redox-rpi clone with console-image.sh"
+for e in "${EXPERIMENTS[@]}"; do
+	[ -d "$redox/patches/experiments/$e" ] || die "$redox has no experiment $e (too old?)"
+done
 for need in mcopy mmd mformat sfdisk fdtoverlay fdtget fdtput sha256sum; do
 	command -v "$need" >/dev/null || die "$need missing"
 done
@@ -114,7 +126,9 @@ echo "== Redox: console-image.sh --minimal ($rx_build)"
 	--image "$redox/upstream/redox/build/aarch64/release-netboot/harddrive.img" \
 	--out "$work/console" >"$work/console.log" 2>&1 ||
 	{ tail -20 "$work/console.log" >&2; die "console-image.sh failed (log $work/console.log)"; }
-grep -q 'EXPERIMENTS=.*quiet-boot' "$work/console/manifest.txt" || die "the console image has no quiet-boot"
+for e in "${EXPERIMENTS[@]}"; do
+	grep -q "EXPERIMENTS=.*\\b$e\\b" "$work/console/manifest.txt" || die "the console image has no $e"
+done
 grep -q '^prune config/console-prune-minimal.txt' "$work/console/manifest.txt" || die "the console image is not --minimal"
 
 # 3. The card's FAT partition
