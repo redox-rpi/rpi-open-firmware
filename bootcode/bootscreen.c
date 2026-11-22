@@ -101,6 +101,18 @@ static void text(volatile uint8_t *fb, uint32_t x, uint32_t y, const char *s, ui
 	}
 }
 
+/*
+ * The bar by time (#43 follow-up): the firmware's own steps give pct 0..90
+ * (90: the ARM runs) and fill the first BS_FW_SHARE % of the bar; Redox's
+ * steps fill the rest. The firmware's part is the short one (about 4 s of
+ * about 22 s to the login, Test 559), and a monitor shows the picture only
+ * 1.5 to 3 s after HDMI starts.
+ */
+#define BS_FW_SHARE 40u
+static uint32_t fw_bar(uint32_t pct) {
+	return pct >= 90 ? BS_FW_SHARE : pct * BS_FW_SHARE / 90;
+}
+
 static void draw_bar(volatile uint8_t *fb) {
 	uint32_t inner = BS_W - 2 * BS_BORDER;
 	uint32_t done = (inner * g_pct / 100) & ~1u;
@@ -169,7 +181,7 @@ bool bs_start(const char *a, const char *b, uint32_t pct) {
 	g_on = false;
 	g_arm = g_redox = g_done = false;
 	g_nline = 0;
-	g_pct = pct;
+	g_pct = fw_bar(pct);
 	add_line(a, b, false);
 	if (!hdmi_on(0x000000)) {
 		printf("bootscreen: HDMI did not come up, no boot screen\n");
@@ -191,6 +203,7 @@ static void step(uint32_t pct, const char *a, const char *b, bool fail) {
 		return;
 	uint32_t t0 = timer_us();
 	add_line(a, b, fail);
+	pct = fw_bar(pct);
 	if (pct > g_pct) /* the bar never goes back */
 		g_pct = pct;
 	draw_bar(g_bs_fb);
@@ -296,6 +309,23 @@ static uint32_t panel_pixel(uint32_t p, uint32_t depth, uint32_t order) {
 #define BSDMA_TI_BURST(n) ((uint32_t)(n) << 12)
 #define BS_DMA_OFF 0x40000u /* behind the 200 KB panel */
 
+/* how the last handover cleared the ARM's buffer, for the serial line (#82) */
+static const char *g_clear_how = "none";
+static uint32_t g_clear_left;
+
+/*
+ * Words of the n bytes at dst (uncached) that are not 0, one sample per
+ * 4 KB and the last word. The DMA clear was only checked at its first and
+ * last word, and on the Zero 2 W the screen kept old memory (#82).
+ */
+static uint32_t not_cleared(uint32_t dst, uint32_t n) {
+	volatile uint32_t *d = (volatile uint32_t *)(ALIAS_UNCACHED | (dst & 0x3fffffffu));
+	uint32_t left = d[n / 4 - 1] != 0;
+	for (uint32_t i = 0; i < n / 4; i += 1024)
+		left += d[i] != 0;
+	return left;
+}
+
 static bool dma_clear(uint32_t dst, uint32_t n) {
 	if ((dst | n) & 15 || !n || n >= 1u << 30)
 		return false;
@@ -327,9 +357,9 @@ static bool dma_clear(uint32_t dst, uint32_t n) {
 	BSDMA_CONBLK = 0;
 	if (!done)
 		return false;
-	/* first and last word: did it write? */
-	volatile uint32_t *d = (volatile uint32_t *)(ALIAS_UNCACHED | (dst & 0x3fffffffu));
-	return d[0] == 0 && d[n / 4 - 1] == 0;
+	/* did it write everywhere? Else the VPU clears (#82) */
+	g_clear_left = not_cleared(dst, n);
+	return g_clear_left == 0;
 }
 
 /* the first shown pixel of v, uncached */
@@ -381,7 +411,10 @@ static void keep_panel(const struct fb_view *v) {
 	volatile uint8_t *base = view_base(v);
 	uint32_t first = (v->base & 0x3fffffffu) + v->yoff * pitch + v->xoff * bpp;
 	bool whole = v->xoff == 0 && v->w == v->vw; /* the shown rows in one piece */
+	g_clear_left = 0;
+	g_clear_how = "DMA";
 	if (!whole || !dma_clear(ALIAS_UNCACHED | first, v->h * pitch)) {
+		g_clear_how = g_clear_left ? "VPU, DMA left samples" : "VPU";
 		for (uint32_t y = 0; y < v->h; y++) {
 			volatile uint32_t *row = (volatile uint32_t *)(base + y * pitch);
 			for (uint32_t i = 0; i < v->w * bpp / 4; i++)
@@ -425,8 +458,8 @@ void bs_handover(const struct fb_view *v) {
 		}
 	}
 	printf("bootscreen: handed over to the ARM's framebuffer %u ms after it came up; HDMI start %u us, drawing %u us, "
-	       "copy %u us\n",
-	       (timer_us() - g_t_up) / 1000, g_t_hdmi, g_t_draw, timer_us() - t0);
+	       "copy %u us, clear by %s (%u)\n",
+	       (timer_us() - g_t_up) / 1000, g_t_hdmi, g_t_draw, timer_us() - t0, g_clear_how, g_clear_left);
 }
 
 /*
@@ -462,7 +495,10 @@ uint32_t bs_redox_step(uint32_t pct, uint32_t flags, const char *s) {
 	}
 	draw_bar(g_bs_fb);
 	draw_lines(g_bs_fb);
-	copy_rows(&g_view, first ? 0 : BS_BAR_Y, BS_H, true);
+	if (first) /* the whole buffer black again, the panel in it (#82) */
+		keep_panel(&g_view);
+	else
+		copy_rows(&g_view, BS_BAR_Y, BS_H, true);
 	g_redox_n++;
 	uint32_t us = timer_us() - t0;
 	g_redox_us += us;
