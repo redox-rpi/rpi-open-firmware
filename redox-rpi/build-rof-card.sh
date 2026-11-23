@@ -116,7 +116,9 @@ make -s -C "$HERE/bootcode" BOOT=1 HDMI=1 BUILD_ID="$build_id" >"$work/fw-build.
 	{ tail -20 "$work/fw-build.log" >&2; die "firmware build failed"; }
 ! grep -qi warning "$work/fw-build.log" || { grep -i warning "$work/fw-build.log" >&2; die "the release build has warnings"; }
 bootcode="$HERE/bootcode/build/bootcode.bin"
-banner=$(strings "$bootcode" | grep -m1 "redox-rpi bootcode") || die "no banner in $bootcode"
+# grep reads to the end (no -m1): with pipefail, an early exit could kill strings with SIGPIPE
+banner=$(strings "$bootcode" | grep "redox-rpi bootcode" | sed -n 1p)
+[ -n "$banner" ] || die "no banner in $bootcode"
 [[ "$banner" = *"release, boots from the SD card, boot screen on HDMI"* ]] ||
 	die "not the HDMI release build: $banner"
 
