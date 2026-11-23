@@ -158,6 +158,7 @@ our own VPU loader (M2) replaces the built-in Broadcom image.
 | `fat.c` | FAT16/32 root directory and file reads, new code from the FAT specification; host test in `tests/fat-test.sh` (FAT16 and FAT32 images made with mtools) |
 | `dt.c` | edits the devicetree as `start.elf` does: `/memory`, `/chosen`, and `dtoverlay=` overlays (libfdt's rules: `__fixups__`, `__local_fixups__`); new code from the Devicetree Specification; host test in `tests/fdt-test.sh` (the result equals `fdtoverlay`'s) |
 | `config.c` | the `config.txt` keys and filters of a direct boot (rof #48); host test in `tests/config-test.sh` |
+| `thermal.c` | SoC temperature (mailbox tag 0x00030006) and the ARM clock throttle from 80 C, flags in tag 0x00030046 (rof #108); host test in `tests/thermal-test.sh` | new; sensor registers and conversion from Linux `bcm2835_thermal.c` and the bcm283x devicetree; thresholds as Broadcom firmware behaves |
 | `armstub8-builtin.h` | the built-in armstub8 from `../armstub`, `make armstub-header`; `tests/armstub-header.sh --check` compares it |
 | `arm.c` | ARM start for the monitor's `arm`: address map, ARM clock (PLLB), ARM power domain, bridge; ported from rpi-open-firmware's ARM control and power drivers |
 | `chain-image.S` | places a `bootcode.bin` image in the boot selector build | new; the image is Broadcom's, unchanged |

@@ -142,6 +142,12 @@ void diag_poll(void);
 void diag_dump(uint32_t count);
 uint32_t diag_bus_addr(void);
 uint32_t diag_bytes(void);
+/* thermal.c (#108): SoC temperature and the ARM clock throttle */
+void thermal_start(void);
+void thermal_poll(void);
+int32_t thermal_mc(void);      /* millidegrees, 0 before the first reading */
+uint32_t thermal_flags(void);  /* mailbox tag 0x00030046 */
+uint32_t thermal_set_arm_mhz(uint32_t mhz); /* the OS's rate, returns kHz */
 void mbox_serve(void) __attribute__((noreturn));
 /* monitor: ask for a framebuffer through the real tag path, as U-Boot does */
 bool mbox_fb_test(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t *base, uint32_t *pitch);

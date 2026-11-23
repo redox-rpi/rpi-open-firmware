@@ -376,7 +376,7 @@ static bool handle(volatile struct tag *t) {
 		else if (a == CLK_ARM && t->id == 0x00030007)
 			r[1] = 600000000u;
 		else if (a == CLK_ARM && t->id == 0x00038002) {
-			r[1] = arm_set_mhz(b / 1000000u) * 1000u;
+			r[1] = thermal_set_arm_mhz(b / 1000000u) * 1000u;
 		}
 		reply(t, r, 8);
 		return true;
@@ -388,6 +388,11 @@ static bool handle(volatile struct tag *t) {
 		reply(t, w, 12);
 		return true;
 	}
+	case 0x00030006: /* temperature, millidegrees (#108) */
+		r[0] = a;
+		r[1] = (uint32_t)thermal_mc();
+		reply(t, r, 8);
+		return true;
 	case 0x0003000a: /* max temperature, millidegrees */
 		r[0] = a;
 		r[1] = 85000;
@@ -413,8 +418,8 @@ static bool handle(volatile struct tag *t) {
 		reply(t, r, 4);
 		return true;
 	}
-	case 0x00030046: /* throttled: never */
-		r[0] = 0;
+	case 0x00030046: /* throttled (#108): bits 1, 2 now, 17, 18 since boot */
+		r[0] = thermal_flags();
 		reply(t, r, 4);
 		return true;
 	case 0x00030048: /* notify reboot */
@@ -581,6 +586,8 @@ static void property(uint32_t bus) {
 /* answer one waiting request, if there is one */
 void mbox_poll(void) {
 	diag_poll();
+	if (g_mbox_on)
+		thermal_poll();
 	if (!g_mbox_on || (ARM_1_MAIL1_STA & ARM_MS_EMPTY))
 		return;
 	uint32_t msg = ARM_1_MAIL1_RD;
