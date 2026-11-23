@@ -31,7 +31,8 @@
 #   4. rof-card.txt on the card and next to the image: both commits, the
 #      Redox build ID, the flags and the SHA-256 of every boot file
 #   5. with --publish: the image server, swiftflash family redox-rpi-rof
-#      (redox-rpi's scripts/publish-sdcard.sh, also as -latest)
+#      (redox-rpi's scripts/publish-sdcard.sh, also as -latest, with the
+#      Redox build manifest)
 #
 # Both trees must be clean (no uncommitted changes to tracked files), so
 # the commits named are the ones built.
@@ -124,6 +125,8 @@ echo "== Redox: build-image.sh ${REDOX_FLAGS[*]}"
 "$redox/scripts/build-image.sh" "${REDOX_FLAGS[@]}" >"$work/redox-build.log" 2>&1 ||
 	{ tail -20 "$work/redox-build.log" >&2; die "Redox build failed (log $work/redox-build.log)"; }
 rx_build=$(grep -o 'build v[^,]*' "$work/redox-build.log" | tail -1 | cut -d' ' -f2)
+rx_manifest="$redox/build/manifests/release-netboot-$rx_build.toml"
+[ -n "$rx_build" ] && [ -f "$rx_manifest" ] || die "no build manifest for build ${rx_build:-?} in $redox/build/manifests"
 echo "== Redox: console-image.sh --minimal ($rx_build)"
 "$redox/scripts/console-image.sh" --minimal --root-on-card \
 	--image "$redox/upstream/redox/build/aarch64/release-netboot/harddrive.img" \
@@ -214,6 +217,7 @@ cat "$work/fat/rof-card.txt"
 # 5. Publish
 if [ "$publish" = yes ]; then
 	echo "== publish"
-	args=(--family "$FAMILY" --version "$version" --owner open-firmware --commit "$fw_commit" --latest)
+	args=(--family "$FAMILY" --version "$version" --owner open-firmware --commit "$fw_commit" --latest
+		--manifest "$rx_manifest")
 	"$redox/scripts/publish-sdcard.sh" "$img" "${args[@]}"
 fi
