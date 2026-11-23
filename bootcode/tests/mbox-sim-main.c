@@ -59,6 +59,9 @@ int32_t thermal_mc(void) {
 uint32_t thermal_flags(void) {
 	return 0;
 }
+int32_t thermal_limit_mc(void) {
+	return 85000;
+}
 uint32_t thermal_set_arm_mhz(uint32_t mhz) {
 	return arm_set_mhz(mhz);
 }

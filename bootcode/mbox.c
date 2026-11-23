@@ -395,7 +395,7 @@ static bool handle(volatile struct tag *t) {
 		return true;
 	case 0x0003000a: /* max temperature, millidegrees */
 		r[0] = a;
-		r[1] = 85000;
+		r[1] = (uint32_t)thermal_limit_mc();
 		reply(t, r, 8);
 		return true;
 	case 0x000f0001: /* redox-rpi: diag sampler (#66): period in us (0 stops) -> ring bus address, bytes */

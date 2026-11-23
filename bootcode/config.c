@@ -226,6 +226,10 @@ void cfg_parse(struct boot_cfg *c, const char *txt, uint32_t len, uint32_t board
 			copy_word(c->overlay[c->n_overlays], sizeof c->overlay[0], v, n, "dtoverlay");
 			if (c->overlay[c->n_overlays][0])
 				c->n_overlays++;
+		} else if (eq && word_is(k, kn, "temp_limit")) {
+			uint32_t x;
+			if (number(v, vn, &x))
+				c->temp_limit = x;
 		} else if (eq && word_is(k, kn, "dtparam")) {
 			note("dtparam not supported: ", v, vn, "");
 		} else if (word_is(k, kn, "include") || word_is(k, kn, "os_prefix")) {

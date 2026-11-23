@@ -116,6 +116,7 @@ struct boot_cfg {
 	char kernel[32], initramfs[32], armstub[32], device_tree[40], cmdline[32];
 	char overlay[CFG_OVERLAYS][32];
 	uint32_t n_overlays, unknown_filters;
+	uint32_t temp_limit; /* temp_limit= in C, 0 = not set (#108) */
 };
 void cfg_defaults(struct boot_cfg *c);
 void cfg_parse(struct boot_cfg *c, const char *txt, uint32_t len, uint32_t board_type, uint32_t lev0, uint32_t lev1);
@@ -148,6 +149,8 @@ void thermal_poll(void);
 int32_t thermal_mc(void);      /* millidegrees, 0 before the first reading */
 uint32_t thermal_flags(void);  /* mailbox tag 0x00030046 */
 uint32_t thermal_set_arm_mhz(uint32_t mhz); /* the OS's rate, returns kHz */
+void thermal_set_limit(uint32_t c); /* temp_limit= in C, 40..85 */
+int32_t thermal_limit_mc(void);   /* mailbox tag 0x0003000a */
 void mbox_serve(void) __attribute__((noreturn));
 /* monitor: ask for a framebuffer through the real tag path, as U-Boot does */
 bool mbox_fb_test(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t *base, uint32_t *pitch);
