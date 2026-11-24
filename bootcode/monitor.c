@@ -57,6 +57,7 @@
  *                  -> ok hdmistat
  *   regs           clock/PLL/GPIO registers next to start.elf's -> ok regs N
  *   vpuclk D       VPU clock PLLC CORE0 / D (3..8; 4 = 250 MHz) -> ok vpuclk
+ *   temp           SoC temperature (rof #108) -> ok temp N mC, throttled F, ARM K kHz
  *   armmax M       top ARM clock for the mailbox in MHz, hex (258..578;
  *                  4B0 = 1200, the default; 578 = 1400) -> ok armmax
  *   boot64 [K [D]] load armstub8, kernel K and devicetree D from the FAT
@@ -463,6 +464,9 @@ static bool run(int argc, char **argv) {
 	} else if (!strcmp_s(c, "armmax") && n == 1 && a[0] >= 600 && a[0] <= 1400) {
 		arm_max_mhz = a[0];
 		printf("ok armmax %u MHz\n", arm_max_mhz);
+	} else if (!strcmp_s(c, "temp") && n == 0) {
+		int32_t mc = thermal_mc();
+		printf("ok temp %d mC, throttled %08X, ARM %u kHz\n", (int)mc, thermal_flags(), arm_khz());
 	} else if (!strcmp_s(c, "vpuclk") && n == 1 && a[0] >= 3 && a[0] <= 8) {
 		vpu_clock(a[0]);
 		printf("ok vpuclk PLLC CORE0 / %u, CM_VPUCTL %08X DIV %08X\n", a[0], CM_VPUCTL, CM_VPUDIV);
@@ -501,7 +505,7 @@ static bool run(int argc, char **argv) {
 	} else if (!strcmp_s(c, "diagdump") && n == 1) {
 		diag_dump(a[0]);
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | hdmi [RGB] | hdmistat | diag US(hex, 0 off) | diagdump N | bs | regs | vpuclk D | armmax M | boot64 [K [DTB]] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | hdmi [RGB] | hdmistat | diag US(hex, 0 off) | diagdump N | bs | regs | vpuclk D | armmax M | temp | boot64 [K [DTB]] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();

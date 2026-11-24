@@ -17,6 +17,15 @@
  * draws its own (quiet boot step I4A; until then the buffer held whatever
  * the SDRAM had).
  *
+ * Redox's own steps (quiet boot I4B, #43): mailbox tag 0x000f0002 brings
+ * a percentage of Redox's boot, flags and a line of text. Redox sends them
+ * only with QUIET=1, when nothing else draws into its framebuffer, and the
+ * last one before its first console. bs_redox_step() draws them into the
+ * panel and copies the changed rows into the ARM's framebuffer, where the
+ * handover put the panel; Redox's 0..100 % fill the rest of the bar. If
+ * the ARM changes its framebuffer while Redox reports, the panel goes
+ * along. After the last step nothing more is drawn.
+ *
  * Drawing touches only memory, so tests/bootscreen-sim.sh runs it in resim
  * and compares the panel with a Python model. New code.
  *
@@ -53,6 +62,11 @@ static uint32_t g_nline, g_pct;
 static bool g_on;
 static uint32_t g_t_up, g_t_hdmi, g_t_draw;
 
+/* after the handover (#43): the panel in the ARM's framebuffer g_view */
+static bool g_arm, g_redox, g_done;
+static struct fb_view g_view;
+static uint32_t g_base_pct, g_redox_n, g_redox_us;
+
 /* the panel's memory, at the start of the VideoCore's part (BS_BASE, set
  * by bs_start() once the SDRAM size is known); tests/bootscreen-sim.sh
  * points it elsewhere first */
@@ -85,6 +99,18 @@ static void text(volatile uint8_t *fb, uint32_t x, uint32_t y, const char *s, ui
 		while (px < x_end)
 			p[px++] = bg;
 	}
+}
+
+/*
+ * The bar by time (#43 follow-up): the firmware's own steps give pct 0..90
+ * (90: the ARM runs) and fill the first BS_FW_SHARE % of the bar; Redox's
+ * steps fill the rest. The firmware's part is the short one (about 4 s of
+ * about 22 s to the login, Test 559), and a monitor shows the picture only
+ * 1.5 to 3 s after HDMI starts.
+ */
+#define BS_FW_SHARE 40u
+static uint32_t fw_bar(uint32_t pct) {
+	return pct >= 90 ? BS_FW_SHARE : pct * BS_FW_SHARE / 90;
 }
 
 static void draw_bar(volatile uint8_t *fb) {
@@ -153,8 +179,9 @@ bool bs_start(const char *a, const char *b, uint32_t pct) {
 	if (!g_bs_fb)
 		g_bs_fb = (volatile uint8_t *)(ALIAS_UNCACHED | BS_BASE);
 	g_on = false;
+	g_arm = g_redox = g_done = false;
 	g_nline = 0;
-	g_pct = pct;
+	g_pct = fw_bar(pct);
 	add_line(a, b, false);
 	if (!hdmi_on(0x000000)) {
 		printf("bootscreen: HDMI did not come up, no boot screen\n");
@@ -176,6 +203,7 @@ static void step(uint32_t pct, const char *a, const char *b, bool fail) {
 		return;
 	uint32_t t0 = timer_us();
 	add_line(a, b, fail);
+	pct = fw_bar(pct);
 	if (pct > g_pct) /* the bar never goes back */
 		g_pct = pct;
 	draw_bar(g_bs_fb);
@@ -281,6 +309,23 @@ static uint32_t panel_pixel(uint32_t p, uint32_t depth, uint32_t order) {
 #define BSDMA_TI_BURST(n) ((uint32_t)(n) << 12)
 #define BS_DMA_OFF 0x40000u /* behind the 200 KB panel */
 
+/* how the last handover cleared the ARM's buffer, for the serial line (#82) */
+static const char *g_clear_how = "none";
+static uint32_t g_clear_left;
+
+/*
+ * Words of the n bytes at dst (uncached) that are not 0, one sample per
+ * 4 KB and the last word. The DMA clear was only checked at its first and
+ * last word, and on the Zero 2 W the screen kept old memory (#82).
+ */
+static uint32_t not_cleared(uint32_t dst, uint32_t n) {
+	volatile uint32_t *d = (volatile uint32_t *)(ALIAS_UNCACHED | (dst & 0x3fffffffu));
+	uint32_t left = d[n / 4 - 1] != 0;
+	for (uint32_t i = 0; i < n / 4; i += 1024)
+		left += d[i] != 0;
+	return left;
+}
+
 static bool dma_clear(uint32_t dst, uint32_t n) {
 	if ((dst | n) & 15 || !n || n >= 1u << 30)
 		return false;
@@ -312,9 +357,45 @@ static bool dma_clear(uint32_t dst, uint32_t n) {
 	BSDMA_CONBLK = 0;
 	if (!done)
 		return false;
-	/* first and last word: did it write? */
-	volatile uint32_t *d = (volatile uint32_t *)(ALIAS_UNCACHED | (dst & 0x3fffffffu));
-	return d[0] == 0 && d[n / 4 - 1] == 0;
+	/* did it write everywhere? Else the VPU clears (#82) */
+	g_clear_left = not_cleared(dst, n);
+	return g_clear_left == 0;
+}
+
+/* the first shown pixel of v, uncached */
+static volatile uint8_t *view_base(const struct fb_view *v) {
+	uint32_t bpp = v->depth / 8, pitch = v->vw * bpp;
+	return (volatile uint8_t *)(ALIAS_UNCACHED | (v->base & 0x3fffffffu)) + v->yoff * pitch + v->xoff * bpp;
+}
+
+/* the panel fits into v and v is 16 or 32 bit */
+static bool panel_fits(const struct fb_view *v) {
+	return (v->depth == 16 || v->depth == 32) && v->w >= BS_W && v->h >= BS_H;
+}
+
+/*
+ * Panel rows y0..y1-1 into the middle of v. black: also the black pixels
+ * (a redraw), else they are skipped (the buffer was just cleared).
+ */
+static void copy_rows(const struct fb_view *v, uint32_t y0, uint32_t y1, bool black) {
+	uint32_t bpp = v->depth / 8, pitch = v->vw * bpp, last_in = 0, last_out = 0;
+	volatile uint8_t *base = view_base(v);
+	uint32_t px = (v->w - BS_W) / 2, py = (v->h - BS_H) / 2;
+	for (uint32_t y = y0; y < y1; y++) {
+		const volatile uint16_t *src = (const volatile uint16_t *)(g_bs_fb + y * BS_PITCH);
+		volatile uint8_t *dst = base + (py + y) * pitch + px * bpp;
+		for (uint32_t x = 0; x < BS_W; x++) {
+			uint32_t p = src[x];
+			if (!p && !black)
+				continue; /* black already */
+			if (p != last_in) /* a handful of colours: convert each once per run */
+				last_in = p, last_out = p ? panel_pixel(p, v->depth, v->order) : 0;
+			if (bpp == 2)
+				((volatile uint16_t *)dst)[x] = (uint16_t)last_out;
+			else
+				((volatile uint32_t *)dst)[x] = last_out;
+		}
+	}
 }
 
 /*
@@ -327,35 +408,21 @@ static void keep_panel(const struct fb_view *v) {
 	if (v->depth != 16 && v->depth != 32)
 		return;
 	uint32_t bpp = v->depth / 8, pitch = v->vw * bpp;
-	volatile uint8_t *base = (volatile uint8_t *)(ALIAS_UNCACHED | (v->base & 0x3fffffffu)) + v->yoff * pitch +
-				 v->xoff * bpp;
+	volatile uint8_t *base = view_base(v);
 	uint32_t first = (v->base & 0x3fffffffu) + v->yoff * pitch + v->xoff * bpp;
 	bool whole = v->xoff == 0 && v->w == v->vw; /* the shown rows in one piece */
+	g_clear_left = 0;
+	g_clear_how = "DMA";
 	if (!whole || !dma_clear(ALIAS_UNCACHED | first, v->h * pitch)) {
+		g_clear_how = g_clear_left ? "VPU, DMA left samples" : "VPU";
 		for (uint32_t y = 0; y < v->h; y++) {
 			volatile uint32_t *row = (volatile uint32_t *)(base + y * pitch);
 			for (uint32_t i = 0; i < v->w * bpp / 4; i++)
 				row[i] = 0;
 		}
 	}
-	if (v->w < BS_W || v->h < BS_H)
-		return;
-	uint32_t x0 = (v->w - BS_W) / 2, y0 = (v->h - BS_H) / 2, last_in = 0, last_out = 0;
-	for (uint32_t y = 0; y < BS_H; y++) {
-		const volatile uint16_t *src = (const volatile uint16_t *)(g_bs_fb + y * BS_PITCH);
-		volatile uint8_t *dst = base + (y0 + y) * pitch + x0 * bpp;
-		for (uint32_t x = 0; x < BS_W; x++) {
-			uint32_t p = src[x];
-			if (!p)
-				continue; /* black already */
-			if (p != last_in) /* a handful of colours: convert each once per run */
-				last_in = p, last_out = panel_pixel(p, v->depth, v->order);
-			if (bpp == 2)
-				((volatile uint16_t *)dst)[x] = (uint16_t)last_out;
-			else
-				((volatile uint32_t *)dst)[x] = last_out;
-		}
-	}
+	if (panel_fits(v))
+		copy_rows(v, 0, BS_H, false);
 }
 
 /*
@@ -363,15 +430,84 @@ static void keep_panel(const struct fb_view *v) {
  * the panel on the screen by copying it there. v NULL: only stop.
  */
 void bs_handover(const struct fb_view *v) {
-	if (!g_on)
+	if (!g_on) {
+		/*
+		 * The ARM changed its framebuffer (#43): follow it. The panel is
+		 * copied again only once Redox reports steps (QUIET=1); without
+		 * that, Redox's boot log may be in it already.
+		 */
+		if (v && g_arm && !g_done) {
+			if (!panel_fits(v))
+				g_arm = false;
+			else {
+				g_view = *v;
+				if (g_redox)
+					keep_panel(v);
+			}
+		}
 		return;
+	}
 	g_on = false;
+	g_base_pct = g_pct;
 	uint32_t t0 = timer_us();
-	if (v)
+	if (v) {
 		keep_panel(v);
+		if (panel_fits(v)) {
+			g_view = *v;
+			g_arm = true;
+		}
+	}
 	printf("bootscreen: handed over to the ARM's framebuffer %u ms after it came up; HDMI start %u us, drawing %u us, "
-	       "copy %u us\n",
-	       (timer_us() - g_t_up) / 1000, g_t_hdmi, g_t_draw, timer_us() - t0);
+	       "copy %u us, clear by %s (%u)\n",
+	       (timer_us() - g_t_up) / 1000, g_t_hdmi, g_t_draw, timer_us() - t0, g_clear_how, g_clear_left);
+}
+
+/*
+ * One of Redox's boot steps (tag 0x000f0002, #43): pct 0..100 of Redox's
+ * boot (~0: the bar stays), flags bit 0 a failed step (red), bit 1 the
+ * last step (the bar full, nothing drawn after it), s the line (printable
+ * ASCII, empty: no new line). 1 when drawn, 0 when there is no panel in
+ * the ARM's framebuffer or the last step was before.
+ */
+uint32_t bs_redox_step(uint32_t pct, uint32_t flags, const char *s) {
+	if (!g_arm || g_done)
+		return 0;
+	uint32_t t0 = timer_us();
+	bool first = !g_redox; /* the whole panel then: the buffer may be new */
+	g_redox = true;
+	if (pct != 0xffffffffu) {
+		if (pct > 100)
+			pct = 100;
+		uint32_t p = g_base_pct + (100 - g_base_pct) * pct / 100;
+		if (p > g_pct) /* the bar never goes back */
+			g_pct = p;
+	}
+	char line[BS_LINE_MAX + 1];
+	uint32_t n = 0;
+	for (; s[n] && n < BS_LINE_MAX; n++)
+		line[n] = s[n] >= ' ' && s[n] <= '~' ? s[n] : ' ';
+	line[n] = 0;
+	if (n)
+		add_line(line, 0, flags & 1);
+	if (flags & 2) {
+		g_pct = 100;
+		g_done = true;
+	}
+	draw_bar(g_bs_fb);
+	draw_lines(g_bs_fb);
+	if (first) /* the whole buffer black again, the panel in it (#82) */
+		keep_panel(&g_view);
+	else
+		copy_rows(&g_view, BS_BAR_Y, BS_H, true);
+	g_redox_n++;
+	uint32_t us = timer_us() - t0;
+	g_redox_us += us;
+	/* one serial line per step, so a test without a screen sees them */
+	printf("bootscreen: Redox step %u%s%s, bar %u %%, \"%s\", %u us\n", g_redox_n, flags & 1 ? ", failed" : "",
+	       flags & 2 ? ", last" : "", g_pct, line, us);
+	if (g_done)
+		printf("bootscreen: Redox's last step, %u steps, drawing %u us\n", g_redox_n, g_redox_us);
+	return 1;
 }
 
 /*
