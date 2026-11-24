@@ -212,6 +212,8 @@ static void read_config(struct boot_cfg *c) {
 	       c->arm_64bit ? "" : ", arm_64bit=0 (only 64-bit is supported)");
 	if (c->unknown_filters)
 		printf("boot64: %u config.txt sections with filters we do not know, skipped\n", c->unknown_filters);
+	if (c->temp_limit)
+		thermal_set_limit(c->temp_limit);
 #if HDMI
 	/* the boot screen's title from the card (boot_title= in config.txt) */
 	if (bs_config_title((const char *)B64_INITRD, (uint32_t)n))

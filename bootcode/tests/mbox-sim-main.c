@@ -35,6 +35,10 @@ uint32_t arm_khz(void) {
 
 uint32_t arm_max_mhz = 1400;
 
+uint32_t arm_set_mhz(uint32_t mhz) {
+	return mhz;
+}
+
 /* the diag sampler (#66) is not simulated here */
 void diag_poll(void) {}
 void diag_start(uint32_t period_us) {
@@ -47,12 +51,23 @@ uint32_t diag_bytes(void) {
 	return 0;
 }
 
+/* thermal.c (#108) is not simulated here */
+void thermal_poll(void) {}
+int32_t thermal_mc(void) {
+	return 47000;
+}
+uint32_t thermal_flags(void) {
+	return 0;
+}
+int32_t thermal_limit_mc(void) {
+	return 85000;
+}
+uint32_t thermal_set_arm_mhz(uint32_t mhz) {
+	return arm_set_mhz(mhz);
+}
+
 /* sdram.c is not linked: the 1 GB split, as before sdram_init() */
 uint32_t g_ram_bytes = 0x40000000u, g_arm_mem = 0x40000000u - VC_MEM;
-
-uint32_t arm_set_mhz(uint32_t mhz) {
-	return mhz;
-}
 
 int main(void) {
 	*(volatile uint32_t *)0x7e200004u = 2u << 12; /* GPFSEL1: GPIO 14 alt 5 */

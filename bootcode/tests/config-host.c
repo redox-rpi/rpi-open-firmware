@@ -19,9 +19,9 @@ int main(int argc, char **argv) {
 	struct boot_cfg c;
 	cfg_defaults(&c);
 	cfg_parse(&c, txt, n, (uint32_t)strtoul(argv[2], NULL, 16), argc > 3 ? (uint32_t)strtoul(argv[3], NULL, 16) : 0, 0);
-	printf("RESULT kernel=%s initramfs=%s armstub=%s dt=%s%s cmdline=%s 64=%d unknown=%u overlays=", c.kernel,
+	printf("RESULT kernel=%s initramfs=%s armstub=%s dt=%s%s cmdline=%s 64=%d unknown=%u templimit=%u overlays=", c.kernel,
 	       c.initramfs, c.armstub, c.device_tree_set ? "set:" : "", c.device_tree, c.cmdline, c.arm_64bit,
-	       c.unknown_filters);
+	       c.unknown_filters, c.temp_limit);
 	for (uint32_t i = 0; i < c.n_overlays; i++)
 		printf("%s%s", i ? "," : "", c.overlay[i]);
 	printf(" boarddtb=%s\n", cfg_board_dtb((uint32_t)strtoul(argv[2], NULL, 16)));
