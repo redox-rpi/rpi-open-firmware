@@ -39,7 +39,7 @@ import sys, zlib, struct
 w, h, depth, order, pitch = map(int, sys.argv[1:6])
 bars = [0xffffff, 0xffff00, 0x00ffff, 0x00ff00, 0xff00ff, 0xff0000, 0x0000ff, 0x000000]
 def pix(rgb):
-    if not order:
+    if (not order) if depth == 16 else order:  # hvs.c fb_pixel(), #82
         rgb = (rgb & 0x00ff00) | ((rgb >> 16) & 0xff) | ((rgb & 0xff) << 16)
     if depth == 16:
         return ((rgb >> 8) & 0xf800) | ((rgb >> 5) & 0x07e0) | ((rgb >> 3) & 0x1f)
