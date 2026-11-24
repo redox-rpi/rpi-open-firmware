@@ -15,6 +15,9 @@
  *                        parameters are not supported (a message)
  *   dtparam=...          not supported (a message)
  *   cmdline=NAME         default cmdline.txt
+ *   diag_period=US       ours, not Broadcom's: start the display sampler
+ *                        (diag.c, #66) before the ARM, one record per US
+ *   diag_axi=1           ours: the sampler also reads the AXI bus counters
  *
  * Filters: a [section] line decides whether the lines after it apply.
  * [all] applies everything again. A model filter ([pi3], [pi3+], [pi02],
@@ -209,6 +212,15 @@ void cfg_parse(struct boot_cfg *c, const char *txt, uint32_t len, uint32_t board
 		} else if (eq && word_is(k, kn, "device_tree")) {
 			copy_word(c->device_tree, sizeof c->device_tree, v, vn, "device_tree");
 			c->device_tree_set = true;
+		} else if (eq && word_is(k, kn, "diag_period")) {
+			uint32_t x;
+			if (number(v, vn, &x))
+				c->diag_period = x;
+			else
+				note("diag_period is not a number: ", v, vn, "");
+		} else if (eq && word_is(k, kn, "diag_axi")) {
+			uint32_t x;
+			c->diag_axi = number(v, vn, &x) && x != 0;
 		} else if (eq && word_is(k, kn, "cmdline")) {
 			copy_word(c->cmdline, sizeof c->cmdline, v, vn, "cmdline");
 		} else if (eq && word_is(k, kn, "dtoverlay")) {
