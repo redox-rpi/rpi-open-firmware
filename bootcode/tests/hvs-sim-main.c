@@ -52,6 +52,23 @@ void bs_handover(const struct fb_view *v) {
 	(void)v;
 }
 
+/* the diag sampler (#66) is not simulated here */
+void diag_poll(void) {}
+void diag_start(uint32_t period_us) {
+	(void)period_us;
+}
+uint32_t diag_bus_addr(void) {
+	return 0;
+}
+uint32_t diag_bytes(void) {
+	return 0;
+}
+
+uint32_t bs_redox_step(uint32_t pct, uint32_t flags, const char *s) {
+	(void)pct, (void)flags, (void)s;
+	return 0;
+}
+
 static void dump(const char *what, uint32_t bad, const volatile uint8_t *p, uint32_t n) {
 	printf("RESULT pattern %s bad %u bytes ", what, bad);
 	for (uint32_t i = 0; i < n; i++)

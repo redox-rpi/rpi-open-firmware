@@ -29,8 +29,9 @@ HDMI ?= $(MONITOR)
 # CHAIN_IMAGE=path (with MONITOR=1): build that bootcode.bin image in and
 # chain it when nobody opens the monitor (boot selector, chain-image.S)
 CHAIN_IMAGE ?=
-# LOAD_CRC=1: also the CRC-32 of the initramfs on the serial line (tests of
-# the SD reads, #34; about 1 s per 10 MB on the VPU)
+# LOAD_CRC=1: the CRC-32 of every loaded file on the serial line (kernel,
+# devicetree, armstub; it costs about 0.5 s for kernel8.img, #44), and of
+# the initramfs (tests of the SD reads, #34; about 1 s per 10 MB on the VPU)
 LOAD_CRC ?= 0
 
 # Broadcom's register headers (BSD) through upstream's glue, as system
@@ -47,7 +48,7 @@ LDFLAGS := -nostdlib -nostartfiles -Wl,--build-id=none -T linker.ld
 
 SRCS := start.S main.c clock.c timer.c uart.c printf.c sdram.c libc.c
 ifeq ($(MONITOR),1)
-SRCS += monitor.c arm.c sd.c fat.c dt.c config.c mbox.c diag.c power.c i2c.c boot64.c
+SRCS += monitor.c arm.c sd.c fat.c dt.c config.c mbox.c diag.c thermal.c power.c i2c.c boot64.c
 ifneq ($(CHAIN_IMAGE),)
 SRCS += chain-image.S
 CFLAGS += -DCHAIN_IMAGE=1
@@ -57,7 +58,7 @@ ifeq ($(BOOT),1)
 ifeq ($(MONITOR),1)
 $(error BOOT=1 is the release build, without the monitor)
 endif
-SRCS += arm.c sd.c fat.c dt.c config.c mbox.c diag.c power.c i2c.c boot64.c
+SRCS += arm.c sd.c fat.c dt.c config.c mbox.c diag.c thermal.c power.c i2c.c boot64.c
 CFLAGS += -DBOOT=1
 ifneq ($(KERNEL),)
 CFLAGS += -DBOOT_KERNEL='"$(KERNEL)"'

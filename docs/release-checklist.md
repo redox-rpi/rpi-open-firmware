@@ -14,7 +14,13 @@ is due and approves the tag; nothing here starts a release on its own.
 ## Release card, on both boards
 
 One card image for the Pi 3B+ and the Pi Zero 2 W (#57) with the minimal
-Redox (#56). It is tested on each board from a cold start (power-on), with the
+Redox (#56). Build it with `redox-rpi/build-rof-card.sh` (#84), which has
+the Redox flags built in (minimal configuration, quiet boot):
+
+```bash
+redox-rpi/build-rof-card.sh --redox <your redox-rpi clone> --version v0.1.0-rcN --publish
+```
+ It is tested on each board from a cold start (power-on), with the
 serial line captured and an HDMI monitor attached.
 
 - [ ] **Boot to login** on the 3B+ and on the Zero 2 W.
