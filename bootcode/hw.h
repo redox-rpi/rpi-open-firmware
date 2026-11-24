@@ -116,6 +116,9 @@ struct boot_cfg {
 	char kernel[32], initramfs[32], armstub[32], device_tree[40], cmdline[32];
 	char overlay[CFG_OVERLAYS][32];
 	uint32_t n_overlays, unknown_filters;
+	uint32_t diag_period; /* diag_period=US: start the sampler at boot (#66) */
+	uint32_t arm_freq;    /* arm_freq=MHZ: top ARM clock, 0 = default */
+	bool core_dvs_off;    /* core_dvs=0: never change the core voltage (#72) */
 	uint32_t temp_limit; /* temp_limit= in C, 0 = not set (#108) */
 };
 void cfg_defaults(struct boot_cfg *c);
@@ -211,11 +214,14 @@ void bs_report(void);
 #define bs_config_title(t, n) ((void)(t), (void)(n), false)
 #endif
 
-/* i2c.c (monitor builds): bit-banged I2C on GPIO 46/47, reads only */
+/* i2c.c: bit-banged I2C on GPIO 46/47 (expander, PMIC; monitor i2cr/i2cw) */
 void i2c_scan(void);
 void i2c_read(uint32_t addr, uint32_t reg, uint32_t n);
 void i2c_write(uint32_t addr, uint32_t reg, uint32_t value);
 bool expander_start(void);
+bool pmic_start(void);
+bool pmic_core_set(uint32_t code);
+extern bool arm_core_dvs;
 void pllc_per_on(void);
 uint32_t core_khz(void);
 uint32_t pllc_per_khz(void);

@@ -134,10 +134,24 @@ static void arm_clock(void) {
  * while PLLB relocks, so the cores just stop for a moment (the generic
  * timer runs from the crystal). If PLLB does not lock, the old setting
  * goes back before the hold is released. There is no PMIC voltage
- * control yet, so the top rate is capped (arm_max_mhz, monitor "armmax").
+ * control yet, so the top rate is capped (arm_max_mhz, monitor "armmax")
+ * at 1000 MHz: at 1200 MHz rpi-firmwared crashed right after the
+ * governor switched up (Pi tests 516 and 534, a jump to an odd address);
+ * at 600 MHz it ran through 136 switches. arm_freq= in config.txt
+ * overrides the cap.
+ *
+ * On a 3B+ whose PMIC answers (arm_core_dvs, boot64.c), the core voltage
+ * goes up to start.elf's 1.4 GHz value before the clock goes above
+ * 1000 MHz, and back to the power-on 1.2 V after it came down (#72). If
+ * the PMIC write fails, the clock stays at 1000 MHz.
  */
 #define ARM_MIN_MHZ 600u
-uint32_t arm_max_mhz = 1200;
+#define ARM_NOM_MHZ 1000u
+#define CORE_NOM 0xC0u  /* 1.200 V, the PMIC after power-on */
+#define CORE_HIGH 0xD9u /* 1.35625 V, start.elf at 1.4 GHz (Pi test row 409) */
+uint32_t arm_max_mhz = 1000;
+bool arm_core_dvs;
+static uint32_t g_core = CORE_NOM;
 static uint32_t g_arm_ndiv = 48, g_arm_frac = 0xeaaa8, g_arm_div = 2;
 
 uint32_t arm_khz(void) {
@@ -169,6 +183,14 @@ uint32_t arm_set_mhz(uint32_t mhz) {
 		mhz = ARM_MIN_MHZ;
 	if (mhz > arm_max_mhz)
 		mhz = arm_max_mhz;
+	if (mhz > ARM_NOM_MHZ && g_core != CORE_HIGH) {
+		if (arm_core_dvs && pmic_core_set(CORE_HIGH)) {
+			g_core = CORE_HIGH;
+			printf("arm: core 1356 mV\n");
+		} else {
+			mhz = ARM_NOM_MHZ;
+		}
+	}
 	uint32_t div = mhz > 875u ? 1 : 2;
 	uint32_t vco_khz = mhz * 1000u * div;
 	uint32_t ndiv = vco_khz / 19200u, rem = vco_khz % 19200u;
@@ -197,6 +219,10 @@ uint32_t arm_set_mhz(uint32_t mhz) {
 	       "CTRL %08X FRAC %08X ARM %08X, now %u kHz\n",
 	       mhz, locked ? "set" : "NOT LOCKED, old clock back", ndiv, frac, div,
 	       lock_before, lock_after, A2W_PLLB_CTRL, A2W_PLLB_FRAC, A2W_PLLB_ARM, arm_khz());
+	if (g_core != CORE_NOM && arm_khz() <= ARM_NOM_MHZ * 1000u && pmic_core_set(CORE_NOM)) {
+		g_core = CORE_NOM;
+		printf("arm: core 1200 mV\n");
+	}
 	return arm_khz();
 }
 

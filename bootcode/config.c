@@ -15,6 +15,14 @@
  *                        parameters are not supported (a message)
  *   dtparam=...          not supported (a message)
  *   cmdline=NAME         default cmdline.txt
+ *   diag_period=US       ours, not Broadcom's: start the display sampler
+ *                        (diag.c, #66) before the ARM, one record per US
+ *   arm_freq=MHZ         top ARM clock for the mailbox (the governor), as
+ *                        Broadcom's; 600..1400, default 1000 (no core voltage
+ *                        control), the Zero 2 W stays at 1000; 1200 on a
+ *                        3B+ whose PMIC answers (core_dvs)
+ *   core_dvs=0           ours: never change the 3B+ core voltage, so at
+ *                        most 1000 MHz unless arm_freq= says more (#72)
  *
  * Filters: a [section] line decides whether the lines after it apply.
  * [all] applies everything again. A model filter ([pi3], [pi3+], [pi02],
@@ -209,6 +217,24 @@ void cfg_parse(struct boot_cfg *c, const char *txt, uint32_t len, uint32_t board
 		} else if (eq && word_is(k, kn, "device_tree")) {
 			copy_word(c->device_tree, sizeof c->device_tree, v, vn, "device_tree");
 			c->device_tree_set = true;
+		} else if (eq && word_is(k, kn, "diag_period")) {
+			uint32_t x;
+			if (number(v, vn, &x))
+				c->diag_period = x;
+			else
+				note("diag_period is not a number: ", v, vn, "");
+		} else if (eq && word_is(k, kn, "arm_freq")) {
+			uint32_t x;
+			if (number(v, vn, &x) && x >= 600 && x <= 1400)
+				c->arm_freq = x;
+			else
+				note("arm_freq is not 600..1400: ", v, vn, "");
+		} else if (eq && word_is(k, kn, "core_dvs")) {
+			uint32_t x;
+			if (number(v, vn, &x) && x <= 1)
+				c->core_dvs_off = x == 0;
+			else
+				note("core_dvs is not 0 or 1: ", v, vn, "");
 		} else if (eq && word_is(k, kn, "cmdline")) {
 			copy_word(c->cmdline, sizeof c->cmdline, v, vn, "cmdline");
 		} else if (eq && word_is(k, kn, "dtoverlay")) {
