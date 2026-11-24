@@ -134,10 +134,14 @@ static void arm_clock(void) {
  * while PLLB relocks, so the cores just stop for a moment (the generic
  * timer runs from the crystal). If PLLB does not lock, the old setting
  * goes back before the hold is released. There is no PMIC voltage
- * control yet, so the top rate is capped (arm_max_mhz, monitor "armmax").
+ * control yet, so the top rate is capped (arm_max_mhz, monitor "armmax")
+ * at 1000 MHz: at 1200 MHz rpi-firmwared crashed right after the
+ * governor switched up (Pi tests 516 and 534, a jump to an odd address);
+ * at 600 MHz it ran through 136 switches. arm_freq= in config.txt
+ * overrides the cap.
  */
 #define ARM_MIN_MHZ 600u
-uint32_t arm_max_mhz = 1200;
+uint32_t arm_max_mhz = 1000;
 static uint32_t g_arm_ndiv = 48, g_arm_frac = 0xeaaa8, g_arm_div = 2;
 
 uint32_t arm_khz(void) {
