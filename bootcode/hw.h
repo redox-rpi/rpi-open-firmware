@@ -119,6 +119,7 @@ struct boot_cfg {
 	uint32_t diag_period; /* diag_period=US: start the sampler at boot (#66) */
 	uint32_t arm_freq;    /* arm_freq=MHZ: top ARM clock, 0 = default */
 	bool core_dvs_off;    /* core_dvs=0: never change the core voltage (#72) */
+	uint32_t temp_limit; /* temp_limit= in C, 0 = not set (#108) */
 };
 void cfg_defaults(struct boot_cfg *c);
 void cfg_parse(struct boot_cfg *c, const char *txt, uint32_t len, uint32_t board_type, uint32_t lev0, uint32_t lev1);
@@ -145,6 +146,14 @@ void diag_poll(void);
 void diag_dump(uint32_t count);
 uint32_t diag_bus_addr(void);
 uint32_t diag_bytes(void);
+/* thermal.c (#108): SoC temperature and the ARM clock throttle */
+void thermal_start(void);
+void thermal_poll(void);
+int32_t thermal_mc(void);      /* millidegrees, 0 before the first reading */
+uint32_t thermal_flags(void);  /* mailbox tag 0x00030046 */
+uint32_t thermal_set_arm_mhz(uint32_t mhz); /* the OS's rate, returns kHz */
+void thermal_set_limit(uint32_t c); /* temp_limit= in C, 40..85 */
+int32_t thermal_limit_mc(void);   /* mailbox tag 0x0003000a */
 void mbox_serve(void) __attribute__((noreturn));
 /* monitor: ask for a framebuffer through the real tag path, as U-Boot does */
 bool mbox_fb_test(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t *base, uint32_t *pitch);
@@ -187,6 +196,8 @@ bool bs_start(const char *a, const char *b, uint32_t pct);
 void bs_step(uint32_t pct, const char *a, const char *b);
 void bs_fail(const char *a, const char *b);
 void bs_handover(const struct fb_view *v);
+#define BS_STEP_MAX 79u /* text of a Redox step (#43) */
+uint32_t bs_redox_step(uint32_t pct, uint32_t flags, const char *s);
 void bs_title(const char *s);
 void bs_update(uint32_t pct, const char *a, const char *b);
 bool bs_config_title(const char *txt, uint32_t len);
@@ -198,6 +209,8 @@ void bs_report(void);
 #define bs_fail(a, b) ((void)(a), (void)(b))
 #define bs_update(pct, a, b) ((void)(pct), (void)(a), (void)(b))
 #define bs_handover(v) ((void)(v))
+#define bs_redox_step(p, f, s) ((void)(p), (void)(f), (void)(s), 0u)
+#define BS_STEP_MAX 79u
 #define bs_config_title(t, n) ((void)(t), (void)(n), false)
 #endif
 

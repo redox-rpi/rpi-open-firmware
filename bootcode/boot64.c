@@ -55,11 +55,18 @@ uint32_t crc32(const volatile uint8_t *p, uint32_t n) {
 /* the boot screen (#430): "loading NAME", the bar to pct */
 static bool load_one(const char *name, uint32_t addr, uint32_t max, uint32_t pct) {
 	bs_step(pct, "loading ", name);
+	uint32_t t0 = timer_us();
 	int32_t n = fat_load(name, addr, max);
 	if (n < 0)
 		return false;
-	printf("boot64: %s %u bytes at ARM %08X, crc32 %08X\n", name, (uint32_t)n, B64_ARM(addr),
+	uint32_t ms = (timer_us() - t0) / 1000;
+#if LOAD_CRC
+	/* bit by bit over uncached memory: about 0.5 s for kernel8.img (#44) */
+	printf("boot64: %s %u bytes at ARM %08X in %u ms, crc32 %08X\n", name, (uint32_t)n, B64_ARM(addr), ms,
 	       crc32((const volatile uint8_t *)addr, (uint32_t)n));
+#else
+	printf("boot64: %s %u bytes at ARM %08X in %u ms\n", name, (uint32_t)n, B64_ARM(addr), ms);
+#endif
 	return true;
 }
 
@@ -212,6 +219,8 @@ static void read_config(struct boot_cfg *c) {
 	       c->arm_64bit ? "" : ", arm_64bit=0 (only 64-bit is supported)");
 	if (c->unknown_filters)
 		printf("boot64: %u config.txt sections with filters we do not know, skipped\n", c->unknown_filters);
+	if (c->temp_limit)
+		thermal_set_limit(c->temp_limit);
 #if HDMI
 	/* the boot screen's title from the card (boot_title= in config.txt) */
 	if (bs_config_title((const char *)B64_INITRD, (uint32_t)n))

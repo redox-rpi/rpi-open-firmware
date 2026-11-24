@@ -60,7 +60,7 @@ static void sums(const char *what) {
 static uint32_t want_pixel(uint32_t p, uint32_t depth, uint32_t order) {
 	/* bit replication, as the HVS widens RGB565 */
 	uint32_t r = (p >> 11) * 33 >> 2, g = (p >> 5 & 63) * 65 >> 4, b = (p & 31) * 33 >> 2;
-	if (!order) {
+	if (depth == 16 ? !order : order) { /* hvs.c fb_pixel(), #82 */
 		uint32_t t = r;
 		r = b, b = t;
 	}
@@ -97,6 +97,20 @@ static void keep(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_
 		}
 	printf("RESULT keep %ux%u %u bit order %u: bad %u, panel pixels %u, untouched %u\n", w, h, depth, order, bad,
 	       panel, pad);
+}
+
+/* the panel in the ARM's framebuffer as the panel buffer has it now */
+static void check(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t yoff, const char *what) {
+	uint32_t vw = w + 16, bpp = depth / 8, pitch = vw * bpp, bad = 0;
+	volatile uint8_t *fb = (volatile uint8_t *)ARMFB + yoff * pitch;
+	uint32_t x0 = (w - BS_W) / 2, y0 = (h - BS_H) / 2;
+	for (uint32_t y = 0; y < BS_H; y++)
+		for (uint32_t x = 0; x < BS_W; x++) {
+			volatile uint8_t *q = fb + (y0 + y) * pitch + (x0 + x) * bpp;
+			uint32_t got = depth == 16 ? *(volatile uint16_t *)q : *(volatile uint32_t *)q;
+			bad += got != want_pixel(((const volatile uint16_t *)g_bs_fb)[y * BS_W + x], depth, order);
+		}
+	printf("RESULT check %s: bad %u\n", what, bad);
 }
 
 int main(void) {
@@ -137,6 +151,28 @@ int main(void) {
 	keep(700, 180, 16, 0, 2);
 	bs_start("again", 0, 50);
 	keep(600, 100, 32, 1, 0); /* smaller than the panel: only cleared */
+
+	/* Redox's steps (#43): into the ARM's framebuffer after the handover */
+	printf("REDOX-START\n");
+	if (bs_redox_step(50, 0, "before a fitting handover"))
+		printf("RESULT redox drew without a panel\n");
+	bs_start("redox", 0, 60);
+	keep(800, 200, 32, 1, 0);
+	uint32_t r1 = bs_redox_step(50, 0, "Redox: drivers\t\x01");
+	/* bar: the firmware's 60 is 60 * 40 / 90 = 26 %, + 50 % of the remaining 74 % = 63 % */
+	/* bootscreen.c: border 2, bar at line 48, 16 high; C_BAR ff8000, C_EMPTY 303030 */
+	uint32_t done = (BS_W - 2 * 2) * 63 / 100 & ~1u, y = 48 + 8;
+	const volatile uint16_t *row = (const volatile uint16_t *)(g_bs_fb + y * BS_W * 2);
+	bool bar = row[2 + done - 1] == 0xfc00u && row[2 + done] == 0x3186u;
+	check(800, 200, 32, 1, 0, "step");
+	uint32_t r2 = bs_redox_step(0xffffffffu, 1, "Redox: a failed step");
+	/* a new 16-bit framebuffer: the panel goes along */
+	keep(700, 180, 16, 0, 2);
+	check(700, 180, 16, 0, 2, "moved");
+	uint32_t r3 = bs_redox_step(100, 2, "Redox: login");
+	uint32_t r4 = bs_redox_step(100, 0, "after the last step");
+	check(700, 180, 16, 0, 2, "last");
+	printf("RESULT redox answers %u %u %u %u, bar %s\n", r1, r2, r3, r4, bar ? "ok" : "wrong");
 
 	printf("bootscreen-sim: end\n");
 	return 0;
