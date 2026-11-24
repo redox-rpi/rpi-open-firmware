@@ -49,10 +49,7 @@
 #define D_HVS_DISPSTAT1 R(0x7e400058)
 #define D_PV2_STAT R(0x7e80702c)
 #define D_HD_FRAME_COUNT R(0x7e808068)
-#define D_TS_CTL R(0x7e212000)
 #define D_TS_STAT R(0x7e212004)
-#define D_CM_TSENSCTL R(0x7e1010e0)
-#define D_CM_TSENSDIV R(0x7e1010e4)
 
 #define DIAG_MAGIC 0x47414944u /* "DIAG" little-endian */
 #define DIAG_VERSION 2u
@@ -81,7 +78,6 @@ enum { H_MAGIC, H_VERSION, H_REC_WORDS, H_RECS, H_WRITTEN, H_PERIOD, H_MARKER, H
 /* system: HVS 9, CPU_L2 15, V3D 12; VPU: SDRAM 14, L2_IN 15, DMA_UC 13 */
 static const uint32_t axi_bus[6] = {9, 15, 12, 14, 15, 13};
 
-static void ts_start(void);
 static bool g_diag_on;
 static bool g_diag_axi;
 static uint32_t g_diag_next, g_diag_period, g_diag_rec_words, g_diag_recs;
@@ -151,32 +147,12 @@ void diag_start(uint32_t word) {
 		h[H_AXI_BUSES] |= axi_bus[w] << (5 * w);
 	h[H_PERIOD] = period_us;
 	h[H_MAGIC] = DIAG_MAGIC;
-	ts_start();
+	thermal_start(); /* thermal.c */
 	g_diag_period = period_us;
 	if (g_diag_axi)
 		axi_on(true);
 	g_diag_next = timer_us();
 	g_diag_on = true;
-}
-
-/*
- * The thermal sensor, as Broadcom's firmware leaves it (Pi test 337) and
- * Linux bcm2835_thermal.c starts it: its clock at 19.2 MHz / 10 from the
- * crystal, then TSENSCTL with the bandgap default, the regulator and the
- * recommended reset delay, written once without and once with RSTB. Before
- * this the sensor had no clock and read a fixed 268 C (Pi test 530).
- */
-static void ts_start(void) {
-	if (!(D_CM_TSENSCTL & 0x10u)) { /* ENAB */
-		D_CM_TSENSDIV = CM_PASSWORD | 0xa000u;
-		D_CM_TSENSCTL = CM_PASSWORD | 1u;         /* source: crystal */
-		D_CM_TSENSCTL = CM_PASSWORD | 0x10u | 1u; /* enable */
-	}
-	if (!(D_TS_CTL & 2u)) { /* RSTB */
-		uint32_t v = 1u << 2 | 1u << 26 | 0xfeu << 18 | 607u << 8; /* threshold 80 C */
-		D_TS_CTL = v;
-		D_TS_CTL = v | 2u;
-	}
 }
 
 /* called from the mailbox loop: one record when the period is due */

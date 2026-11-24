@@ -58,6 +58,11 @@ def sums(raw):
         out.append("%08X" % s2)
     return " ".join(out) + " all %08X %08X" % (a1, a2)
 
+FW_SHARE = 40  # bootscreen.c BS_FW_SHARE: the firmware's pct 0..90 fill 0..40 %
+
+def fw_bar(p):
+    return FW_SHARE if p >= 90 else p * FW_SHARE // 90
+
 def steps(seq, title=TITLE):
     """seq: [(pct or None, text, fail)] as bs_start/bs_step/bs_fail"""
     lines, pct = [], 0
@@ -65,9 +70,9 @@ def steps(seq, title=TITLE):
         lines.append((s[:LINE_MAX], fail))
         lines = lines[-LINES:]
         if i == 0:
-            pct = p
-        elif p is not None and p > pct:
-            pct = p
+            pct = fw_bar(p)
+        elif p is not None and fw_bar(p) > pct:
+            pct = fw_bar(p)
     return render(lines, pct, title)
 
 demo = steps([

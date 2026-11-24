@@ -74,14 +74,23 @@ uint32_t hvs_plane(uint32_t *dl, const struct fb_view *v, uint32_t scr_w, uint32
 /*
  * Test pattern for the monitor's fb command: eight vertical colour bars
  * (white, yellow, cyan, green, magenta, red, blue, black) with a one-pixel
- * white border, in the buffer's own pixel format: 32 bit 0x00RRGGBB words
- * (0x00BBGGRR for BGR), 16 bit RGB565 (BGR565). Returns the number of
+ * white border, in the buffer's own pixel format: 32 bit 0x00BBGGRR words for order 1
+ * (0x00RRGGBB for order 0), 16 bit RGB565 (BGR565 for order 0). Returns the number of
  * pixels at the bar centres of the middle line that read back wrong.
  */
 static const uint32_t g_bars[8] = {0xffffff, 0xffff00, 0x00ffff, 0x00ff00, 0xff00ff, 0xff0000, 0x0000ff, 0x000000};
 
+/*
+ * The HVS's pixel order means opposite things for 16 and 32 bit (#82): for
+ * RGB565 order XRGB (ours for order 1) has red on top, as Linux vc4 uses
+ * XRGB for DRM RGB565; for RGBA8888 order ARGB (ours for order 1, as
+ * start.elf's plane for U-Boot, row 337) shows the bytes R, G, B in memory,
+ * a word 0x00BBGGRR, while Linux vc4 uses ABGR for XRGB8888 (0x00RRGGBB).
+ * The person test on the Zero 2 W showed the bar orange in the 16-bit panel
+ * and blue after the copy into the ARM's 32-bit buffer.
+ */
 uint32_t fb_pixel(uint32_t rgb, uint32_t depth, uint32_t order) {
-	if (!order)
+	if (depth == 16 ? !order : order)
 		rgb = (rgb & 0x00ff00u) | ((rgb >> 16) & 0xffu) | ((rgb & 0xffu) << 16);
 	if (depth == 16)
 		return ((rgb >> 8) & 0xf800u) | ((rgb >> 5) & 0x07e0u) | ((rgb >> 3) & 0x001fu);

@@ -35,6 +35,9 @@ gpu_mem=16
 boot_title=Redox
 C
 expect "standard card, 3B+" "$t/std.txt" d 0 "kernel=kernel8.img " "initramfs=initramfs " "armstub= " "dt= " "overlays=disable-bt,mmc " "boarddtb=bcm2710-rpi-3-b-plus.dtb" "64=1"
+printf 'kernel=k.img\ntemp_limit=60\n' > "$t/temp.txt"
+expect "temp_limit (#108)" "$t/temp.txt" d 0 "templimit=60 "
+expect "no temp_limit: 0" "$t/std.txt" d 0 "templimit=0 "
 expect "standard card, Zero 2 W" "$t/std.txt" 12 0 "boarddtb=bcm2710-rpi-zero-2-w.dtb" "overlays=disable-bt,mmc "
 printf '' > "$t/empty.txt"
 expect "no config: defaults" "$t/empty.txt" d 0 "kernel=kernel8.img " "initramfs= " "cmdline=cmdline.txt " "overlays= "

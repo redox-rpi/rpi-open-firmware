@@ -376,7 +376,7 @@ static bool handle(volatile struct tag *t) {
 		else if (a == CLK_ARM && t->id == 0x00030007)
 			r[1] = 600000000u;
 		else if (a == CLK_ARM && t->id == 0x00038002) {
-			r[1] = arm_set_mhz(b / 1000000u) * 1000u;
+			r[1] = thermal_set_arm_mhz(b / 1000000u) * 1000u;
 		}
 		reply(t, r, 8);
 		return true;
@@ -388,9 +388,14 @@ static bool handle(volatile struct tag *t) {
 		reply(t, w, 12);
 		return true;
 	}
+	case 0x00030006: /* temperature, millidegrees (#108) */
+		r[0] = a;
+		r[1] = (uint32_t)thermal_mc();
+		reply(t, r, 8);
+		return true;
 	case 0x0003000a: /* max temperature, millidegrees */
 		r[0] = a;
-		r[1] = 85000;
+		r[1] = (uint32_t)thermal_limit_mc();
 		reply(t, r, 8);
 		return true;
 	case 0x000f0001: /* redox-rpi: diag sampler (#66): period in us (0 stops) -> ring bus address, bytes */
@@ -399,8 +404,22 @@ static bool handle(volatile struct tag *t) {
 		r[1] = diag_bytes();
 		reply(t, r, 8);
 		return true;
-	case 0x00030046: /* throttled: never */
-		r[0] = 0;
+	case 0x000f0002: { /* redox-rpi: Redox's boot step on the boot screen (#43): pct, flags, text -> 1 shown */
+		char s[BS_STEP_MAX + 1];
+		uint32_t n = 0;
+		for (uint32_t i = 8; i < t->size && n < BS_STEP_MAX; i++) {
+			char c = ((volatile char *)t->v)[i];
+			if (!c)
+				break;
+			s[n++] = c;
+		}
+		s[n] = 0;
+		r[0] = t->size >= 8 ? bs_redox_step(a, b, s) : 0;
+		reply(t, r, 4);
+		return true;
+	}
+	case 0x00030046: /* throttled (#108): bits 1, 2 now, 17, 18 since boot */
+		r[0] = thermal_flags();
 		reply(t, r, 4);
 		return true;
 	case 0x00030048: /* notify reboot */
@@ -567,6 +586,8 @@ static void property(uint32_t bus) {
 /* answer one waiting request, if there is one */
 void mbox_poll(void) {
 	diag_poll();
+	if (g_mbox_on)
+		thermal_poll();
 	if (!g_mbox_on || (ARM_1_MAIL1_STA & ARM_MS_EMPTY))
 		return;
 	uint32_t msg = ARM_1_MAIL1_RD;
