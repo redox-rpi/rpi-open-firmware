@@ -29,8 +29,9 @@ HDMI ?= $(MONITOR)
 # CHAIN_IMAGE=path (with MONITOR=1): build that bootcode.bin image in and
 # chain it when nobody opens the monitor (boot selector, chain-image.S)
 CHAIN_IMAGE ?=
-# LOAD_CRC=1: also the CRC-32 of the initramfs on the serial line (tests of
-# the SD reads, #34; about 1 s per 10 MB on the VPU)
+# LOAD_CRC=1: the CRC-32 of every loaded file on the serial line (kernel,
+# devicetree, armstub; it costs about 0.5 s for kernel8.img, #44), and of
+# the initramfs (tests of the SD reads, #34; about 1 s per 10 MB on the VPU)
 LOAD_CRC ?= 0
 
 # Broadcom's register headers (BSD) through upstream's glue, as system
