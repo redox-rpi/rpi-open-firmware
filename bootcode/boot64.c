@@ -249,6 +249,19 @@ static bool load_armstub(const struct boot_cfg *c) {
 }
 
 /*
+ * /chosen redox-rpi,diag-ring = <ARM address, bytes> of the display
+ * sampler's ring (diag.c, #66), so a reader on Redox or Linux finds it
+ * without the mailbox. The ring is above the ARM's memory, so no kernel
+ * uses it as RAM.
+ */
+static bool add_diag_ring(struct dt *t) {
+	uint32_t a = B64_ARM(diag_bus_addr()), n = diag_bytes();
+	uint8_t v[8] = {a >> 24, a >> 16, a >> 8, a, n >> 24, n >> 16, n >> 8, n};
+	int32_t c = dt_add_subnode(t, dt_root(t), "chosen");
+	return c >= 0 && dt_setprop(t, c, "redox-rpi,diag-ring", v, sizeof v);
+}
+
+/*
  * /psci when the armstub answers PSCI ("PSCI" at 0x100, our armstub8 since
  * rof #40): Redox and Linux then stop and restart the Pi through it, and
  * our bootcode stays off after a SYSTEM_OFF. Without the node the kernel
@@ -308,6 +321,12 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 		printf("err boot64: SDRAM not set up\n");
 		return false;
 	}
+	static struct boot_cfg cfg;
+	read_config(&cfg);
+	if (cfg.arm_freq) {
+		arm_max_mhz = cfg.arm_freq;
+		printf("boot64: arm_freq, ARM clock at most %u MHz\n", arm_max_mhz);
+	}
 	/* the Zero 2 W's BCM2710A1 is rated for 1000 MHz; at 1200 MHz, with no
 	 * core voltage control, Redox crashed under load (an instruction
 	 * abort at PC 0 while logging in, right after the governor's switch) */
@@ -315,8 +334,6 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 		arm_max_mhz = 1000u;
 		printf("boot64: Zero 2 W, ARM clock at most 1000 MHz\n");
 	}
-	static struct boot_cfg cfg;
-	read_config(&cfg);
 	if (!kernel)
 		kernel = cfg.kernel;
 	if (!load_armstub(&cfg))
@@ -347,7 +364,7 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 			if (!dt_open(&t, (uint8_t *)B64_DTB, (uint32_t)n, B64_DTB_ROOM) ||
 			    (overlays && !apply_overlays(&t, &cfg)) || !dt_set_memory(&t, 0, B64_MEM_SIZE) ||
 			    !set_bootargs(&t, cfg.cmdline) || (!dtb_in_mem && !load_initrd(&t, cfg.initramfs)) ||
-			    !add_psci(&t)) {
+			    !add_psci(&t) || !add_diag_ring(&t)) {
 				fail("devicetree: see the serial line", 0);
 				return false;
 			}
@@ -360,6 +377,10 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 		}
 	}
 	sd_off();
+	if (cfg.diag_period) {
+		diag_start(cfg.diag_period);
+		printf("boot64: display sampler on, every %u us, ring at %08X\n", cfg.diag_period, diag_bus_addr());
+	}
 	bs_step(75, "starting the ARM", 0);
 	/* printed before the start: the ARM's first line came in the middle of
 	 * it otherwise (Pi test 466: "rpi-boot-stub: devicok boot64") */
