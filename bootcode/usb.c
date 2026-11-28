@@ -33,6 +33,11 @@ void *memcpy(void *dst, const void *src, size_t n); /* libc.c */
 #define GINTSTS D(0x014)
 #define GSNPSID D(0x040)
 #define GHWCFG2 D(0x048)
+#define GRXFSIZ D(0x024)
+#define GNPTXFSIZ D(0x028)
+#define GHWCFG3 D(0x04c)
+#define GDFIFOCFG D(0x05c)
+#define HPTXFSIZ D(0x100)
 #define HCFG D(0x400)
 #define HPRT0 D(0x440)
 #define PCGCCTL D(0xe00)
@@ -72,6 +77,9 @@ void *memcpy(void *dst, const void *src, size_t n); /* libc.c */
 #define PID_SETUP 3u
 
 #define CH 0 /* one host channel is enough for a boot loader */
+#define USB_RXF 532u   /* FIFO sizes in words, as U-Boot (dwc2.h) */
+#define USB_NPTXF 256u
+#define USB_PTXF 512u
 #define USB_DMA_OFF 0x300000u /* 256 KB in the VideoCore's part, after diag.c's ring */
 #define USB_DMA_BYTES 0x40000u
 
@@ -115,6 +123,29 @@ static void flush_fifos(void) {
 }
 
 static uint32_t g_speed; /* root port: 0 high, 1 full, 2 low speed */
+static uint32_t g_xfers; /* channel runs since boot, for the checks in xfer() */
+static uint32_t g_dma_odd, g_reread; /* odd register values seen; reads that needed a repeat */
+
+/*
+ * Read a channel register until two reads agree (Test 714: HCDMA and
+ * HCTSIZ sometimes read back values the transfer cannot have left, more
+ * often at a higher VPU clock). Counts the repeats in g_reread.
+ */
+static uint32_t rd_stable(volatile unsigned int *r) {
+	uint32_t a = *r;
+	for (int i = 0; i < 8; i++) {
+		uint32_t b = *r;
+		if (a == b)
+			return a;
+		g_reread++;
+		a = b;
+	}
+	return a;
+}
+
+void usb_stats(uint32_t *xfers, uint32_t *odd, uint32_t *reread) {
+	*xfers = g_xfers, *odd = g_dma_odd, *reread = g_reread;
+}
 
 /* core and root port up, the device on the root port reset; true when one is there */
 bool usb_host_start(void) {
@@ -144,6 +175,24 @@ bool usb_host_start(void) {
 	}
 	PCGCCTL = 0;
 	HCFG = (HCFG & ~3u); /* PHY clock 30/60 MHz */
+	/*
+	 * FIFO sizes in 32-bit words, as U-Boot's dwc2.c sets them (dwc2.h):
+	 * receive 532, non-periodic transmit 256, periodic transmit 512. The
+	 * power-on sizes let the receive FIFO reach the top of the FIFO RAM,
+	 * where the core keeps each channel's DMA address (GDFIFOCFG
+	 * EPInfoBase): received data then overwrote HCDMA and the controller
+	 * wrote into our memory (Tests 706-715: HCDMA = the last data word,
+	 * first at transfer 3110).
+	 */
+	uint32_t depth = GHWCFG3 >> 16, epinfo = GDFIFOCFG >> 16;
+	uint32_t rx0 = GRXFSIZ, np0 = GNPTXFSIZ, p0 = HPTXFSIZ;
+	GRXFSIZ = USB_RXF;
+	GNPTXFSIZ = USB_NPTXF << 16 | USB_RXF;
+	HPTXFSIZ = USB_PTXF << 16 | (USB_RXF + USB_NPTXF);
+	printf("usb: FIFO RAM %u words, EPInfo at %u; rx %u (was %u), np tx %u@%u (was %08X), p tx %u@%u (was %08X)\n",
+	       depth, epinfo, USB_RXF, rx0, USB_NPTXF, USB_RXF, np0, USB_PTXF, USB_RXF + USB_NPTXF, p0);
+	if (epinfo && USB_RXF + USB_NPTXF + USB_PTXF > epinfo)
+		printf("err usb: FIFOs reach the EPInfo area\n");
 	flush_fifos();
 	uint32_t nch = ((GHWCFG2 >> 14) & 0xfu) + 1u;
 	for (uint32_t i = 0; i < nch; i++) {
@@ -177,7 +226,8 @@ bool usb_host_start(void) {
 }
 
 /* one transfer on the channel; returns the bytes moved or a negative error */
-static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint32_t len) {
+static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint32_t len,
+                int max_tries) {
 	uint8_t *d = dma_buf();
 	uint32_t mps = ep->mps ? ep->mps : 64u;
 	if (len > USB_DMA_BYTES)
@@ -185,12 +235,19 @@ static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint
 	uint32_t pkts = len ? (len + mps - 1u) / mps : 1u;
 	if (!in && len)
 		memcpy(d, buf, len);
-	for (int tries = 0; tries < 2000; tries++) {
+	for (int tries = 0; tries < max_tries; tries++) {
 		HCCHAR(CH) = (mps & 0x7ffu) | (ep->ep & 0xfu) << 11 | (in ? HCCHAR_EPDIR_IN : 0) |
 		             (ep->type & 3u) << 18 | 1u << 20 | (ep->addr & 0x7fu) << 22;
 		HCSPLT(CH) = 0;
 		HCTSIZ(CH) = (len & 0x7ffffu) | (pkts & 0x3ffu) << 19 | (*pid & 3u) << 29;
 		HCDMA(CH) = (uint32_t)d;
+		/* Test 711: HCDMA held a foreign address; compare the low 30 bits in
+		 * case the register does not keep the bus alias */
+		if ((HCDMA(CH) ^ (uint32_t)d) & 0x3fffffffu) {
+			printf("err usb: HCDMA reads %08X after writing %08X (transfer %u)\n", HCDMA(CH),
+			       (uint32_t)d, g_xfers);
+			return -11;
+		}
 		HCINT(CH) = 0x3fffu;
 		HCINTMSK(CH) = 0;
 		HCCHAR(CH) |= HCCHAR_CHENA;
@@ -198,10 +255,20 @@ static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint
 			HCCHAR(CH) |= HCCHAR_CHDIS;
 			return -3; /* timeout */
 		}
-		uint32_t st = HCINT(CH), ts = HCTSIZ(CH);
+		uint32_t st = rd_stable(&HCINT(CH)), ts = rd_stable(&HCTSIZ(CH)), da = rd_stable(&HCDMA(CH));
+		g_xfers++;
+		if (((da - (uint32_t)d) & 0x3fffffffu) > len + 3u && g_dma_odd++ < 5)
+			printf("usb: odd HCDMA %08X after the transfer, buffer %08X, len %u, HCINT %08X "
+			       "HCTSIZ %08X (transfer %u)\n", da, (uint32_t)d, len, st, ts, g_xfers);
 		if (st & HCINT_XFERCOMPL) {
 			*pid = (ts >> 29) & 3u;
-			uint32_t n = in ? len - (ts & 0x7ffffu) : len;
+			uint32_t left = ts & 0x7ffffu;
+			if (left > len) { /* never trust it past the request (Tests 706-714) */
+				if (g_dma_odd++ < 5)
+					printf("usb: odd HCTSIZ %08X for len %u (transfer %u)\n", ts, len, g_xfers);
+				left = len;
+			}
+			uint32_t n = in ? len - left : len;
 			if (in && n)
 				memcpy(buf, d, n);
 			return (int)n;
@@ -210,31 +277,70 @@ static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint
 			return -4;
 		if (!(st & (HCINT_NAK | HCINT_FRMOVRUN)))
 			return -5; /* transaction error, babble, data toggle */
-		udelay(100); /* NAK: the device is not ready, ask again */
+		if (tries + 1 < max_tries)
+			udelay(100); /* NAK: the device is not ready, ask again */
 	}
 	return -6;
 }
 
 int usb_control(const struct usb_ep *ep0, const struct usb_setup *s, void *data) {
 	uint32_t pid = PID_SETUP;
-	int r = xfer(ep0, false, &pid, (void *)s, 8);
+	int r = xfer(ep0, false, &pid, (void *)s, 8, 2000);
 	if (r < 0)
 		return r;
 	bool in = s->bmRequestType & 0x80u;
 	int n = 0;
 	if (s->wLength) {
 		pid = PID_DATA1;
-		n = xfer(ep0, in, &pid, data, s->wLength);
+		n = xfer(ep0, in, &pid, data, s->wLength, 2000);
 		if (n < 0)
 			return n;
 	}
 	pid = PID_DATA1; /* status stage: the other direction, no data */
-	r = xfer(ep0, s->wLength ? !in : true, &pid, 0, 0);
+	r = xfer(ep0, s->wLength ? !in : true, &pid, 0, 0, 2000);
 	return r < 0 ? r : n;
 }
 
 int usb_bulk(const struct usb_ep *ep, bool in, uint32_t *toggle, void *buf, uint32_t len) {
-	return xfer(ep, in, toggle, buf, len);
+	return xfer(ep, in, toggle, buf, len, 2000);
+}
+
+/* one bulk IN try: 0 if the device answers NAK (nothing to send yet) */
+int usb_bulk_in_try(const struct usb_ep *ep, uint32_t *toggle, void *buf, uint32_t len) {
+	int r = xfer(ep, true, toggle, buf, len, 1);
+	return r == -6 ? 0 : r;
+}
+
+/*
+ * The first bulk IN and OUT endpoints of configuration 1, from its
+ * descriptor; then SET_CONFIGURATION 1. False if there are none.
+ */
+bool usb_bulk_endpoints(const struct usb_dev *dev, struct usb_ep *in, struct usb_ep *out) {
+	uint8_t cd[128];
+	struct usb_setup get = {0x80, 6, 0x0200, 0, 9}; /* GET_DESCRIPTOR configuration */
+	int n = usb_control(&dev->ep0, &get, cd);
+	if (n < 9)
+		return false;
+	uint32_t total = (uint32_t)(cd[2] | cd[3] << 8);
+	get.wLength = (uint16_t)(total < sizeof cd ? total : sizeof cd);
+	n = usb_control(&dev->ep0, &get, cd);
+	if (n < 9)
+		return false;
+	in->mps = out->mps = 0;
+	for (int i = 0; i + 2 <= n && cd[i] >= 2; i += cd[i]) {
+		if (cd[i + 1] != 5 || i + 7 > n || (cd[i + 3] & 3u) != 2u) /* bulk endpoint */
+			continue;
+		struct usb_ep *e = cd[i + 2] & 0x80u ? in : out;
+		if (e->mps)
+			continue;
+		e->addr = dev->ep0.addr;
+		e->ep = cd[i + 2] & 0xfu;
+		e->type = USB_EP_BULK;
+		e->mps = (uint16_t)((cd[i + 4] | cd[i + 5] << 8) & 0x7ffu);
+	}
+	if (!in->mps || !out->mps)
+		return false;
+	return usb_set_config(dev, cd[5]) >= 0;
 }
 
 uint32_t usb_root_speed(void) {
@@ -387,19 +493,32 @@ int usb_hub_scan(const struct usb_dev *hub, uint8_t *next, struct usb_dev *found
 	return n;
 }
 
+static struct usb_dev g_devs[8]; /* the root port's device, then those behind it */
+static int g_ndevs;
+
 /* N1/N2 check: the device on the root port and, if it is a hub, the devices behind it */
 bool usb_probe_root(void) {
+	g_ndevs = 0;
 	if (!usb_host_start())
 		return false;
-	struct usb_dev root, behind[7];
-	if (!usb_enumerate(1, &root))
+	if (!usb_enumerate(1, &g_devs[0]))
 		return false;
-	if (root.cls != 9)
+	g_ndevs = 1;
+	if (g_devs[0].cls != 9)
 		return true;
 	uint8_t next = 2;
-	int n = usb_hub_scan(&root, &next, behind, 7);
+	int n = usb_hub_scan(&g_devs[0], &next, &g_devs[1], 7);
 	if (n < 0)
 		return false;
+	g_ndevs += n;
 	printf("usb: %d high-speed device(s) behind the root hub\n", n);
 	return true;
+}
+
+/* a device found by the last usb_probe_root(), or 0 */
+const struct usb_dev *usb_find(uint16_t vid, uint16_t pid) {
+	for (int i = 0; i < g_ndevs; i++)
+		if (g_devs[i].vid == vid && g_devs[i].pid == pid)
+			return &g_devs[i];
+	return 0;
 }

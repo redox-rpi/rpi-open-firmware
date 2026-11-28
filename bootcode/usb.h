@@ -40,5 +40,9 @@ uint32_t usb_root_speed(void); /* 0 high, 1 full, 2 low */
 int usb_control(const struct usb_ep *ep0, const struct usb_setup *s, void *data);
 int usb_bulk(const struct usb_ep *ep, bool in, uint32_t *toggle, void *buf, uint32_t len);
 bool usb_probe_root(void);
+int usb_bulk_in_try(const struct usb_ep *ep, uint32_t *toggle, void *buf, uint32_t len);
+bool usb_bulk_endpoints(const struct usb_dev *dev, struct usb_ep *in, struct usb_ep *out);
+const struct usb_dev *usb_find(uint16_t vid, uint16_t pid);
+void usb_stats(uint32_t *xfers, uint32_t *odd, uint32_t *reread);
 
 #endif

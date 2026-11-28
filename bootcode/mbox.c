@@ -57,6 +57,11 @@ uint32_t board_revision(void) {
 	return otp_read(30);
 }
 
+/* the chip serial number from OTP row 28 (lan78xx.c builds the MAC address) */
+uint32_t board_serial(void) {
+	return otp_read(28);
+}
+
 static uint32_t otp_read(uint32_t row) {
 	OTP_CONFIG_REG = 3;
 	udelay(1);
