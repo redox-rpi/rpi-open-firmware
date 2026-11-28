@@ -42,8 +42,9 @@
  *   i2cw A R V     write V to register R of I2C device A -> ok i2cw
  *   exp            GPIO expander: LAN_RUN and power LED on -> ok exp
  *   usbon          power up USB as boot64 does (clocks, expander) -> ok usbon
- *   usb            DWC2 host: reset the root port and print the device
- *                  descriptor there (after usbon; network boot N1, #116) -> ok usb
+ *   usb            DWC2 host: reset the root port, print the device there
+ *                  and, for a hub, the high-speed devices behind it (after
+ *                  usbon; network boot N1/N2, #116, #117) -> ok usb
  *   hdmi [RGB]     1920x1080 60 Hz DVI on HDMI, one colour 0xRRGGBB from the
  *                  HVS background (default ff8000, orange) (hdmi.c, #442)
  *                  -> step lines, then ok hdmi or err hdmi
