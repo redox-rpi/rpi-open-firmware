@@ -45,8 +45,8 @@
  *   usb            DWC2 host: reset the root port, print the device there
  *                  and, for a hub, the high-speed devices behind it (after
  *                  usbon; network boot N1/N2, #116, #117) -> ok usb
- *   eth [IP [G]]   usb, then the 3B+'s LAN7800: reset, MAC, link (100 Mbit;
- *                  G=1 also 1000), and with
+ *   eth [IP [F]]   usb, then the 3B+'s LAN7800: reset, MAC, link (100 Mbit;
+ *                  F: 1 also 1000, 2 no PHY reset, 4 no pauses), and with
  *                  IP (hex, e.g. C0A8B214) an ARP probe for it; 3 s of
  *                  received frames (after usbon; network boot N7, #122) -> ok eth
  *   hdmi [RGB]     1920x1080 60 Hz DVI on HDMI, one colour 0xRRGGBB from the
@@ -504,7 +504,7 @@ static bool run(int argc, char **argv) {
 	} else if (!strcmp_s(c, "eth") && n <= 2) {
 		if (!g_sdram_up)
 			printf("err eth: SDRAM not set up\n");
-		else if (lan78xx_check(n ? a[0] : 0, n == 2 && a[1] != 0))
+		else if (lan78xx_check(n ? a[0] : 0, n == 2 ? a[1] : 0))
 			printf("ok eth\n");
 	} else if (!strcmp_s(c, "usbon") && n == 0) {
 		if (usb_power_on())
@@ -524,7 +524,7 @@ static bool run(int argc, char **argv) {
 	} else if (!strcmp_s(c, "diagdump") && n == 1) {
 		diag_dump(a[0]);
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | usb | eth [IP [G]] | hdmi [RGB] | hdmistat | diag US(hex, 0 off) | diagdump N | bs | regs | vpuclk D | armmax M | temp | boot64 [K [DTB]] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | usb | eth [IP [F]] | hdmi [RGB] | hdmistat | diag US(hex, 0 off) | diagdump N | bs | regs | vpuclk D | armmax M | temp | boot64 [K [DTB]] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();

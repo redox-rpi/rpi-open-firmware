@@ -60,6 +60,12 @@ void exception_fatal(uint32_t num, const uint32_t *sp) {
 	/* which interrupt it was (Test 706): the controllers' status and masks */
 	printf("IC0 C %08X S %08X SRC %08X %08X  IC1 C %08X S %08X SRC %08X %08X\n", IC0_C, IC0_S,
 	       IC0_SRC0, IC0_SRC1, IC1_C, IC1_S, IC1_SRC0, IC1_SRC1);
+	/* what the USB host channel was doing (network boot, Tests 706-709) */
+	printf("USB HCCHAR %08X HCINT %08X HCTSIZ %08X HCDMA %08X GINTSTS %08X HPRT0 %08X\n",
+	       *(volatile uint32_t *)0x7e980500u, *(volatile uint32_t *)0x7e980508u,
+	       *(volatile uint32_t *)0x7e980510u, *(volatile uint32_t *)0x7e980514u,
+	       *(volatile uint32_t *)0x7e980014u, *(volatile uint32_t *)0x7e980440u);
+	printf("stack %08X %08X %08X %08X\n", sp[2], sp[3], sp[4], sp[5]);
 	printf("IC0 MASK %08X %08X %08X %08X %08X %08X %08X %08X\n", IC0_MASK0, IC0_MASK1, IC0_MASK2,
 	       IC0_MASK3, IC0_MASK4, IC0_MASK5, IC0_MASK6, IC0_MASK7);
 	for (;;) {

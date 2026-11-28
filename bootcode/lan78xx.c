@@ -137,7 +137,7 @@ const uint8_t *lan78xx_mac(void) {
  * Bring up the LAN7800 found by usb_probe_root(): reset, MAC address, PHY
  * autonegotiation, link, then the TX and RX paths. Prints one line per step.
  */
-bool lan78xx_start(const struct usb_dev *dev, uint32_t link_ms, bool gigabit) {
+bool lan78xx_start(const struct usb_dev *dev, uint32_t link_ms, uint32_t flags) {
 	g_ep0 = dev->ep0;
 	if (!usb_bulk_endpoints(dev, &g_in, &g_out)) {
 		printf("err eth: no bulk endpoints\n");
@@ -148,12 +148,13 @@ bool lan78xx_start(const struct usb_dev *dev, uint32_t link_ms, bool gigabit) {
 	int r = reg_write(HW_CFG, HW_CFG_LRST);
 	if (r == 0)
 		r = reg_wait(HW_CFG, HW_CFG_LRST, false, 1000);
-	if (r == 0)
+	if (r == 0 && !(flags & ETH_NO_PHY)) {
 		r = reg_read(PMT_CTL, &v);
-	if (r == 0)
-		r = reg_write(PMT_CTL, v | PMT_CTL_PHY_RST);
-	if (r == 0)
-		r = reg_wait(PMT_CTL, PMT_CTL_PHY_RST, false, 1000);
+		if (r == 0)
+			r = reg_write(PMT_CTL, v | PMT_CTL_PHY_RST);
+		if (r == 0)
+			r = reg_wait(PMT_CTL, PMT_CTL_PHY_RST, false, 1000);
+	}
 	if (r == 0)
 		r = reg_wait(PMT_CTL, PMT_CTL_READY, true, 1000);
 	if (r == 0)
@@ -192,16 +193,20 @@ bool lan78xx_start(const struct usb_dev *dev, uint32_t link_ms, bool gigabit) {
 	 * Tests 706/708 stopped with stray exceptions while the gigabit link
 	 * came up; 100 Mbit is more than netboot needs (the USB 2.0 link caps
 	 * the chip at about 300 Mbit anyway). */
-	int c = mdio_read(MII_CTRL1000);
-	if (c >= 0)
-		mdio_write(MII_CTRL1000, gigabit ? (uint32_t)c | 0x300u : (uint32_t)c & ~0x300u);
-	int w = mdio_write(MII_BMCR, BMCR_ANENABLE | BMCR_ANRESTART);
-	printf("eth: PHY %04X:%04X, autonegotiation restarted (%d)\n", mdio_read(2) & 0xffff,
-	       mdio_read(3) & 0xffff, w);
+	int w = 0;
+	if (!(flags & ETH_NO_PHY)) {
+		int c = mdio_read(MII_CTRL1000);
+		if (c >= 0)
+			mdio_write(MII_CTRL1000, flags & ETH_GIGABIT ? (uint32_t)c | 0x300u : (uint32_t)c & ~0x300u);
+		w = mdio_write(MII_BMCR, BMCR_ANENABLE | BMCR_ANRESTART);
+	}
+	printf("eth: PHY %04X:%04X, autonegotiation restarted (%d), flags %X\n", mdio_read(2) & 0xffff,
+	       mdio_read(3) & 0xffff, w, flags);
 	uint32_t t0 = timer_us();
 	int bmsr = 0, last = -1;
 	do {
-		udelay(10000);
+		if (!(flags & ETH_NO_SLEEP))
+			udelay(10000);
 		bmsr = mdio_read(MII_BMSR);
 		if (bmsr != last) /* each change, to see where a fault happens */
 			printf("eth: %u ms: BMSR %04X\n", (timer_us() - t0) / 1000u, bmsr & 0xffff);
@@ -277,9 +282,9 @@ int lan78xx_recv(void *buf, uint32_t max) {
  * Monitor check (N7): bring the chip up, send an ARP probe for target_ip
  * (RFC 5227: our IP 0.0.0.0, so the answer comes to our MAC), and listen
  * for 3 s: count the frames, print the first few and the ARP reply.
- * gigabit: also advertise 1000 Mbit.
+ * flags: ETH_GIGABIT, ETH_NO_PHY, ETH_NO_SLEEP (lan78xx.h).
  */
-bool lan78xx_check(uint32_t target_ip, bool gigabit) {
+bool lan78xx_check(uint32_t target_ip, uint32_t flags) {
 	if (!usb_probe_root())
 		return false;
 	const struct usb_dev *dev = usb_find(0x0424, 0x7800);
@@ -287,7 +292,7 @@ bool lan78xx_check(uint32_t target_ip, bool gigabit) {
 		printf("err eth: no LAN7800 (0424:7800) found\n");
 		return false;
 	}
-	if (!lan78xx_start(dev, 5000, gigabit))
+	if (!lan78xx_start(dev, 5000, flags))
 		return false;
 	uint8_t arp[42] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 	memcpy(arp + 6, g_mac, 6);
