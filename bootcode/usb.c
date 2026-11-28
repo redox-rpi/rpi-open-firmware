@@ -124,27 +124,10 @@ static void flush_fifos(void) {
 
 static uint32_t g_speed; /* root port: 0 high, 1 full, 2 low speed */
 static uint32_t g_xfers; /* channel runs since boot, for the checks in xfer() */
-static uint32_t g_dma_odd, g_reread; /* odd register values seen; reads that needed a repeat */
+static uint32_t g_dma_odd; /* odd HCDMA/HCTSIZ values after a transfer (should stay 0) */
 
-/*
- * Read a channel register until two reads agree (Test 714: HCDMA and
- * HCTSIZ sometimes read back values the transfer cannot have left, more
- * often at a higher VPU clock). Counts the repeats in g_reread.
- */
-static uint32_t rd_stable(volatile unsigned int *r) {
-	uint32_t a = *r;
-	for (int i = 0; i < 8; i++) {
-		uint32_t b = *r;
-		if (a == b)
-			return a;
-		g_reread++;
-		a = b;
-	}
-	return a;
-}
-
-void usb_stats(uint32_t *xfers, uint32_t *odd, uint32_t *reread) {
-	*xfers = g_xfers, *odd = g_dma_odd, *reread = g_reread;
+void usb_stats(uint32_t *xfers, uint32_t *odd) {
+	*xfers = g_xfers, *odd = g_dma_odd;
 }
 
 /* core and root port up, the device on the root port reset; true when one is there */
@@ -255,7 +238,7 @@ static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint
 			HCCHAR(CH) |= HCCHAR_CHDIS;
 			return -3; /* timeout */
 		}
-		uint32_t st = rd_stable(&HCINT(CH)), ts = rd_stable(&HCTSIZ(CH)), da = rd_stable(&HCDMA(CH));
+		uint32_t st = HCINT(CH), ts = HCTSIZ(CH), da = HCDMA(CH);
 		g_xfers++;
 		if (((da - (uint32_t)d) & 0x3fffffffu) > len + 3u && g_dma_odd++ < 5)
 			printf("usb: odd HCDMA %08X after the transfer, buffer %08X, len %u, HCINT %08X "
@@ -263,7 +246,7 @@ static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint
 		if (st & HCINT_XFERCOMPL) {
 			*pid = (ts >> 29) & 3u;
 			uint32_t left = ts & 0x7ffffu;
-			if (left > len) { /* never trust it past the request (Tests 706-714) */
+			if (left > len) { /* never copy past the request */
 				if (g_dma_odd++ < 5)
 					printf("usb: odd HCTSIZ %08X for len %u (transfer %u)\n", ts, len, g_xfers);
 				left = len;
