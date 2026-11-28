@@ -42,6 +42,17 @@
  *   i2cw A R V     write V to register R of I2C device A -> ok i2cw
  *   exp            GPIO expander: LAN_RUN and power LED on -> ok exp
  *   usbon          power up USB as boot64 does (clocks, expander) -> ok usbon
+ *   usb            DWC2 host: reset the root port, print the device there
+ *                  and, for a hub, the high-speed devices behind it (after
+ *                  usbon; network boot N1/N2, #116, #117) -> ok usb
+ *   dhcp           eth up, then DHCP: our IP, mask, router (network boot N4, #119) -> ok dhcp
+ *   tftp IP FILE ADDR [B [W]]  TFTP FILE from server IP (dotted) to ADDR,
+ *                  blksize B (hex, default 5BC = 1468), window W (default 10 = 16);
+ *                  prints MB/s and the CRC-32 (after dhcp; N5, #120) -> ok tftp N
+ *   eth [IP [F]]   usb, then the 3B+'s LAN7800: reset, MAC, link (100 Mbit;
+ *                  F: 1 also 1000, 2 no PHY reset, 4 no pauses), and with
+ *                  IP (hex, e.g. C0A8B214) an ARP probe for it; 3 s of
+ *                  received frames (after usbon; network boot N7, #122) -> ok eth
  *   hdmi [RGB]     1920x1080 60 Hz DVI on HDMI, one colour 0xRRGGBB from the
  *                  HVS background (default ff8000, orange) (hdmi.c, #442)
  *                  -> step lines, then ok hdmi or err hdmi
@@ -78,6 +89,9 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "hw.h"
+#include "lan78xx.h"
+#include "net.h"
+#include "usb.h"
 
 #define L1_IC_FLUSH 0x2 /* L1_IC0/1_CONTROL_START_FLUSH */
 #define L1_DC_FLUSH 0x6 /* L1_D_CONTROL_DC0_FLUSH | DC1_FLUSH */
@@ -384,6 +398,31 @@ static void cmd_sd(void) {
 		printf("ok sd %s %u MB %s, SH_CDIV %X\n", g_sd.name, g_sd.mb, g_sd.high_capacity ? "SDHC" : "SDSC", SH_CDIV);
 }
 
+/* dhcp | tftp IP FILE ADDR [BLKSIZE [WINDOW]] (network boot N4/N5, #119, #120) */
+static void cmd_net(int argc, char **argv) {
+	if (!g_sdram_up) {
+		printf("err net: SDRAM not set up\n");
+		return;
+	}
+	if (!strcmp_s(argv[0], "dhcp")) {
+		if (argc == 1 && net_dhcp())
+			printf("ok dhcp\n");
+		else if (argc != 1)
+			printf("err usage: dhcp\n");
+		return;
+	}
+	bool ok = false;
+	uint32_t ip = argc >= 4 ? net_parse_ip(argv[1], &ok) : 0, addr = 0, blk = 1468, win = 16;
+	if (!ok || !parse_hex(argv[3], &addr) || argc > 6 || (argc > 4 && !parse_hex(argv[4], &blk)) ||
+	    (argc > 5 && !parse_hex(argv[5], &win))) {
+		printf("err usage: tftp IP FILE ADDR [BLKSIZE [WINDOW]] (hex numbers)\n");
+		return;
+	}
+	int n = net_tftp(ip, argv[2], (uint8_t *)addr, 0x4000000u, blk, win);
+	if (n >= 0)
+		printf("ok tftp %08X\n", (uint32_t)n);
+}
+
 static bool run(int argc, char **argv) {
 	uint32_t a[5] = {0};
 	if (!strcmp_s(argv[0], "fl")) {
@@ -391,6 +430,10 @@ static bool run(int argc, char **argv) {
 			cmd_fl(argv[1], argv[2]);
 		else
 			printf("err usage: fl NAME A\n");
+		return false;
+	}
+	if (!strcmp_s(argv[0], "dhcp") || !strcmp_s(argv[0], "tftp")) {
+		cmd_net(argc, argv);
 		return false;
 	}
 	if (!strcmp_s(argv[0], "boot64")) {
@@ -487,6 +530,16 @@ static bool run(int argc, char **argv) {
 		printf("ok hdmistat\n");
 	} else if (!strcmp_s(c, "regs") && n == 0) {
 		regs_compare();
+	} else if (!strcmp_s(c, "usb") && n == 0) {
+		if (!g_sdram_up)
+			printf("err usb: SDRAM not set up\n");
+		else if (usb_probe_root())
+			printf("ok usb\n");
+	} else if (!strcmp_s(c, "eth") && n <= 2) {
+		if (!g_sdram_up)
+			printf("err eth: SDRAM not set up\n");
+		else if (lan78xx_check(n ? a[0] : 0, n == 2 ? a[1] : 0))
+			printf("ok eth\n");
 	} else if (!strcmp_s(c, "usbon") && n == 0) {
 		if (usb_power_on())
 			printf("ok usbon\n");
@@ -505,7 +558,7 @@ static bool run(int argc, char **argv) {
 	} else if (!strcmp_s(c, "diagdump") && n == 1) {
 		diag_dump(a[0]);
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | hdmi [RGB] | hdmistat | diag US(hex, 0 off) | diagdump N | bs | regs | vpuclk D | armmax M | temp | boot64 [K [DTB]] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | usb | eth [IP [F]] | dhcp | tftp IP FILE ADDR [B [W]] | hdmi [RGB] | hdmistat | diag US(hex, 0 off) | diagdump N | bs | regs | vpuclk D | armmax M | temp | boot64 [K [DTB]] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();

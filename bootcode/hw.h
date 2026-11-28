@@ -135,6 +135,7 @@ uint32_t crc32(const volatile uint8_t *p, uint32_t n);
 extern bool g_mbox_on;
 void mbox_start(void);
 uint32_t board_revision(void); /* OTP row 30, e.g. a020d3 (3B+), 902120 (Zero 2 W) */
+uint32_t board_serial(void);   /* OTP row 28; the MAC address is b8:27:eb + its low 24 bits */
 #define BOARD_TYPE_3BP 0x0du /* board type, bits 4..11 of the revision */
 void mbox_poll(void);
 /* diag.c: display/graphics sampler into a ring buffer for the ARM (#66) */
