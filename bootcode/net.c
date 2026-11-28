@@ -26,7 +26,6 @@ void *memset(void *dst, int c, size_t n);
 #define ETH_IP 0x0800u
 #define PORT_DHCP_S 67u
 #define PORT_DHCP_C 68u
-#define PORT_TFTP 69u
 
 static uint8_t g_mac[6];
 static uint32_t g_ip, g_mask, g_router, g_dhcp_server, g_next_server;
@@ -324,7 +323,7 @@ static uint32_t str_num(const uint8_t *p) {
 	return v;
 }
 
-int net_tftp(uint32_t server, const char *file, uint8_t *dst, uint32_t max, uint32_t blksize,
+int net_tftp(uint32_t server, uint32_t port, const char *file, uint8_t *dst, uint32_t max, uint32_t blksize,
              uint32_t window) {
 	if (!g_ip) {
 		printf("err tftp: no IP, run dhcp first\n");
@@ -355,7 +354,7 @@ int net_tftp(uint32_t server, const char *file, uint8_t *dst, uint32_t max, uint
 		}
 	}
 	uint32_t t0 = timer_us();
-	udp_send(smac, server, lport, PORT_TFTP, rl);
+	udp_send(smac, server, lport, port, rl);
 
 	uint32_t blk = 512, win = 1, tsize = 0;
 	uint32_t sport = 0;      /* the server's port, from its first answer */
@@ -373,7 +372,7 @@ int net_tftp(uint32_t server, const char *file, uint8_t *dst, uint32_t max, uint
 			last_rx = timer_us();
 			if (!started) {
 				/* the request is still at g_tx + 42: only ARP replies were sent */
-				udp_send(smac, server, lport, PORT_TFTP, rl);
+				udp_send(smac, server, lport, port, rl);
 			} else {
 				uint8_t *a = g_tx + 42;
 				put16(a, TFTP_ACK), put16(a + 2, got & 0xffffu);

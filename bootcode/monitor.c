@@ -46,7 +46,8 @@
  *                  and, for a hub, the high-speed devices behind it (after
  *                  usbon; network boot N1/N2, #116, #117) -> ok usb
  *   dhcp           eth up, then DHCP: our IP, mask, router (network boot N4, #119) -> ok dhcp
- *   tftp IP FILE ADDR [B [W]]  TFTP FILE from server IP (dotted) to ADDR,
+ *   tftp IP[:P] FILE ADDR [B [W]]  TFTP FILE from server IP (dotted, port P
+ *                  decimal, default 69) to ADDR,
  *                  blksize B (hex, default 5BC = 1468), window W (default 10 = 16);
  *                  prints MB/s and the CRC-32 (after dhcp; N5, #120) -> ok tftp N
  *   eth [IP [F]]   usb, then the 3B+'s LAN7800: reset, MAC, link (100 Mbit;
@@ -412,13 +413,22 @@ static void cmd_net(int argc, char **argv) {
 		return;
 	}
 	bool ok = false;
+	uint32_t port = 69;
+	for (char *p = argv[1]; argc >= 4 && *p; p++) /* IP:PORT, the port in decimal */
+		if (*p == ':') {
+			*p = 0;
+			port = 0;
+			for (char *q = p + 1; *q >= '0' && *q <= '9'; q++)
+				port = port * 10u + (uint32_t)(*q - '0');
+			break;
+		}
 	uint32_t ip = argc >= 4 ? net_parse_ip(argv[1], &ok) : 0, addr = 0, blk = 1468, win = 16;
 	if (!ok || !parse_hex(argv[3], &addr) || argc > 6 || (argc > 4 && !parse_hex(argv[4], &blk)) ||
 	    (argc > 5 && !parse_hex(argv[5], &win))) {
-		printf("err usage: tftp IP FILE ADDR [BLKSIZE [WINDOW]] (hex numbers)\n");
+		printf("err usage: tftp IP[:PORT] FILE ADDR [BLKSIZE [WINDOW]] (hex numbers)\n");
 		return;
 	}
-	int n = net_tftp(ip, argv[2], (uint8_t *)addr, 0x4000000u, blk, win);
+	int n = net_tftp(ip, port, argv[2], (uint8_t *)addr, 0x4000000u, blk, win);
 	if (n >= 0)
 		printf("ok tftp %08X\n", (uint32_t)n);
 }
