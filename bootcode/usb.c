@@ -1,11 +1,14 @@
 /*
- * usb.c: the DWC2 USB controller as a host, for network boot (rof #116, N1).
+ * usb.c: the DWC2 USB controller as a host, for network boot (rof #116 N1, #117 N2).
  *
  * Core reset, host mode, root port power and reset, and transfers on one
  * host channel in DMA mode: control transfers now, bulk for the network
  * driver (N3). No split transactions: on both boards everything netboot
  * needs is high speed (the LAN7515 hub and LAN7800 on the 3B+, the HAT's
  * hub and RTL8152 on the Zero 2 W).
+ *
+ * Hubs: port power, reset and enumeration of the high-speed devices behind
+ * them (usb_hub_scan), after U-Boot common/usb_hub.c.
  *
  * The register sequence follows U-Boot's drivers/usb/host/dwc2.c
  * (GPL-2.0+), trimmed to the BCM283x configuration: UTMI+ PHY 8 bit,
@@ -153,7 +156,7 @@ bool usb_host_start(void) {
 		HPRT0 = p | HPRT0_PWR;
 	/* wait for a device to connect */
 	if (!wait_set(&HPRT0, HPRT0_CONNSTS, 1000000)) {
-		printf("usb: nothing on the root port (HPRT0 %08X)\n", HPRT0);
+		printf("err usb: nothing on the root port (HPRT0 %08X); usbon first\n", HPRT0);
 		return false;
 	}
 	udelay(100000); /* USB 2.0: 100 ms debounce after connect */
@@ -238,10 +241,12 @@ uint32_t usb_root_speed(void) {
 	return g_speed;
 }
 
-/* N1 check: enumerate the device on the root port and print its descriptor */
-bool usb_probe_root(void) {
-	if (!usb_host_start())
-		return false;
+/*
+ * Enumerate the device that just appeared at address 0 (after a port reset):
+ * read its descriptor, give it address addr, read the descriptor again.
+ * dev gets the device's VID, PID, class and ep0 size.
+ */
+bool usb_enumerate(uint8_t addr, struct usb_dev *dev) {
 	struct usb_ep ep0 = {.addr = 0, .ep = 0, .type = USB_EP_CONTROL, .mps = 64};
 	uint8_t dd[18];
 	struct usb_setup get = {0x80, 6, 0x0100, 0, 8}; /* GET_DESCRIPTOR device, 8 bytes */
@@ -251,21 +256,150 @@ bool usb_probe_root(void) {
 		return false;
 	}
 	ep0.mps = dd[7];
-	struct usb_setup addr = {0x00, 5, 1, 0, 0}; /* SET_ADDRESS 1 */
-	n = usb_control(&ep0, &addr, 0);
+	struct usb_setup sa = {0x00, 5, addr, 0, 0}; /* SET_ADDRESS */
+	n = usb_control(&ep0, &sa, 0);
 	if (n < 0) {
-		printf("err usb: SET_ADDRESS failed: %d\n", n);
+		printf("err usb: SET_ADDRESS %u failed: %d\n", addr, n);
 		return false;
 	}
 	udelay(10000);
-	ep0.addr = 1;
+	ep0.addr = addr;
 	get.wLength = 18;
 	n = usb_control(&ep0, &get, dd);
 	if (n < 18) {
 		printf("err usb: device descriptor (18 bytes) failed: %d\n", n);
 		return false;
 	}
-	printf("usb: device %04X:%04X, USB %X.%02X, class %02X, max packet %u, %u configuration(s)\n",
-	       dd[8] | dd[9] << 8, dd[10] | dd[11] << 8, dd[3], dd[2], dd[4], dd[7], dd[17]);
+	dev->ep0 = ep0;
+	dev->vid = (uint16_t)(dd[8] | dd[9] << 8);
+	dev->pid = (uint16_t)(dd[10] | dd[11] << 8);
+	dev->cls = dd[4];
+	printf("usb: device %u: %04X:%04X, USB %X.%02X, class %02X, max packet %u, %u configuration(s)\n",
+	       addr, dev->vid, dev->pid, dd[3], dd[2], dd[4], dd[7], dd[17]);
+	return true;
+}
+
+int usb_set_config(const struct usb_dev *dev, uint8_t cfg) {
+	struct usb_setup sc = {0x00, 9, cfg, 0, 0}; /* SET_CONFIGURATION */
+	return usb_control(&dev->ep0, &sc, 0);
+}
+
+#define PORT_CONNECTION (1u << 0)
+#define PORT_ENABLE (1u << 1)
+#define PORT_RESET (1u << 4)
+#define PORT_LOW_SPEED (1u << 9)
+#define PORT_HIGH_SPEED (1u << 10)
+#define FEAT_PORT_RESET 4u
+#define FEAT_PORT_POWER 8u
+#define FEAT_C_PORT_CONNECTION 16u
+#define FEAT_C_PORT_RESET 20u
+
+static int port_feature(const struct usb_dev *hub, bool set, uint16_t feat, uint16_t port) {
+	struct usb_setup s = {0x23, set ? 3 : 1, feat, port, 0}; /* SET/CLEAR_FEATURE, port */
+	return usb_control(&hub->ep0, &s, 0);
+}
+
+static int port_status(const struct usb_dev *hub, uint16_t port, uint32_t *st) {
+	uint8_t b[4];
+	struct usb_setup s = {0xa3, 0, 0, port, 4}; /* GET_STATUS, port */
+	int n = usb_control(&hub->ep0, &s, b);
+	if (n < 4)
+		return n < 0 ? n : -7;
+	*st = (uint32_t)(b[0] | b[1] << 8 | b[2] << 16 | b[3] << 24);
+	return 0;
+}
+
+/*
+ * Hub at hub->ep0.addr: configure it, power its ports, reset each port with
+ * a device and enumerate high-speed devices from address *next on. found
+ * gets up to max devices; returns how many.
+ */
+int usb_hub_scan(const struct usb_dev *hub, uint8_t *next, struct usb_dev *found, int max) {
+	int r = usb_set_config(hub, 1);
+	if (r < 0) {
+		printf("err usb: hub SET_CONFIGURATION failed: %d\n", r);
+		return r;
+	}
+	uint8_t hd[9];
+	struct usb_setup gd = {0xa0, 6, 0x2900, 0, 9}; /* GET_DESCRIPTOR hub */
+	r = usb_control(&hub->ep0, &gd, hd);
+	if (r < 7) {
+		printf("err usb: hub descriptor failed: %d\n", r);
+		return r < 0 ? r : -7;
+	}
+	uint32_t nports = hd[2], good_ms = 2u * hd[5];
+	printf("usb: hub %u: %u ports, power good after %u ms\n", hub->ep0.addr, nports, good_ms);
+	for (uint32_t p = 1; p <= nports; p++)
+		port_feature(hub, true, FEAT_PORT_POWER, (uint16_t)p);
+	udelay(good_ms * 1000u);
+	/* Devices may take a while to connect after port power (Test 704: the
+	 * LAN7800 was not there 100 ms after power good). Wait up to 1 s from
+	 * power good for each port, as U-Boot's connect_timeout does. */
+	uint32_t t_good = timer_us();
+	int n = 0;
+	for (uint32_t p = 1; p <= nports && n < max; p++) {
+		uint32_t st = 0;
+		int r2;
+		while ((r2 = port_status(hub, (uint16_t)p, &st)) >= 0 && !(st & PORT_CONNECTION) &&
+		       timer_us() - t_good < 1000000u)
+			udelay(10000);
+		if (r2 < 0 || !(st & PORT_CONNECTION)) {
+			printf("usb: hub %u port %u: empty (status %08X)\n", hub->ep0.addr, p, st);
+			continue;
+		}
+		printf("usb: hub %u port %u: connected after %u ms\n", hub->ep0.addr, p,
+		       (timer_us() - t_good) / 1000u);
+		port_feature(hub, false, FEAT_C_PORT_CONNECTION, (uint16_t)p);
+		port_feature(hub, true, FEAT_PORT_RESET, (uint16_t)p);
+		uint32_t t0 = timer_us();
+		do {
+			udelay(10000);
+			if (port_status(hub, (uint16_t)p, &st) < 0)
+				break;
+		} while ((st & PORT_RESET) && timer_us() - t0 < 500000u);
+		port_feature(hub, false, FEAT_C_PORT_RESET, (uint16_t)p);
+		if (!(st & PORT_ENABLE)) {
+			printf("err usb: hub %u port %u: not enabled after reset (status %08X)\n",
+			       hub->ep0.addr, p, st);
+			continue;
+		}
+		const char *spd = st & PORT_HIGH_SPEED ? "high" : st & PORT_LOW_SPEED ? "low" : "full";
+		if (!(st & PORT_HIGH_SPEED)) {
+			/* would need split transactions, which netboot does not need */
+			printf("usb: hub %u port %u: %s-speed device, skipped\n", hub->ep0.addr, p, spd);
+			continue;
+		}
+		udelay(10000); /* reset recovery */
+		printf("usb: hub %u port %u: high-speed device\n", hub->ep0.addr, p);
+		if (!usb_enumerate(*next, &found[n]))
+			continue;
+		(*next)++;
+		n++;
+		if (found[n - 1].cls == 9 && n < max) {
+			/* a hub behind the hub: on the 3B+ the LAN7515 has two levels,
+			 * the LAN7800 sits behind the second hub. Scan it too; max
+			 * bounds the depth. */
+			int m = usb_hub_scan(&found[n - 1], next, &found[n], max - n);
+			if (m > 0)
+				n += m;
+		}
+	}
+	return n;
+}
+
+/* N1/N2 check: the device on the root port and, if it is a hub, the devices behind it */
+bool usb_probe_root(void) {
+	if (!usb_host_start())
+		return false;
+	struct usb_dev root, behind[7];
+	if (!usb_enumerate(1, &root))
+		return false;
+	if (root.cls != 9)
+		return true;
+	uint8_t next = 2;
+	int n = usb_hub_scan(&root, &next, behind, 7);
+	if (n < 0)
+		return false;
+	printf("usb: %d high-speed device(s) behind the root hub\n", n);
 	return true;
 }
