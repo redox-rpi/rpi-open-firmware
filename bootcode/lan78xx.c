@@ -186,9 +186,12 @@ bool lan78xx_start(const struct usb_dev *dev, uint32_t link_ms) {
 	reg_write(FCT_TX_FIFO_END, (MAX_FIFO - 512u) / 512u);
 	reg_write(FLOW, 0);
 	reg_write(RFE_CTL, RFE_CTL_BCAST_EN | RFE_CTL_DA_PERFECT);
+	printf("eth: FIFOs and receive filter set\n");
 
 	/* the PHY comes up advertising every mode; restart autonegotiation */
-	mdio_write(MII_BMCR, BMCR_ANENABLE | BMCR_ANRESTART);
+	int w = mdio_write(MII_BMCR, BMCR_ANENABLE | BMCR_ANRESTART);
+	printf("eth: PHY %04X:%04X, autonegotiation restarted (%d)\n", mdio_read(2) & 0xffff,
+	       mdio_read(3) & 0xffff, w);
 	uint32_t t0 = timer_us();
 	int bmsr = 0;
 	do {
