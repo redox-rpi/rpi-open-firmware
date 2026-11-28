@@ -340,6 +340,9 @@ bool lan78xx_check(uint32_t target_ip, uint32_t flags) {
 	}
 	printf("eth: 3 s: %u ARP probe(s) sent, %u frames (%u bytes) received, %u receive errors\n", sent,
 	       frames, bytes, errs);
+	uint32_t nx, odd, rr;
+	usb_stats(&nx, &odd, &rr);
+	printf("eth: USB %u transfers, %u odd register values, %u repeated reads\n", nx, odd, rr);
 	if (target_ip && !answered) {
 		printf("err eth: no ARP reply\n");
 		return false;
