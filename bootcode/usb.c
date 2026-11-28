@@ -361,9 +361,17 @@ int usb_hub_scan(const struct usb_dev *hub, uint8_t *next, struct usb_dev *found
 		}
 		udelay(10000); /* reset recovery */
 		printf("usb: hub %u port %u: high-speed device\n", hub->ep0.addr, p);
-		if (usb_enumerate(*next, &found[n])) {
-			(*next)++;
-			n++;
+		if (!usb_enumerate(*next, &found[n]))
+			continue;
+		(*next)++;
+		n++;
+		if (found[n - 1].cls == 9 && n < max) {
+			/* a hub behind the hub: on the 3B+ the LAN7515 has two levels,
+			 * the LAN7800 sits behind the second hub. Scan it too; max
+			 * bounds the depth. */
+			int m = usb_hub_scan(&found[n - 1], next, &found[n], max - n);
+			if (m > 0)
+				n += m;
 		}
 	}
 	return n;
@@ -382,6 +390,6 @@ bool usb_probe_root(void) {
 	int n = usb_hub_scan(&root, &next, behind, 7);
 	if (n < 0)
 		return false;
-	printf("usb: %d high-speed device(s) behind the hub\n", n);
+	printf("usb: %d high-speed device(s) behind the root hub\n", n);
 	return true;
 }
