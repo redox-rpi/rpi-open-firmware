@@ -48,7 +48,7 @@ LDFLAGS := -nostdlib -nostartfiles -Wl,--build-id=none -T linker.ld
 
 SRCS := start.S main.c clock.c timer.c uart.c printf.c sdram.c libc.c
 ifeq ($(MONITOR),1)
-SRCS += monitor.c arm.c sd.c fat.c dt.c config.c mbox.c diag.c thermal.c power.c i2c.c boot64.c
+SRCS += monitor.c arm.c sd.c fat.c dt.c config.c mbox.c diag.c thermal.c power.c i2c.c usb.c boot64.c
 ifneq ($(CHAIN_IMAGE),)
 SRCS += chain-image.S
 CFLAGS += -DCHAIN_IMAGE=1

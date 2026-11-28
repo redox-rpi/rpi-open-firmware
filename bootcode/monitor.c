@@ -42,6 +42,8 @@
  *   i2cw A R V     write V to register R of I2C device A -> ok i2cw
  *   exp            GPIO expander: LAN_RUN and power LED on -> ok exp
  *   usbon          power up USB as boot64 does (clocks, expander) -> ok usbon
+ *   usb            DWC2 host: reset the root port and print the device
+ *                  descriptor there (after usbon; network boot N1, #116) -> ok usb
  *   hdmi [RGB]     1920x1080 60 Hz DVI on HDMI, one colour 0xRRGGBB from the
  *                  HVS background (default ff8000, orange) (hdmi.c, #442)
  *                  -> step lines, then ok hdmi or err hdmi
@@ -78,6 +80,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "hw.h"
+#include "usb.h"
 
 #define L1_IC_FLUSH 0x2 /* L1_IC0/1_CONTROL_START_FLUSH */
 #define L1_DC_FLUSH 0x6 /* L1_D_CONTROL_DC0_FLUSH | DC1_FLUSH */
@@ -487,6 +490,11 @@ static bool run(int argc, char **argv) {
 		printf("ok hdmistat\n");
 	} else if (!strcmp_s(c, "regs") && n == 0) {
 		regs_compare();
+	} else if (!strcmp_s(c, "usb") && n == 0) {
+		if (!g_sdram_up)
+			printf("err usb: SDRAM not set up\n");
+		else if (usb_probe_root())
+			printf("ok usb\n");
 	} else if (!strcmp_s(c, "usbon") && n == 0) {
 		if (usb_power_on())
 			printf("ok usbon\n");
@@ -505,7 +513,7 @@ static bool run(int argc, char **argv) {
 	} else if (!strcmp_s(c, "diagdump") && n == 1) {
 		diag_dump(a[0]);
 	} else if ((!strcmp_s(c, "help") || !strcmp_s(c, "?")) && n == 0) {
-		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | hdmi [RGB] | hdmistat | diag US(hex, 0 off) | diagdump N | bs | regs | vpuclk D | armmax M | temp | boot64 [K [DTB]] | reset | boot\n");
+		printf("r A | w A V | s A M | c A M | d A N | l A N [C] | crc A N | g A [r0..r3] | chain A N [R] | arm [M] | sd | sdr L A N | ls | fl NAME A | i2cscan | i2cr A R N | i2cw A R V | exp | usbon | usb | hdmi [RGB] | hdmistat | diag US(hex, 0 off) | diagdump N | bs | regs | vpuclk D | armmax M | temp | boot64 [K [DTB]] | reset | boot\n");
 		printf("ok\n");
 	} else {
 		drain_input();
