@@ -115,6 +115,7 @@ static void flush_fifos(void) {
 }
 
 static uint32_t g_speed; /* root port: 0 high, 1 full, 2 low speed */
+static uint32_t g_xfers; /* channel runs since boot, for the checks in xfer() */
 
 /* core and root port up, the device on the root port reset; true when one is there */
 bool usb_host_start(void) {
@@ -192,6 +193,13 @@ static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint
 		HCSPLT(CH) = 0;
 		HCTSIZ(CH) = (len & 0x7ffffu) | (pkts & 0x3ffu) << 19 | (*pid & 3u) << 29;
 		HCDMA(CH) = (uint32_t)d;
+		/* Test 711: HCDMA held a foreign address; compare the low 30 bits in
+		 * case the register does not keep the bus alias */
+		if ((HCDMA(CH) ^ (uint32_t)d) & 0x3fffffffu) {
+			printf("err usb: HCDMA reads %08X after writing %08X (transfer %u)\n", HCDMA(CH),
+			       (uint32_t)d, g_xfers);
+			return -11;
+		}
 		HCINT(CH) = 0x3fffu;
 		HCINTMSK(CH) = 0;
 		HCCHAR(CH) |= HCCHAR_CHENA;
@@ -199,7 +207,13 @@ static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint
 			HCCHAR(CH) |= HCCHAR_CHDIS;
 			return -3; /* timeout */
 		}
-		uint32_t st = HCINT(CH), ts = HCTSIZ(CH);
+		uint32_t st = HCINT(CH), ts = HCTSIZ(CH), da = HCDMA(CH);
+		g_xfers++;
+		if (((da - (uint32_t)d) & 0x3fffffffu) > len + 3u) {
+			printf("err usb: HCDMA %08X after the transfer, buffer %08X, len %u, HCINT %08X "
+			       "HCTSIZ %08X (transfer %u)\n", da, (uint32_t)d, len, st, ts, g_xfers);
+			return -12;
+		}
 		if (st & HCINT_XFERCOMPL) {
 			*pid = (ts >> 29) & 3u;
 			uint32_t n = in ? len - (ts & 0x7ffffu) : len;
