@@ -156,7 +156,7 @@ bool usb_host_start(void) {
 		HPRT0 = p | HPRT0_PWR;
 	/* wait for a device to connect */
 	if (!wait_set(&HPRT0, HPRT0_CONNSTS, 1000000)) {
-		printf("usb: nothing on the root port (HPRT0 %08X)\n", HPRT0);
+		printf("err usb: nothing on the root port (HPRT0 %08X); usbon first\n", HPRT0);
 		return false;
 	}
 	udelay(100000); /* USB 2.0: 100 ms debounce after connect */
@@ -331,14 +331,24 @@ int usb_hub_scan(const struct usb_dev *hub, uint8_t *next, struct usb_dev *found
 	printf("usb: hub %u: %u ports, power good after %u ms\n", hub->ep0.addr, nports, good_ms);
 	for (uint32_t p = 1; p <= nports; p++)
 		port_feature(hub, true, FEAT_PORT_POWER, (uint16_t)p);
-	udelay((good_ms + 100u) * 1000u); /* power good, then 100 ms for devices to connect */
+	udelay(good_ms * 1000u);
+	/* Devices may take a while to connect after port power (Test 704: the
+	 * LAN7800 was not there 100 ms after power good). Wait up to 1 s from
+	 * power good for each port, as U-Boot's connect_timeout does. */
+	uint32_t t_good = timer_us();
 	int n = 0;
 	for (uint32_t p = 1; p <= nports && n < max; p++) {
 		uint32_t st = 0;
-		if (port_status(hub, (uint16_t)p, &st) < 0 || !(st & PORT_CONNECTION)) {
-			printf("usb: hub %u port %u: empty\n", hub->ep0.addr, p);
+		int r2;
+		while ((r2 = port_status(hub, (uint16_t)p, &st)) >= 0 && !(st & PORT_CONNECTION) &&
+		       timer_us() - t_good < 1000000u)
+			udelay(10000);
+		if (r2 < 0 || !(st & PORT_CONNECTION)) {
+			printf("usb: hub %u port %u: empty (status %08X)\n", hub->ep0.addr, p, st);
 			continue;
 		}
+		printf("usb: hub %u port %u: connected after %u ms\n", hub->ep0.addr, p,
+		       (timer_us() - t_good) / 1000u);
 		port_feature(hub, false, FEAT_C_PORT_CONNECTION, (uint16_t)p);
 		port_feature(hub, true, FEAT_PORT_RESET, (uint16_t)p);
 		uint32_t t0 = timer_us();
