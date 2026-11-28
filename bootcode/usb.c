@@ -177,7 +177,8 @@ bool usb_host_start(void) {
 }
 
 /* one transfer on the channel; returns the bytes moved or a negative error */
-static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint32_t len) {
+static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint32_t len,
+                int max_tries) {
 	uint8_t *d = dma_buf();
 	uint32_t mps = ep->mps ? ep->mps : 64u;
 	if (len > USB_DMA_BYTES)
@@ -185,7 +186,7 @@ static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint
 	uint32_t pkts = len ? (len + mps - 1u) / mps : 1u;
 	if (!in && len)
 		memcpy(d, buf, len);
-	for (int tries = 0; tries < 2000; tries++) {
+	for (int tries = 0; tries < max_tries; tries++) {
 		HCCHAR(CH) = (mps & 0x7ffu) | (ep->ep & 0xfu) << 11 | (in ? HCCHAR_EPDIR_IN : 0) |
 		             (ep->type & 3u) << 18 | 1u << 20 | (ep->addr & 0x7fu) << 22;
 		HCSPLT(CH) = 0;
@@ -210,31 +211,70 @@ static int xfer(const struct usb_ep *ep, bool in, uint32_t *pid, void *buf, uint
 			return -4;
 		if (!(st & (HCINT_NAK | HCINT_FRMOVRUN)))
 			return -5; /* transaction error, babble, data toggle */
-		udelay(100); /* NAK: the device is not ready, ask again */
+		if (tries + 1 < max_tries)
+			udelay(100); /* NAK: the device is not ready, ask again */
 	}
 	return -6;
 }
 
 int usb_control(const struct usb_ep *ep0, const struct usb_setup *s, void *data) {
 	uint32_t pid = PID_SETUP;
-	int r = xfer(ep0, false, &pid, (void *)s, 8);
+	int r = xfer(ep0, false, &pid, (void *)s, 8, 2000);
 	if (r < 0)
 		return r;
 	bool in = s->bmRequestType & 0x80u;
 	int n = 0;
 	if (s->wLength) {
 		pid = PID_DATA1;
-		n = xfer(ep0, in, &pid, data, s->wLength);
+		n = xfer(ep0, in, &pid, data, s->wLength, 2000);
 		if (n < 0)
 			return n;
 	}
 	pid = PID_DATA1; /* status stage: the other direction, no data */
-	r = xfer(ep0, s->wLength ? !in : true, &pid, 0, 0);
+	r = xfer(ep0, s->wLength ? !in : true, &pid, 0, 0, 2000);
 	return r < 0 ? r : n;
 }
 
 int usb_bulk(const struct usb_ep *ep, bool in, uint32_t *toggle, void *buf, uint32_t len) {
-	return xfer(ep, in, toggle, buf, len);
+	return xfer(ep, in, toggle, buf, len, 2000);
+}
+
+/* one bulk IN try: 0 if the device answers NAK (nothing to send yet) */
+int usb_bulk_in_try(const struct usb_ep *ep, uint32_t *toggle, void *buf, uint32_t len) {
+	int r = xfer(ep, true, toggle, buf, len, 1);
+	return r == -6 ? 0 : r;
+}
+
+/*
+ * The first bulk IN and OUT endpoints of configuration 1, from its
+ * descriptor; then SET_CONFIGURATION 1. False if there are none.
+ */
+bool usb_bulk_endpoints(const struct usb_dev *dev, struct usb_ep *in, struct usb_ep *out) {
+	uint8_t cd[128];
+	struct usb_setup get = {0x80, 6, 0x0200, 0, 9}; /* GET_DESCRIPTOR configuration */
+	int n = usb_control(&dev->ep0, &get, cd);
+	if (n < 9)
+		return false;
+	uint32_t total = (uint32_t)(cd[2] | cd[3] << 8);
+	get.wLength = (uint16_t)(total < sizeof cd ? total : sizeof cd);
+	n = usb_control(&dev->ep0, &get, cd);
+	if (n < 9)
+		return false;
+	in->mps = out->mps = 0;
+	for (int i = 0; i + 2 <= n && cd[i] >= 2; i += cd[i]) {
+		if (cd[i + 1] != 5 || i + 7 > n || (cd[i + 3] & 3u) != 2u) /* bulk endpoint */
+			continue;
+		struct usb_ep *e = cd[i + 2] & 0x80u ? in : out;
+		if (e->mps)
+			continue;
+		e->addr = dev->ep0.addr;
+		e->ep = cd[i + 2] & 0xfu;
+		e->type = USB_EP_BULK;
+		e->mps = (uint16_t)((cd[i + 4] | cd[i + 5] << 8) & 0x7ffu);
+	}
+	if (!in->mps || !out->mps)
+		return false;
+	return usb_set_config(dev, cd[5]) >= 0;
 }
 
 uint32_t usb_root_speed(void) {
@@ -387,19 +427,32 @@ int usb_hub_scan(const struct usb_dev *hub, uint8_t *next, struct usb_dev *found
 	return n;
 }
 
+static struct usb_dev g_devs[8]; /* the root port's device, then those behind it */
+static int g_ndevs;
+
 /* N1/N2 check: the device on the root port and, if it is a hub, the devices behind it */
 bool usb_probe_root(void) {
+	g_ndevs = 0;
 	if (!usb_host_start())
 		return false;
-	struct usb_dev root, behind[7];
-	if (!usb_enumerate(1, &root))
+	if (!usb_enumerate(1, &g_devs[0]))
 		return false;
-	if (root.cls != 9)
+	g_ndevs = 1;
+	if (g_devs[0].cls != 9)
 		return true;
 	uint8_t next = 2;
-	int n = usb_hub_scan(&root, &next, behind, 7);
+	int n = usb_hub_scan(&g_devs[0], &next, &g_devs[1], 7);
 	if (n < 0)
 		return false;
+	g_ndevs += n;
 	printf("usb: %d high-speed device(s) behind the root hub\n", n);
 	return true;
+}
+
+/* a device found by the last usb_probe_root(), or 0 */
+const struct usb_dev *usb_find(uint16_t vid, uint16_t pid) {
+	for (int i = 0; i < g_ndevs; i++)
+		if (g_devs[i].vid == vid && g_devs[i].pid == pid)
+			return &g_devs[i];
+	return 0;
 }
