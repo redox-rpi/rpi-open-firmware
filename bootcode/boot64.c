@@ -308,6 +308,7 @@ bool boot64(const char *kernel, const char *dtb, uint32_t dtb_in_mem) {
 		printf("err boot64: SDRAM not set up\n");
 		return false;
 	}
+	rng_start(); /* its warm-up runs while the files load */
 	/* the Zero 2 W's BCM2710A1 is rated for 1000 MHz; at 1200 MHz, with no
 	 * core voltage control, Redox crashed under load (an instruction
 	 * abort at PC 0 while logging in, right after the governor's switch) */

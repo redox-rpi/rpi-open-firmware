@@ -151,6 +151,8 @@ uint32_t thermal_flags(void);  /* mailbox tag 0x00030046 */
 uint32_t thermal_set_arm_mhz(uint32_t mhz); /* the OS's rate, returns kHz */
 void thermal_set_limit(uint32_t c); /* temp_limit= in C, 40..85 */
 int32_t thermal_limit_mc(void);   /* mailbox tag 0x0003000a */
+/* rng.c (#90): start the hardware RNG early, so the OS does not wait for it */
+void rng_start(void);
 void mbox_serve(void) __attribute__((noreturn));
 /* monitor: ask for a framebuffer through the real tag path, as U-Boot does */
 bool mbox_fb_test(uint32_t w, uint32_t h, uint32_t depth, uint32_t order, uint32_t *base, uint32_t *pitch);
