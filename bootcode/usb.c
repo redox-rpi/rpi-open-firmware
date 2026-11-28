@@ -33,6 +33,11 @@ void *memcpy(void *dst, const void *src, size_t n); /* libc.c */
 #define GINTSTS D(0x014)
 #define GSNPSID D(0x040)
 #define GHWCFG2 D(0x048)
+#define GRXFSIZ D(0x024)
+#define GNPTXFSIZ D(0x028)
+#define GHWCFG3 D(0x04c)
+#define GDFIFOCFG D(0x05c)
+#define HPTXFSIZ D(0x100)
 #define HCFG D(0x400)
 #define HPRT0 D(0x440)
 #define PCGCCTL D(0xe00)
@@ -72,6 +77,9 @@ void *memcpy(void *dst, const void *src, size_t n); /* libc.c */
 #define PID_SETUP 3u
 
 #define CH 0 /* one host channel is enough for a boot loader */
+#define USB_RXF 532u   /* FIFO sizes in words, as U-Boot (dwc2.h) */
+#define USB_NPTXF 256u
+#define USB_PTXF 512u
 #define USB_DMA_OFF 0x300000u /* 256 KB in the VideoCore's part, after diag.c's ring */
 #define USB_DMA_BYTES 0x40000u
 
@@ -167,6 +175,24 @@ bool usb_host_start(void) {
 	}
 	PCGCCTL = 0;
 	HCFG = (HCFG & ~3u); /* PHY clock 30/60 MHz */
+	/*
+	 * FIFO sizes in 32-bit words, as U-Boot's dwc2.c sets them (dwc2.h):
+	 * receive 532, non-periodic transmit 256, periodic transmit 512. The
+	 * power-on sizes let the receive FIFO reach the top of the FIFO RAM,
+	 * where the core keeps each channel's DMA address (GDFIFOCFG
+	 * EPInfoBase): received data then overwrote HCDMA and the controller
+	 * wrote into our memory (Tests 706-715: HCDMA = the last data word,
+	 * first at transfer 3110).
+	 */
+	uint32_t depth = GHWCFG3 >> 16, epinfo = GDFIFOCFG >> 16;
+	uint32_t rx0 = GRXFSIZ, np0 = GNPTXFSIZ, p0 = HPTXFSIZ;
+	GRXFSIZ = USB_RXF;
+	GNPTXFSIZ = USB_NPTXF << 16 | USB_RXF;
+	HPTXFSIZ = USB_PTXF << 16 | (USB_RXF + USB_NPTXF);
+	printf("usb: FIFO RAM %u words, EPInfo at %u; rx %u (was %u), np tx %u@%u (was %08X), p tx %u@%u (was %08X)\n",
+	       depth, epinfo, USB_RXF, rx0, USB_NPTXF, USB_RXF, np0, USB_PTXF, USB_RXF + USB_NPTXF, p0);
+	if (epinfo && USB_RXF + USB_NPTXF + USB_PTXF > epinfo)
+		printf("err usb: FIFOs reach the EPInfo area\n");
 	flush_fifos();
 	uint32_t nch = ((GHWCFG2 >> 14) & 0xfu) + 1u;
 	for (uint32_t i = 0; i < nch; i++) {
